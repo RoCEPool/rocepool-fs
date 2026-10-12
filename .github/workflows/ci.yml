@@ -33,4 +33,14 @@ jobs:
             libibverbs-dev librdmacm-dev
           sudo modprobe fuse || true
       - name: tests
-        run: sudo -E env "PATH=$PATH" python3 -m unittest discover -s tests -t .
+        run: |
+          set -o pipefail
+          sudo -E env "PATH=$PATH" python3 -m unittest discover -s tests -t . 2>&1 | tee unittest.log
+      - name: summary
+        if: always()
+        run: |
+          # the result line as an annotation (readable through the API without the raw log)
+          r=$(grep -E '^Ran [0-9]+ tests' unittest.log | tail -1); v=$(grep -E '^(OK|FAILED)' unittest.log | tail -1)
+          echo "::notice title=tests::$r -- $v"
+          echo "$r -- $v" >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^(FAIL|ERROR):' unittest.log | head -20 | sed 's/^/::error title=test::/' || true
