@@ -398,7 +398,11 @@ def main() -> int:
     mpi_bin = ensure_mpi()
     io500 = ensure_io500(mpi_bin)
     work = os.path.join(CACHE, "io500_run")
-    subprocess.run(["rm", "-rf", work])
+    # the previous run's outputs (the onsite quick run's, when this is the
+    # official one) are kept next to it, one generation, for the results bundle
+    subprocess.run(["rm", "-rf", work + "_prev"])
+    if os.path.isdir(work):
+        os.rename(work, work + "_prev")
     os.makedirs(os.path.join(work, "results"))
     report = {"benchmark": "IO500 (official app, github.com/IO500/io500)", "cluster": cluster.describe,
               "nodes": n, "ranks": ranks, "ranks_per_node": args.ranks_per_node,
@@ -659,7 +663,8 @@ def main() -> int:
             res = {"client": mode, "uring": uring if mode == "fuse" else None, "direct_read": direct,
                    "returncode": rc, "score": score, "phases": phases}
             if rc:  # why: the run's own error lines, and the clients' (a failed probe must say so)
-                errs = [x for x in text.splitlines() if re.search(r"ERROR|error|failed|Abort", x)][-3:]
+                bad = [x for x in text.splitlines() if re.search(r"ERROR|error|fail|Abort|chdir|No such", x)]
+                errs = bad[:3] + bad[3:][-2:]  # the first (the cause, usually) and the last
                 for node in cluster.nodes:
                     try:
                         with open(os.path.join(work, f"client{node.index}_probe_{tag}.log"), errors="replace") as f:

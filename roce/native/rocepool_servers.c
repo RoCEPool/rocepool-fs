@@ -891,6 +891,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         if (!c) {
             pthread_mutex_unlock(&st->lock);
             atomic_fetch_add(&s->lease_misses, 1);
+            ost_evict(s);
             return frame_error(f, "NO_LEASE", "object not readable one-sided", out_len);
         }
         if (s->tier) lru_touch(s, e);
@@ -904,6 +905,12 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         ok[40] = rk >> 24; ok[41] = rk >> 16; ok[42] = rk >> 8; ok[43] = rk;
         pthread_mutex_unlock(&st->lock);
         atomic_fetch_add(&s->leases, 1);
+        /* the copy just made resident counts against the RAM budget like a
+         * write's: without this, one-sided reads of a tier-backed OST grew
+         * its cache without bound (site: 29 GiB budget, 117 GiB, OOM kill).
+         * This entry is at the LRU head; a copy evicted under a lease reads
+         * an odd seq and the client falls back to an RPC read. */
+        ost_evict(s);
         return frame_simple(OP_LEASE_OK, f, ok, 44, out_len);
     }
     case OP_VTOKEN: {

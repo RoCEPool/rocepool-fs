@@ -172,6 +172,32 @@ with open(P + "/direct.bin", "rb") as f:
         used1 = _stats(self.transport, self.osts.split(",")[1])["tier_used"]
         self.assertEqual(used0, used1)
 
+    def test_one_sided_reads_stay_within_the_ram_budget(self):
+        # The C client reads stripes one-sided: it asks for a lease, the OST
+        # brings the object into RAM (from the tier) and publishes it. That
+        # path never evicted: on site, ior-easy-read grew an OST's 29 GiB
+        # cache to 117 GiB and the OOM killer took it.
+        from roce.native.build_lib import ensure_intercept_lib
+        prefix = os.path.join(self.tmp, "rp")
+        penv = dict(self.env, LD_PRELOAD=ensure_intercept_lib(), ROCEPOOL_PREFIX=prefix, ROCEPOOL_MDTS=self.mdts,
+                    ROCEPOOL_OSTS=self.osts, ROCEPOOL_DIRECT_READ="1")
+        out = subprocess.run([sys.executable, "-c", f"""
+import hashlib, os
+P = {prefix!r}
+data = bytes(range(256)) * (96 << 12)          # 24 MiB: 12x the budget per OST
+with open(P + "/lease.bin", "wb") as f:
+    f.write(data)
+for _ in range(2):
+    with open(P + "/lease.bin", "rb") as f:
+        got = f.read()
+print(got == data)
+"""], capture_output=True, text=True, env=penv, timeout=300)
+        self.assertEqual(out.stdout.split(), ["True"], out.stdout + out.stderr)
+        st = self.stats()
+        self.assertGreater(sum(s["leases"] for s in st), 0, st)
+        for s in st:
+            self.assertLessEqual(s["ram_cache_bytes"], s["ram_cache_budget"] + (2 << 20), s)
+
     def test_many_small_objects_survive_eviction(self):
         e = self.engines[0]
         blobs = {f"s/{i}": random.Random(i).randbytes(3000 + i) for i in range(1500)}  # ~6 MiB, 3x the budget

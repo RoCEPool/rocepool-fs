@@ -101,6 +101,23 @@ class ClusterDownTests(unittest.TestCase):
         self.assertLess(time.monotonic() - t0, 150)
 
 
+class MpiWorkdirTests(unittest.TestCase):
+    def test_workdir_made_on_every_peer(self):
+        # hydra runs each rank in mpiexec's cwd on every host
+        from tools.cluster import Cluster, Node
+        c = Cluster([Node(0, "10.0.0.1"), Node(1, "10.0.0.2", peer="root@10.0.0.2"),
+                     Node(2, "10.0.0.3", peer="root@10.0.0.3")], real=True)
+        calls = []
+        c.run = lambda i, argv, env=None, **kw: calls.append((i, argv))
+        d = tempfile.mkdtemp()
+        try:
+            c.mpi_files(os.path.join(d, "probe_x"), 4)
+        finally:
+            shutil.rmtree(d)
+        self.assertEqual(sorted(calls), [(1, ["mkdir", "-p", os.path.join(d, "probe_x")]),
+                                         (2, ["mkdir", "-p", os.path.join(d, "probe_x")])])
+
+
 class SlowTierTests(unittest.TestCase):
     def test_site_speeds(self):
         from tools.io500_run import slow_tier_nodes

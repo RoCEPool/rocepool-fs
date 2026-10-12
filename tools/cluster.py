@@ -306,6 +306,14 @@ class Cluster:
         the address to advertise (MPIR_CVAR_CH3_INTERFACE_HOSTNAME), and a
         host's own name often resolves to 127.0.1.1."""
         os.makedirs(workdir, exist_ok=True)
+        # hydra starts every rank in mpiexec's working directory, on every
+        # host: it must exist there too. (The client probe's directories
+        # existed only here, so on real clusters every probe died at launch
+        # -- "process manager error waiting for completion" -- and the run
+        # never got the interception client.)
+        for n in self.nodes:
+            if self.real and not n.local:
+                self.run(n.index, ["mkdir", "-p", workdir], net=False, capture_output=True, timeout=60)
         label = (lambda n: n.ip) if self.real else (lambda n: f"rpnode{n.index}")
         hostfile = os.path.join(workdir, "hosts")
         with open(hostfile, "w") as f:
