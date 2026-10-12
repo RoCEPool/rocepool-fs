@@ -44,3 +44,28 @@ jobs:
           echo "::notice title=tests::$r -- $v"
           echo "$r -- $v" >> "$GITHUB_STEP_SUMMARY"
           grep -E '^(FAIL|ERROR):' unittest.log | head -20 | sed 's/^/::error title=test::/' || true
+
+  release:
+    # every version that reaches main and passes build + test becomes a
+    # GitHub Release (tag v<VERSION>), with the offline package attached
+    needs: [build, test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: release v<VERSION> if new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=$(tr -d ' \n' < VERSION)
+          if gh release view "v$v" >/dev/null 2>&1; then echo "v$v already released"; exit 0; fi
+          bash tools/package.sh "$RUNNER_TEMP/rocepool-full-$v.tar.gz"
+          {
+            echo "rocepool $v -- built from $GITHUB_SHA after build and test passed."
+            echo
+            echo 'Offline package: `rocepool-full-'"$v"'.tar.gz` (all third-party sources in `deps/`).'
+            echo 'On a node: `tar xzf rocepool-full-'"$v"'.tar.gz && cd rocepool && cp cluster.conf.example cluster.conf && sudo ./run.sh`'
+          } > notes.md
+          gh release create "v$v" "$RUNNER_TEMP/rocepool-full-$v.tar.gz" --target "$GITHUB_SHA" --title "rocepool $v" --notes-file notes.md
