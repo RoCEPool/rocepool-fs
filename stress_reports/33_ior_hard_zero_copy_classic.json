@@ -1,0 +1,47 @@
+{
+  "benchmark": "IOR/mdtest (real upstream github.com/hpc/ior, unmodified)",
+  "scale": 1,
+  "backend": "dist",
+  "mountpoint": "/mnt/rocepool_iorbench",
+  "cases": [
+    {
+      "name": "ior_hard",
+      "tasks": 4,
+      "block": "47008",
+      "xfer": "47008",
+      "segments": 200,
+      "file_per_process": false,
+      "elapsed_s": 0.48,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 220.33,
+      "write_iops": 14085.0,
+      "read_bw_mib_s": 274.42,
+      "read_iops": 6414.0
+    }
+  ],
+  "dist_config": {
+    "fuse_threads": 4,
+    "attr_ttl_s": 3.0,
+    "osts": 4,
+    "mdts": 2,
+    "servers": "native",
+    "client": "native"
+  },
+  "mdtest": {
+    "tasks": 4,
+    "n": 200,
+    "elapsed_s": 1.45,
+    "hard": true,
+    "returncode": 0,
+    "ops_per_sec": {
+      "File creation": 3651.416,
+      "File stat": 68504.996,
+      "File read": 9958.903,
+      "File removal": 9009.207,
+      "Tree creation": 2403.613,
+      "Tree removal": 1535.813
+    }
+  },
+  "ok": true
+}

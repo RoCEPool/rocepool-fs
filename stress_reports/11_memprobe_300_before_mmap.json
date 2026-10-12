@@ -1,0 +1,426 @@
+{
+ "config": {
+  "workload": "data",
+  "ladder": "300",
+  "threads_per_proc": 20,
+  "duration": 30.0,
+  "attr_ttl": 0.0,
+  "file_bytes": 1048576,
+  "mdts": 2,
+  "osts": 4,
+  "batcher_workers": 4,
+  "batcher_per_peer": 2,
+  "server_env": {
+   "PYTHONTRACEMALLOC": "1"
+  },
+  "gdb_servers": false,
+  "core_dumps": false,
+  "mem_probe_at": [
+   10.0,
+   20.0,
+   28.0
+  ],
+  "log_dir": "/tmp/stress_logs",
+  "report": "/tmp/stress_memprobe.json"
+ },
+ "steps": [
+  {
+   "clients": 300,
+   "workload": "data",
+   "ops_ok": 4191,
+   "ops_err": 0,
+   "ops_per_s": 139.7,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [
+     {
+      "rss_mb": 188,
+      "threads": 1,
+      "malloc_in_use_mb": 164.3,
+      "malloc_free_retained_mb": 682.3,
+      "malloc_mmapped_mb": 1.4,
+      "malloc_arena_mb": 846.7,
+      "engine_bytes_mb": 27.0,
+      "engine_objects": 27,
+      "py_traced_mb": 33.2,
+      "py_traced_peak_mb": 66.2,
+      "py_top": [
+       "pool_node.py:244 27.0MiB x27",
+       "<frozen importlib._bootstrap_external>:729 2.6MiB x20977",
+       "<unknown>:0 1.3MiB x2824",
+       "<frozen importlib._bootstrap>:241 0.4MiB x3229",
+       "<frozen abc>:106 0.1MiB x656",
+       "<frozen importlib._bootstrap_external>:1662 0.0MiB x494",
+       "<frozen abc>:107 0.0MiB x166",
+       "__init__.py:503 0.0MiB x136"
+      ]
+     },
+     {
+      "rss_mb": 340,
+      "threads": 1,
+      "malloc_in_use_mb": 143.5,
+      "malloc_free_retained_mb": 1254.4,
+      "malloc_mmapped_mb": 1.4,
+      "malloc_arena_mb": 1397.9,
+      "engine_bytes_mb": 40.0,
+      "engine_objects": 40,
+      "py_traced_mb": 47.4,
+      "py_traced_peak_mb": 203.4,
+      "py_top": [
+       "pool_node.py:244 40.0MiB x40",
+       "<frozen importlib._bootstrap_external>:729 2.6MiB x20973",
+       "<unknown>:0 1.3MiB x2827",
+       "protocol.py:77 1.0MiB x1",
+       "<frozen importlib._bootstrap>:241 0.4MiB x3229",
+       "<frozen abc>:106 0.1MiB x656",
+       "tracemalloc.py:67 0.1MiB x1997",
+       "<frozen importlib._bootstrap_external>:1662 0.0MiB x494"
+      ]
+     },
+     {
+      "rss_mb": 333,
+      "threads": 1,
+      "malloc_in_use_mb": 66.5,
+      "malloc_free_retained_mb": 994.4,
+      "malloc_mmapped_mb": 1.4,
+      "malloc_arena_mb": 1060.8,
+      "engine_bytes_mb": 26.0,
+      "engine_objects": 26,
+      "py_traced_mb": 33.4,
+      "py_traced_peak_mb": 203.4,
+      "py_top": [
+       "pool_node.py:244 26.0MiB x26",
+       "<frozen importlib._bootstrap_external>:729 2.6MiB x20936",
+       "<unknown>:0 1.3MiB x2827",
+       "protocol.py:77 1.0MiB x1",
+       "<frozen importlib._bootstrap>:241 0.4MiB x3229",
+       "<frozen abc>:106 0.1MiB x656",
+       "tracemalloc.py:67 0.1MiB x1995",
+       "<frozen importlib._bootstrap_external>:1662 0.0MiB x494"
+      ]
+     }
+    ],
+    "ost1@10.99.0.2:19952": [
+     {
+      "rss_mb": 216,
+      "threads": 1,
+      "malloc_in_use_mb": 192.3,
+      "malloc_free_retained_mb": 954.3,
+      "malloc_mmapped_mb": 1.4,
+      "malloc_arena_mb": 1146.7,
+      "engine_bytes_mb": 25.0,
+      "engine_objects": 25,
+      "py_traced_mb": 31.2,
+      "py_traced_peak_mb": 85.3,
+      "py_top": [
+       "pool_node.py:244 25.0MiB x25",
+       "<frozen importlib._bootstrap_external>:729 2.6MiB x20977",
+       "<unknown>:0 1.3MiB x2825",
+       "<frozen importlib._bootstrap>:241 0.4MiB x3237",
+       "<frozen abc>:106 0.1MiB x656",
+       "<frozen importlib._bootstrap_external>:1662 0.0MiB x494",
+       "<frozen abc>:107 0.0MiB x166",
+       "__init__.py:503 0.0MiB x136"
+      ]
+     },
+     {
+      "rss_mb": 344,
+      "threads": 1,
+      "malloc_in_use_mb": 759.6,
+      "malloc_free_retained_mb": 941.1,
+      "malloc_mmapped_mb": 1.4,
+      "malloc_arena_mb": 1700.7,
+      "engine_bytes_mb": 34.0,
+      "engine_objects": 34,
+      "py_traced_mb": 56.4,
+      "py_traced_peak_mb": 150.4,
+      "py_top": [
+       "pool_node.py:244 35.0MiB x35",
+       "__init__.py:519 7.0MiB x9",
+       "protocol.py:94 6.0MiB x6",
+       "<frozen importlib._bootstrap_external>:729 2.6MiB x20936",
+       "protocol.py:77 2.0MiB x5",
+       "<unknown>:0 1.3MiB x2859",
+       "<frozen importlib._bootstrap>:241 0.4MiB x3237",
+       "<frozen abc>:106 0.1MiB x656"
+      ]
+     },
+     {
+      "rss_mb": 266,
+      "threads": 1,
+      "malloc_in_use_mb": 127.5,
+      "malloc_free_retained_mb": 1050.0,
+      "malloc_mmapped_mb": 1.4,
+      "malloc_arena_mb": 1177.4,
+      "engine_bytes_mb": 24.0,
+      "engine_objects": 24,
+      "py_traced_mb": 30.4,
+      "py_traced_peak_mb": 95.4,
+      "py_top": [
+       "pool_node.py:244 24.0MiB x24",
+       "<frozen importlib._bootstrap_external>:729 2.6MiB x20973",
+       "<unknown>:0 1.3MiB x2825",
+       "<frozen importlib._bootstrap>:241 0.4MiB x3237",
+       "<frozen abc>:106 0.1MiB x656",
+       "tracemalloc.py:67 0.1MiB x1995",
+       "<frozen importlib._bootstrap_external>:1662 0.0MiB x494",
+       "<frozen abc>:107 0.0MiB x164"
+      ]
+     }
+    ],
+    "ost2@10.99.0.1:19953": [
+     {
+      "rss_mb": 361,
+      "threads": 1,
+      "malloc_in_use_mb": 117.3,
+      "malloc_free_retained_mb": 2440.5,
+      "malloc_mmapped_mb": 1.4,
+      "malloc_arena_mb": 2557.9,
+      "engine_bytes_mb": 44.0,
+      "engine_objects": 44,
+      "py_traced_mb": 50.2,
+      "py_traced_peak_mb": 240.3,
+      "py_top": [
+       "pool_node.py:244 44.0MiB x44",
+       "<frozen importlib._bootstrap_external>:729 2.6MiB x20974",
+       "<unknown>:0 1.3MiB x2825",
+       "<frozen importlib._bootstrap>:241 0.4MiB x3231",
+       "<frozen abc>:106 0.1MiB x656",
+       "<frozen importlib._bootstrap_external>:1662 0.0MiB x494",
+       "<frozen abc>:107 0.0MiB x167",
+       "__init__.py:503 0.0MiB x136"
+      ]
+     },
+     {
+      "rss_mb": 391,
+      "threads": 1,
+      "malloc_in_use_mb": 188.5,
+      "malloc_free_retained_mb": 2272.4,
+      "malloc_mmapped_mb": 1.4,
+      "malloc_arena_mb": 2460.9,
+      "engine_bytes_mb": 22.0,
+      "engine_objects": 22,
+      "py_traced_mb": 28.4,
+      "py_traced_peak_mb": 240.3,
+      "py_top": [
+       "pool_node.py:244 22.0MiB x22",
+       "<frozen importlib._bootstrap_external>:729 2.6MiB x20973",
+       "<unknown>:0 1.3MiB x2825",
+       "<frozen importlib._bootstrap>:241 0.4MiB x3231",
+       "<frozen abc>:106 0.1MiB x656",
+       "tracemalloc.py:67 0.1MiB x1990",
+       "<frozen importlib._bootstrap_external>:1662 0.0MiB x494",
+       "<frozen abc>:107 0.0MiB x164"
+      ]
+     },
+     {
+      "rss_mb": 424,
+      "threads": 1,
+      "malloc_in_use_mb": 175.5,
+      "malloc_free_retained_mb": 2293.3,
+      "malloc_mmapped_mb": 1.4,
+      "malloc_arena_mb": 2468.8,
+      "engine_bytes_mb": 39.0,
+      "engine_objects": 39,
+      "py_traced_mb": 45.4,
+      "py_traced_peak_mb": 240.3,
+      "py_top": [
+       "pool_node.py:244 39.0MiB x39",
+       "<frozen importlib._bootstrap_external>:729 2.6MiB x20936",
+       "<unknown>:0 1.3MiB x2825",
+       "<frozen importlib._bootstrap>:241 0.4MiB x3229",
+       "<frozen abc>:106 0.1MiB x656",
+       "tracemalloc.py:67 0.1MiB x1997",
+       "<frozen importlib._bootstrap_external>:1662 0.0MiB x494",
+       "<frozen abc>:107 0.0MiB x164"
+      ]
+     }
+    ],
+    "ost3@10.99.0.2:19954": [
+     {
+      "rss_mb": 188,
+      "threads": 1,
+      "malloc_in_use_mb": 126.3,
+      "malloc_free_retained_mb": 535.3,
+      "malloc_mmapped_mb": 1.4,
+      "malloc_arena_mb": 661.7,
+      "engine_bytes_mb": 22.0,
+      "engine_objects": 22,
+      "py_traced_mb": 28.2,
+      "py_traced_peak_mb": 85.3,
+      "py_top": [
+       "pool_node.py:244 22.0MiB x22",
+       "<frozen importlib._bootstrap_external>:729 2.6MiB x20974",
+       "<unknown>:0 1.3MiB x2826",
+       "<frozen importlib._bootstrap>:241 0.4MiB x3229",
+       "<frozen abc>:106 0.1MiB x656",
+       "<frozen importlib._bootstrap_external>:1662 0.0MiB x494",
+       "<frozen abc>:107 0.0MiB x167",
+       "__init__.py:503 0.0MiB x136"
+      ]
+     },
+     {
+      "rss_mb": 360,
+      "threads": 1,
+      "malloc_in_use_mb": 154.5,
+      "malloc_free_retained_mb": 1454.9,
+      "malloc_mmapped_mb": 1.4,
+      "malloc_arena_mb": 1609.4,
+      "engine_bytes_mb": 48.0,
+      "engine_objects": 48,
+      "py_traced_mb": 55.4,
+      "py_traced_peak_mb": 226.4,
+      "py_top": [
+       "pool_node.py:244 48.0MiB x48",
+       "<frozen importlib._bootstrap_external>:729 2.6MiB x20973",
+       "<unknown>:0 1.3MiB x2829",
+       "protocol.py:77 1.0MiB x1",
+       "<frozen importlib._bootstrap>:241 0.4MiB x3229",
+       "<frozen abc>:106 0.1MiB x656",
+       "tracemalloc.py:67 0.1MiB x1993",
+       "<frozen importlib._bootstrap_external>:1662 0.0MiB x494"
+      ]
+     },
+     {
+      "rss_mb": 396,
+      "threads": 1,
+      "malloc_in_use_mb": 7.5,
+      "malloc_free_retained_mb": 1346.9,
+      "malloc_mmapped_mb": 1.4,
+      "malloc_arena_mb": 1354.4,
+      "engine_bytes_mb": 0.0,
+      "engine_objects": 0,
+      "py_traced_mb": 6.3,
+      "py_traced_peak_mb": 226.4,
+      "py_top": [
+       "<frozen importlib._bootstrap_external>:729 2.6MiB x20936",
+       "<unknown>:0 1.3MiB x2826",
+       "<frozen importlib._bootstrap>:241 0.4MiB x3227",
+       "<frozen abc>:106 0.1MiB x656",
+       "tracemalloc.py:67 0.1MiB x1994",
+       "<frozen importlib._bootstrap_external>:1662 0.0MiB x494",
+       "<frozen abc>:107 0.0MiB x164",
+       "__init__.py:503 0.0MiB x136"
+      ]
+     }
+    ]
+   },
+   "latency_ms": {
+    "write": {
+     "p50": 3945.8,
+     "p99": 8847.4,
+     "max": 11397.5
+    },
+    "read": {
+     "p50": 1386.4,
+     "p99": 5648.2,
+     "max": 7734.8
+    },
+    "unlink": {
+     "p50": 1027.3,
+     "p99": 5395.2,
+     "max": 7562.4
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 501,
+      "peak_rss_mb": 33.4,
+      "peak_fds": 253,
+      "cpu_pct": 12.8
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 227,
+      "peak_rss_mb": 28.2,
+      "peak_fds": 116,
+      "cpu_pct": 12.8
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 155,
+      "peak_rss_mb": 382.2,
+      "peak_fds": 80,
+      "cpu_pct": 7.8
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 119,
+      "peak_rss_mb": 349.0,
+      "peak_fds": 62,
+      "cpu_pct": 8.0
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 163,
+      "peak_rss_mb": 431.0,
+      "peak_fds": 85,
+      "cpu_pct": 8.4
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 171,
+      "peak_rss_mb": 431.3,
+      "peak_fds": 89,
+      "cpu_pct": 8.2
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 416,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 278,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 4256.0,
+    "peak_loadavg1": 25.41
+   },
+   "ops_per_second_timeline": [
+    11,
+    38,
+    31,
+    62,
+    125,
+    136,
+    206,
+    138,
+    159,
+    158,
+    109,
+    72,
+    69,
+    76,
+    107,
+    131,
+    148,
+    172,
+    152,
+    162,
+    91,
+    53,
+    93,
+    113,
+    185,
+    154,
+    122,
+    107,
+    112,
+    98
+   ]
+  }
+ ]
+}

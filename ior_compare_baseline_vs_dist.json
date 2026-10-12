@@ -1,0 +1,134 @@
+{
+ "baseline": {
+  "cases": {
+   "shared_1m": {
+    "write_bw_mib_s": 69.32000000000001,
+    "read_bw_mib_s": 445.55500000000006
+   },
+   "shared_64k": {
+    "write_bw_mib_s": 40.03,
+    "read_bw_mib_s": 159.105
+   },
+   "fpp_1m": {
+    "write_bw_mib_s": 58.629999999999995,
+    "read_bw_mib_s": 236.755
+   },
+   "shared_4m_large": {
+    "write_bw_mib_s": 9.295,
+    "read_bw_mib_s": 72.345
+   },
+   "fpp_256k": {
+    "write_bw_mib_s": 63.055,
+    "read_bw_mib_s": 337.935
+   }
+  },
+  "mdtest": {
+   "File creation": 93.936,
+   "File stat": 128.892,
+   "File read": 93.509,
+   "File removal": 92.042
+  },
+  "bw_gib": 0.08890904390492622,
+  "md_kiops": 0.10103558754105876,
+  "score": 0.09477857083037289
+ },
+ "dist": {
+  "cases": {
+   "shared_1m": {
+    "write_bw_mib_s": 75.285,
+    "read_bw_mib_s": 280.44
+   },
+   "shared_64k": {
+    "write_bw_mib_s": 83.83,
+    "read_bw_mib_s": 234.09
+   },
+   "fpp_1m": {
+    "write_bw_mib_s": 95.495,
+    "read_bw_mib_s": 404.55
+   },
+   "shared_4m_large": {
+    "write_bw_mib_s": 83.495,
+    "read_bw_mib_s": 431.705
+   },
+   "fpp_256k": {
+    "write_bw_mib_s": 127.36500000000001,
+    "read_bw_mib_s": 501.19
+   }
+  },
+  "mdtest": {
+   "File creation": 218.0095,
+   "File stat": 73503.98749999999,
+   "File read": 10394.9675,
+   "File removal": 458.56
+  },
+  "bw_gib": 0.1763268324151922,
+  "md_kiops": 2.9563197570258497,
+  "score": 0.7219961899918993
+ },
+ "dist_cache_off": {
+  "cases": {
+   "shared_1m": {
+    "write_bw_mib_s": 74.78,
+    "read_bw_mib_s": 76.05
+   },
+   "shared_64k": {
+    "write_bw_mib_s": 91.71,
+    "read_bw_mib_s": 69.19
+   },
+   "fpp_1m": {
+    "write_bw_mib_s": 102.06,
+    "read_bw_mib_s": 152.42
+   },
+   "shared_4m_large": {
+    "write_bw_mib_s": 85.01,
+    "read_bw_mib_s": 91.15
+   },
+   "fpp_256k": {
+    "write_bw_mib_s": 148.34,
+    "read_bw_mib_s": 152.86
+   }
+  },
+  "mdtest": {
+   "File creation": 144.049,
+   "File stat": 1103.235,
+   "File read": 729.606,
+   "File removal": 147.3
+  },
+  "bw_gib": 0.09752189859814207,
+  "md_kiops": 0.36150753652395407,
+  "score": 0.1877628858942927
+ },
+ "dist_1thread": {
+  "cases": {
+   "shared_1m": {
+    "write_bw_mib_s": 74.15,
+    "read_bw_mib_s": 250.77
+   },
+   "shared_64k": {
+    "write_bw_mib_s": 84.91,
+    "read_bw_mib_s": 291.52
+   },
+   "fpp_1m": {
+    "write_bw_mib_s": 111.76,
+    "read_bw_mib_s": 324.67
+   },
+   "shared_4m_large": {
+    "write_bw_mib_s": 90.71,
+    "read_bw_mib_s": 463.53
+   },
+   "fpp_256k": {
+    "write_bw_mib_s": 121.76,
+    "read_bw_mib_s": 451.92
+   }
+  },
+  "mdtest": {
+   "File creation": 209.414,
+   "File stat": 94519.527,
+   "File read": 23688.268,
+   "File removal": 427.081
+  },
+  "bw_gib": 0.1771757229163699,
+  "md_kiops": 3.7617740194546587,
+  "score": 0.8163914694219297
+ }
+}

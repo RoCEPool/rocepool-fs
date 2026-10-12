@@ -1,0 +1,36 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    # both transport backends against real headers, -Werror
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: packages
+        run: sudo apt-get update && sudo apt-get install -y gcc make cmake pkg-config libibverbs-dev librdmacm-dev
+      - name: verbs backend
+        run: ROCE_BACKEND=verbs bash roce/native/build.sh
+      - name: ofi backend (libfabric from deps/)
+        run: ROCE_BACKEND=ofi bash roce/native/build.sh
+
+  test:
+    # the whole suite on the software RDMA emulator: servers, clients, FUSE,
+    # interception library, multi-node clusters in network namespaces (root)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ make cmake pkg-config autoconf automake libtool fuse3 iproute2 \
+            libibverbs-dev librdmacm-dev
+          sudo modprobe fuse || true
+      - name: tests
+        run: sudo -E env "PATH=$PATH" python3 -m unittest discover -s tests -t .

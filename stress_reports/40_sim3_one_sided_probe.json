@@ -1,0 +1,9221 @@
+{
+ "benchmark": "IO500 (official app, github.com/IO500/io500)",
+ "cluster": "simulated: 3 network+mount namespaces on one bridge, softverbs RDMA emulator, 2 CPU cores shared by all nodes",
+ "nodes": 3,
+ "ranks": 6,
+ "ranks_per_node": 2,
+ "mdts": 3,
+ "osts": 3,
+ "stonewall_s": 3,
+ "valid_procedure": false,
+ "cpu_cores_here": 2,
+ "reference": {
+  "WEKA_Afton_10node": {
+   "score": 105.94,
+   "bw_gib_s": 33.28,
+   "md_kiops": 337.29
+  }
+ },
+ "ost_tier": {
+  "mode": "auto",
+  "nodes": {}
+ },
+ "numa_nodes_per_host": 1,
+ "rank_binding": "none",
+ "fuse_channel_probe": {
+  "results": [
+   {
+    "client": "fuse",
+    "uring": false,
+    "direct_read": true,
+    "returncode": 0,
+    "score": {
+     "bw_gib_s": 0.330214,
+     "md_kiops": 11.406684,
+     "score": 1.940786
+    },
+    "phases": {
+     "ior-easy-write": {
+      "value": 0.586439,
+      "unit": "GiB/s",
+      "time_s": 0.206,
+      "invalid": true
+     },
+     "mdtest-easy-write": {
+      "value": 7.001495,
+      "unit": "kIOPS",
+      "time_s": 1.177,
+      "invalid": true
+     },
+     "ior-hard-write": {
+      "value": 0.197765,
+      "unit": "GiB/s",
+      "time_s": 0.078,
+      "invalid": true
+     },
+     "mdtest-hard-write": {
+      "value": 4.601103,
+      "unit": "kIOPS",
+      "time_s": 1.265,
+      "invalid": true
+     },
+     "find": {
+      "value": 8.140618,
+      "unit": "kIOPS",
+      "time_s": 0.329,
+      "invalid": false
+     },
+     "ior-easy-read": {
+      "value": 0.621281,
+      "unit": "GiB/s",
+      "time_s": 0.157,
+      "invalid": false
+     },
+     "mdtest-easy-stat": {
+      "value": 37.096396,
+      "unit": "kIOPS",
+      "time_s": 1.035,
+      "invalid": false
+     },
+     "ior-hard-read": {
+      "value": 0.165015,
+      "unit": "GiB/s",
+      "time_s": 0.093,
+      "invalid": false
+     },
+     "mdtest-hard-stat": {
+      "value": 39.22721,
+      "unit": "kIOPS",
+      "time_s": 1.034,
+      "invalid": false
+     },
+     "mdtest-easy-delete": {
+      "value": 10.27143,
+      "unit": "kIOPS",
+      "time_s": 1.124,
+      "invalid": false
+     },
+     "mdtest-hard-read": {
+      "value": 7.274537,
+      "unit": "kIOPS",
+      "time_s": 1.168,
+      "invalid": false
+     },
+     "mdtest-hard-delete": {
+      "value": 10.051012,
+      "unit": "kIOPS",
+      "time_s": 1.126,
+      "invalid": false
+     }
+    }
+   },
+   {
+    "client": "fuse",
+    "uring": true,
+    "direct_read": true,
+    "returncode": 0,
+    "score": {
+     "bw_gib_s": 0.367221,
+     "md_kiops": 10.7128,
+     "score": 1.983422
+    },
+    "phases": {
+     "ior-easy-write": {
+      "value": 0.925031,
+      "unit": "GiB/s",
+      "time_s": 0.146,
+      "invalid": true
+     },
+     "mdtest-easy-write": {
+      "value": 5.861924,
+      "unit": "kIOPS",
+      "time_s": 1.211,
+      "invalid": true
+     },
+     "ior-hard-write": {
+      "value": 0.199672,
+      "unit": "GiB/s",
+      "time_s": 0.079,
+      "invalid": true
+     },
+     "mdtest-hard-write": {
+      "value": 4.445006,
+      "unit": "kIOPS",
+      "time_s": 1.277,
+      "invalid": true
+     },
+     "find": {
+      "value": 7.308199,
+      "unit": "kIOPS",
+      "time_s": 0.382,
+      "invalid": false
+     },
+     "ior-easy-read": {
+      "value": 0.494757,
+      "unit": "GiB/s",
+      "time_s": 0.197,
+      "invalid": false
+     },
+     "mdtest-easy-stat": {
+      "value": 32.140671,
+      "unit": "kIOPS",
+      "time_s": 1.04,
+      "invalid": false
+     },
+     "ior-hard-read": {
+      "value": 0.198995,
+      "unit": "GiB/s",
+      "time_s": 0.077,
+      "invalid": false
+     },
+     "mdtest-hard-stat": {
+      "value": 33.911635,
+      "unit": "kIOPS",
+      "time_s": 1.039,
+      "invalid": false
+     },
+     "mdtest-easy-delete": {
+      "value": 8.771743,
+      "unit": "kIOPS",
+      "time_s": 1.147,
+      "invalid": false
+     },
+     "mdtest-hard-read": {
+      "value": 9.731714,
+      "unit": "kIOPS",
+      "time_s": 1.127,
+      "invalid": false
+     },
+     "mdtest-hard-delete": {
+      "value": 9.790892,
+      "unit": "kIOPS",
+      "time_s": 1.13,
+      "invalid": false
+     }
+    }
+   }
+  ],
+  "chosen": "io_uring"
+ },
+ "client_probe": {
+  "results": [
+   {
+    "client": "fuse",
+    "uring": false,
+    "direct_read": true,
+    "returncode": 0,
+    "score": {
+     "bw_gib_s": 0.330214,
+     "md_kiops": 11.406684,
+     "score": 1.940786
+    },
+    "phases": {
+     "ior-easy-write": {
+      "value": 0.586439,
+      "unit": "GiB/s",
+      "time_s": 0.206,
+      "invalid": true
+     },
+     "mdtest-easy-write": {
+      "value": 7.001495,
+      "unit": "kIOPS",
+      "time_s": 1.177,
+      "invalid": true
+     },
+     "ior-hard-write": {
+      "value": 0.197765,
+      "unit": "GiB/s",
+      "time_s": 0.078,
+      "invalid": true
+     },
+     "mdtest-hard-write": {
+      "value": 4.601103,
+      "unit": "kIOPS",
+      "time_s": 1.265,
+      "invalid": true
+     },
+     "find": {
+      "value": 8.140618,
+      "unit": "kIOPS",
+      "time_s": 0.329,
+      "invalid": false
+     },
+     "ior-easy-read": {
+      "value": 0.621281,
+      "unit": "GiB/s",
+      "time_s": 0.157,
+      "invalid": false
+     },
+     "mdtest-easy-stat": {
+      "value": 37.096396,
+      "unit": "kIOPS",
+      "time_s": 1.035,
+      "invalid": false
+     },
+     "ior-hard-read": {
+      "value": 0.165015,
+      "unit": "GiB/s",
+      "time_s": 0.093,
+      "invalid": false
+     },
+     "mdtest-hard-stat": {
+      "value": 39.22721,
+      "unit": "kIOPS",
+      "time_s": 1.034,
+      "invalid": false
+     },
+     "mdtest-easy-delete": {
+      "value": 10.27143,
+      "unit": "kIOPS",
+      "time_s": 1.124,
+      "invalid": false
+     },
+     "mdtest-hard-read": {
+      "value": 7.274537,
+      "unit": "kIOPS",
+      "time_s": 1.168,
+      "invalid": false
+     },
+     "mdtest-hard-delete": {
+      "value": 10.051012,
+      "unit": "kIOPS",
+      "time_s": 1.126,
+      "invalid": false
+     }
+    }
+   },
+   {
+    "client": "fuse",
+    "uring": true,
+    "direct_read": true,
+    "returncode": 0,
+    "score": {
+     "bw_gib_s": 0.367221,
+     "md_kiops": 10.7128,
+     "score": 1.983422
+    },
+    "phases": {
+     "ior-easy-write": {
+      "value": 0.925031,
+      "unit": "GiB/s",
+      "time_s": 0.146,
+      "invalid": true
+     },
+     "mdtest-easy-write": {
+      "value": 5.861924,
+      "unit": "kIOPS",
+      "time_s": 1.211,
+      "invalid": true
+     },
+     "ior-hard-write": {
+      "value": 0.199672,
+      "unit": "GiB/s",
+      "time_s": 0.079,
+      "invalid": true
+     },
+     "mdtest-hard-write": {
+      "value": 4.445006,
+      "unit": "kIOPS",
+      "time_s": 1.277,
+      "invalid": true
+     },
+     "find": {
+      "value": 7.308199,
+      "unit": "kIOPS",
+      "time_s": 0.382,
+      "invalid": false
+     },
+     "ior-easy-read": {
+      "value": 0.494757,
+      "unit": "GiB/s",
+      "time_s": 0.197,
+      "invalid": false
+     },
+     "mdtest-easy-stat": {
+      "value": 32.140671,
+      "unit": "kIOPS",
+      "time_s": 1.04,
+      "invalid": false
+     },
+     "ior-hard-read": {
+      "value": 0.198995,
+      "unit": "GiB/s",
+      "time_s": 0.077,
+      "invalid": false
+     },
+     "mdtest-hard-stat": {
+      "value": 33.911635,
+      "unit": "kIOPS",
+      "time_s": 1.039,
+      "invalid": false
+     },
+     "mdtest-easy-delete": {
+      "value": 8.771743,
+      "unit": "kIOPS",
+      "time_s": 1.147,
+      "invalid": false
+     },
+     "mdtest-hard-read": {
+      "value": 9.731714,
+      "unit": "kIOPS",
+      "time_s": 1.127,
+      "invalid": false
+     },
+     "mdtest-hard-delete": {
+      "value": 9.790892,
+      "unit": "kIOPS",
+      "time_s": 1.13,
+      "invalid": false
+     }
+    }
+   },
+   {
+    "client": "intercept",
+    "uring": null,
+    "direct_read": true,
+    "returncode": 0,
+    "score": {
+     "bw_gib_s": 0.541986,
+     "md_kiops": 16.67288,
+     "score": 3.006072
+    },
+    "phases": {
+     "ior-easy-write": {
+      "value": 1.269881,
+      "unit": "GiB/s",
+      "time_s": 0.166,
+      "invalid": true
+     },
+     "mdtest-easy-write": {
+      "value": 7.53707,
+      "unit": "kIOPS",
+      "time_s": 1.164,
+      "invalid": true
+     },
+     "ior-hard-write": {
+      "value": 0.285486,
+      "unit": "GiB/s",
+      "time_s": 0.055,
+      "invalid": true
+     },
+     "mdtest-hard-write": {
+      "value": 6.350275,
+      "unit": "kIOPS",
+      "time_s": 1.193,
+      "invalid": true
+     },
+     "find": {
+      "value": 8.484033,
+      "unit": "kIOPS",
+      "time_s": 0.318,
+      "invalid": false
+     },
+     "ior-easy-read": {
+      "value": 1.165654,
+      "unit": "GiB/s",
+      "time_s": 0.086,
+      "invalid": false
+     },
+     "mdtest-easy-stat": {
+      "value": 63.819197,
+      "unit": "kIOPS",
+      "time_s": 1.021,
+      "invalid": false
+     },
+     "ior-hard-read": {
+      "value": 0.20419,
+      "unit": "GiB/s",
+      "time_s": 0.076,
+      "invalid": false
+     },
+     "mdtest-hard-stat": {
+      "value": 52.788975,
+      "unit": "kIOPS",
+      "time_s": 1.027,
+      "invalid": false
+     },
+     "mdtest-easy-delete": {
+      "value": 17.892007,
+      "unit": "kIOPS",
+      "time_s": 1.072,
+      "invalid": false
+     },
+     "mdtest-hard-read": {
+      "value": 16.329462,
+      "unit": "kIOPS",
+      "time_s": 1.076,
+      "invalid": false
+     },
+     "mdtest-hard-delete": {
+      "value": 14.940394,
+      "unit": "kIOPS",
+      "time_s": 1.084,
+      "invalid": false
+     }
+    }
+   },
+   {
+    "client": "intercept",
+    "uring": null,
+    "direct_read": false,
+    "returncode": 0,
+    "score": {
+     "bw_gib_s": 0.570072,
+     "md_kiops": 11.405971,
+     "score": 2.549945
+    },
+    "phases": {
+     "ior-easy-write": {
+      "value": 1.276344,
+      "unit": "GiB/s",
+      "time_s": 0.083,
+      "invalid": true
+     },
+     "mdtest-easy-write": {
+      "value": 9.111202,
+      "unit": "kIOPS",
+      "time_s": 1.137,
+      "invalid": true
+     },
+     "ior-hard-write": {
+      "value": 0.286766,
+      "unit": "GiB/s",
+      "time_s": 0.055,
+      "invalid": true
+     },
+     "mdtest-hard-write": {
+      "value": 4.52569,
+      "unit": "kIOPS",
+      "time_s": 1.271,
+      "invalid": true
+     },
+     "find": {
+      "value": 8.677689,
+      "unit": "kIOPS",
+      "time_s": 0.33,
+      "invalid": false
+     },
+     "ior-easy-read": {
+      "value": 0.736612,
+      "unit": "GiB/s",
+      "time_s": 0.134,
+      "invalid": false
+     },
+     "mdtest-easy-stat": {
+      "value": 18.817047,
+      "unit": "kIOPS",
+      "time_s": 1.067,
+      "invalid": false
+     },
+     "ior-hard-read": {
+      "value": 0.391727,
+      "unit": "GiB/s",
+      "time_s": 0.041,
+      "invalid": false
+     },
+     "mdtest-hard-stat": {
+      "value": 24.068309,
+      "unit": "kIOPS",
+      "time_s": 1.055,
+      "invalid": false
+     },
+     "mdtest-easy-delete": {
+      "value": 11.717951,
+      "unit": "kIOPS",
+      "time_s": 1.109,
+      "invalid": false
+     },
+     "mdtest-hard-read": {
+      "value": 11.340248,
+      "unit": "kIOPS",
+      "time_s": 1.109,
+      "invalid": false
+     },
+     "mdtest-hard-delete": {
+      "value": 13.30216,
+      "unit": "kIOPS",
+      "time_s": 1.094,
+      "invalid": false
+     }
+    }
+   }
+  ],
+  "chosen": "intercept"
+ },
+ "client": "intercept",
+ "direct_read": true,
+ "fuse_channel": "none",
+ "returncode": 0,
+ "phases": {
+  "ior-easy-write": {
+   "value": 1.356172,
+   "unit": "GiB/s",
+   "time_s": 0.265,
+   "invalid": true,
+   "ops": 251658218.10573313
+  },
+  "mdtest-easy-write": {
+   "value": 10.112876,
+   "unit": "kIOPS",
+   "time_s": 1.185,
+   "invalid": true,
+   "ops": 1800.091928
+  },
+  "ior-hard-write": {
+   "value": 0.279203,
+   "unit": "GiB/s",
+   "time_s": 0.432,
+   "invalid": true,
+   "ops": 128611997.71238399
+  },
+  "mdtest-hard-write": {
+   "value": 7.787692,
+   "unit": "kIOPS",
+   "time_s": 1.235,
+   "invalid": true,
+   "ops": 1798.956852
+  },
+  "find": {
+   "value": 10.217633,
+   "unit": "kIOPS",
+   "time_s": 0.386,
+   "invalid": false,
+   "ops": 3606.9982426635224
+  },
+  "ior-easy-read": {
+   "value": 1.23658,
+   "unit": "GiB/s",
+   "time_s": 0.197,
+   "invalid": false,
+   "ops": 251658857.7161216
+  },
+  "mdtest-easy-stat": {
+   "value": 79.850946,
+   "unit": "kIOPS",
+   "time_s": 1.025,
+   "invalid": false,
+   "ops": 1836.5717579999998
+  },
+  "ior-hard-read": {
+   "value": 0.400558,
+   "unit": "GiB/s",
+   "time_s": 0.302,
+   "invalid": false,
+   "ops": 128613284.2627072
+  },
+  "mdtest-hard-stat": {
+   "value": 67.133927,
+   "unit": "kIOPS",
+   "time_s": 1.03,
+   "invalid": false,
+   "ops": 1812.6160289999998
+  },
+  "mdtest-easy-delete": {
+   "value": 18.73963,
+   "unit": "kIOPS",
+   "time_s": 1.101,
+   "invalid": false,
+   "ops": 1799.00448
+  },
+  "mdtest-hard-read": {
+   "value": 15.738969,
+   "unit": "kIOPS",
+   "time_s": 1.117,
+   "invalid": false,
+   "ops": 1794.242466
+  },
+  "mdtest-hard-delete": {
+   "value": 15.540023,
+   "unit": "kIOPS",
+   "time_s": 1.119,
+   "invalid": false,
+   "ops": 1802.642668
+  }
+ },
+ "score": {
+  "bw_gib_s": 0.658083,
+  "md_kiops": 19.364469,
+  "score": 3.569794
+ },
+ "wall_s": 25.9,
+ "io500_output_tail": [
+  "ERROR INVALID (src/main.c:394) PAUSING BETWEEN RUNS ACTIVATED",
+  "IO500 version eb7638697d79 (standard)",
+  "ERROR INVALID (src/phase_dbg.c:15) stonewall-time 3s != 300s",
+  "ERROR INVALID (src/phase_ior.c:24) Write phase needed 0.172821s instead of stonewall 3s. Stonewall was hit at 0.2s",
+  "ERROR INVALID (src/main.c:484) Runtime of phase (0.264567) is below stonewall time. This shouldn't happen!",
+  "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime",
+  "[RESULT]       ior-easy-write        1.356172 GiB/s : time 0.265 seconds [INVALID]",
+  "ERROR INVALID (src/main.c:484) Runtime of phase (1.185300) is below stonewall time. This shouldn't happen!",
+  "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime",
+  "[RESULT]    mdtest-easy-write       10.112876 kIOPS : time 1.185 seconds [INVALID]",
+  "[      ]            timestamp        0.000000 kIOPS : time 0.000 seconds",
+  "ERROR INVALID (src/phase_ior.c:24) Write phase needed 0.429010s instead of stonewall 3s. Stonewall was hit at 0.4s",
+  "ERROR INVALID (src/main.c:484) Runtime of phase (0.432060) is below stonewall time. This shouldn't happen!",
+  "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime",
+  "[RESULT]       ior-hard-write        0.279203 GiB/s : time 0.432 seconds [INVALID]",
+  "ERROR INVALID (src/main.c:484) Runtime of phase (1.234722) is below stonewall time. This shouldn't happen!",
+  "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime",
+  "[RESULT]    mdtest-hard-write        7.787692 kIOPS : time 1.235 seconds [INVALID]",
+  "[RESULT]                 find       10.217633 kIOPS : time 0.386 seconds",
+  "[RESULT]        ior-easy-read        1.236580 GiB/s : time 0.197 seconds",
+  "[RESULT]     mdtest-easy-stat       79.850946 kIOPS : time 1.025 seconds",
+  "[RESULT]        ior-hard-read        0.400558 GiB/s : time 0.302 seconds",
+  "[RESULT]     mdtest-hard-stat       67.133927 kIOPS : time 1.030 seconds",
+  "[RESULT]   mdtest-easy-delete       18.739630 kIOPS : time 1.101 seconds",
+  "[RESULT]     mdtest-hard-read       15.738969 kIOPS : time 1.117 seconds",
+  "[RESULT]   mdtest-hard-delete       15.540023 kIOPS : time 1.119 seconds",
+  "[      ]  ior-rnd4K-easy-read        0.101246 GiB/s : time 2.318 seconds",
+  "[SCORE ] Bandwidth 0.658083 GiB/s : IOPS 19.364469 kiops : TOTAL 3.569794 [INVALID]",
+  "",
+  "The result files are stored in the directory: /home/claude/rocepool/rocepool/.bench_cache/io500_run/results"
+ ],
+ "config": {
+  "paused_between_phases": true,
+  "ior_easy_block_mib_per_rank": 40,
+  "ior_hard_segments_per_rank": 456,
+  "mdtest_easy_n": 300,
+  "mdtest_hard_n": 300,
+  "client_threads": 16,
+  "attr_ttl_s": 3.0,
+  "client": "intercept",
+  "intercept_io_threads": 4,
+  "ost_tier": "auto",
+  "ost_ram_cache_mib": 64
+ },
+ "servers": [
+  {
+   "kind": "mdt",
+   "node": 0,
+   "addr": "10.99.1.1:19901",
+   "log": "/home/claude/rocepool/rocepool/.bench_cache/io500_run/mdt0.log"
+  },
+  {
+   "kind": "mdt",
+   "node": 1,
+   "addr": "10.99.1.2:19901",
+   "log": "/home/claude/rocepool/rocepool/.bench_cache/io500_run/mdt1.log"
+  },
+  {
+   "kind": "mdt",
+   "node": 2,
+   "addr": "10.99.1.3:19901",
+   "log": "/home/claude/rocepool/rocepool/.bench_cache/io500_run/mdt2.log"
+  },
+  {
+   "kind": "ost",
+   "node": 0,
+   "addr": "10.99.1.1:19951",
+   "log": "/home/claude/rocepool/rocepool/.bench_cache/io500_run/ost0.log"
+  },
+  {
+   "kind": "ost",
+   "node": 1,
+   "addr": "10.99.1.2:19951",
+   "log": "/home/claude/rocepool/rocepool/.bench_cache/io500_run/ost1.log"
+  },
+  {
+   "kind": "ost",
+   "node": 2,
+   "addr": "10.99.1.3:19951",
+   "log": "/home/claude/rocepool/rocepool/.bench_cache/io500_run/ost2.log"
+  }
+ ],
+ "snapshots": [
+  {
+   "phase": "start",
+   "t": 2464.797910744,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 14579,
+     "handler_cpu_ns": 48694331,
+     "handler_wall_ns": 78777672,
+     "bytes_in": 7861395,
+     "bytes_out": 8654816,
+     "inflight_max": 3,
+     "lock_wait_ns": 4595295,
+     "lock_hold_ns": 32540110,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 827,
+     "slots_published": 5040,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 3308,
+      "3": 48,
+      "4": 3308,
+      "5": 68,
+      "6": 56,
+      "7": 1648,
+      "8": 1648,
+      "9": 24,
+      "10": 12,
+      "12": 12
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 14761,
+     "handler_cpu_ns": 48895859,
+     "handler_wall_ns": 82350791,
+     "bytes_in": 7527855,
+     "bytes_out": 8322315,
+     "inflight_max": 3,
+     "lock_wait_ns": 5098389,
+     "lock_hold_ns": 34758301,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 814,
+     "slots_published": 5442,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 3260,
+      "3": 550,
+      "4": 3256,
+      "5": 68,
+      "6": 56,
+      "7": 1564,
+      "8": 1564,
+      "9": 46,
+      "10": 22,
+      "12": 14
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 13781,
+     "handler_cpu_ns": 44052147,
+     "handler_wall_ns": 72048686,
+     "bytes_in": 7549833,
+     "bytes_out": 8298992,
+     "inflight_max": 3,
+     "lock_wait_ns": 4375986,
+     "lock_hold_ns": 29521928,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 780,
+     "slots_published": 4764,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 3120,
+      "3": 32,
+      "4": 3120,
+      "5": 68,
+      "6": 56,
+      "7": 1588,
+      "8": 1588,
+      "9": 16,
+      "10": 8,
+      "12": 12
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 23806,
+     "handler_cpu_ns": 123911981,
+     "handler_wall_ns": 196939417,
+     "bytes_in": 161608972,
+     "bytes_out": 191987512,
+     "inflight_max": 3,
+     "objects": 0,
+     "bytes": 0,
+     "leases": 193,
+     "lease_misses": 0,
+     "arena_bytes": 67108864,
+     "by_op": {
+      "1": 144,
+      "3": 39,
+      "11": 460,
+      "15": 22930,
+      "40": 28,
+      "42": 12,
+      "44": 193
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 22797,
+     "handler_cpu_ns": 130862695,
+     "handler_wall_ns": 223234601,
+     "bytes_in": 154515523,
+     "bytes_out": 180489842,
+     "inflight_max": 5,
+     "objects": 0,
+     "bytes": 0,
+     "leases": 194,
+     "lease_misses": 0,
+     "arena_bytes": 67108864,
+     "by_op": {
+      "1": 137,
+      "3": 38,
+      "11": 504,
+      "15": 21877,
+      "40": 28,
+      "42": 19,
+      "44": 194
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 23099,
+     "handler_cpu_ns": 123895503,
+     "handler_wall_ns": 218527724,
+     "bytes_in": 157347866,
+     "bytes_out": 186148478,
+     "inflight_max": 3,
+     "objects": 0,
+     "bytes": 0,
+     "leases": 196,
+     "lease_misses": 0,
+     "arena_bytes": 67108864,
+     "by_op": {
+      "1": 136,
+      "3": 38,
+      "11": 464,
+      "15": 22229,
+      "40": 28,
+      "42": 8,
+      "44": 196
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.13,
+       "sys": 0.65
+      }
+     },
+     "rss_kb": 26228,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.15,
+       "sys": 0.65
+      }
+     },
+     "rss_kb": 26144,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.09,
+       "sys": 0.64
+      }
+     },
+     "rss_kb": 25932,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.28,
+       "sys": 1.13
+      }
+     },
+     "rss_kb": 90224,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.14
+      }
+     },
+     "rss_kb": 83136,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.29000000000000004,
+       "sys": 1.08
+      }
+     },
+     "rss_kb": 84896,
+     "node": 2
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 98.42,
+     "nice": 0.0,
+     "system": 46.57,
+     "idle": 4743.67,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 10.12,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  },
+  {
+   "phase": "ior-easy-write",
+   "t": 2465.00520007,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 14581,
+     "handler_cpu_ns": 48716764,
+     "handler_wall_ns": 78799939,
+     "bytes_in": 7861466,
+     "bytes_out": 8654928,
+     "inflight_max": 3,
+     "lock_wait_ns": 4609048,
+     "lock_hold_ns": 32544446,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 828,
+     "slots_published": 5041,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 3309,
+      "3": 48,
+      "4": 3308,
+      "5": 68,
+      "6": 56,
+      "7": 1648,
+      "8": 1648,
+      "9": 24,
+      "10": 12,
+      "12": 13
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 14764,
+     "handler_cpu_ns": 48921546,
+     "handler_wall_ns": 82376015,
+     "bytes_in": 7527963,
+     "bytes_out": 8322486,
+     "inflight_max": 3,
+     "lock_wait_ns": 5107592,
+     "lock_hold_ns": 34769521,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 816,
+     "slots_published": 5444,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 3262,
+      "3": 550,
+      "4": 3256,
+      "5": 68,
+      "6": 56,
+      "7": 1564,
+      "8": 1564,
+      "9": 46,
+      "10": 22,
+      "12": 15
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 13781,
+     "handler_cpu_ns": 44052147,
+     "handler_wall_ns": 72048686,
+     "bytes_in": 7549833,
+     "bytes_out": 8298992,
+     "inflight_max": 3,
+     "lock_wait_ns": 4375986,
+     "lock_hold_ns": 29521928,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 780,
+     "slots_published": 4764,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 3120,
+      "3": 32,
+      "4": 3120,
+      "5": 68,
+      "6": 56,
+      "7": 1588,
+      "8": 1588,
+      "9": 16,
+      "10": 8,
+      "12": 12
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 23806,
+     "handler_cpu_ns": 123911981,
+     "handler_wall_ns": 196939417,
+     "bytes_in": 161608972,
+     "bytes_out": 191987512,
+     "inflight_max": 3,
+     "objects": 0,
+     "bytes": 0,
+     "leases": 193,
+     "lease_misses": 0,
+     "arena_bytes": 67108864,
+     "by_op": {
+      "1": 144,
+      "3": 39,
+      "11": 460,
+      "15": 22930,
+      "40": 28,
+      "42": 12,
+      "44": 193
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 22797,
+     "handler_cpu_ns": 130862695,
+     "handler_wall_ns": 223234601,
+     "bytes_in": 154515523,
+     "bytes_out": 180489842,
+     "inflight_max": 5,
+     "objects": 0,
+     "bytes": 0,
+     "leases": 194,
+     "lease_misses": 0,
+     "arena_bytes": 67108864,
+     "by_op": {
+      "1": 137,
+      "3": 38,
+      "11": 504,
+      "15": 21877,
+      "40": 28,
+      "42": 19,
+      "44": 194
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 23099,
+     "handler_cpu_ns": 123895503,
+     "handler_wall_ns": 218527724,
+     "bytes_in": 157347866,
+     "bytes_out": 186148478,
+     "inflight_max": 3,
+     "objects": 0,
+     "bytes": 0,
+     "leases": 196,
+     "lease_misses": 0,
+     "arena_bytes": 67108864,
+     "by_op": {
+      "1": 136,
+      "3": 38,
+      "11": 464,
+      "15": 22229,
+      "40": 28,
+      "42": 8,
+      "44": 196
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.13,
+       "sys": 0.65
+      }
+     },
+     "rss_kb": 26236,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.15,
+       "sys": 0.65
+      }
+     },
+     "rss_kb": 26156,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.09,
+       "sys": 0.64
+      }
+     },
+     "rss_kb": 25932,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.28,
+       "sys": 1.13
+      }
+     },
+     "rss_kb": 90224,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.14
+      }
+     },
+     "rss_kb": 83136,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.29000000000000004,
+       "sys": 1.08
+      }
+     },
+     "rss_kb": 84896,
+     "node": 2
+    },
+    {
+     "pid": 9228,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 11384,
+     "node": 2
+    },
+    {
+     "pid": 9229,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 11084,
+     "node": 2
+    },
+    {
+     "pid": 9230,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 11364,
+     "node": 1
+    },
+    {
+     "pid": 9231,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 11104,
+     "node": 1
+    },
+    {
+     "pid": 9232,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 77316,
+     "node": 0
+    },
+    {
+     "pid": 9233,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 11088,
+     "node": 0
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 98.45,
+     "nice": 0.0,
+     "system": 46.76,
+     "idle": 4743.85,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 10.12,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  },
+  {
+   "phase": "mdtest-easy-write",
+   "t": 2466.211169186,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 14614,
+     "handler_cpu_ns": 48877777,
+     "handler_wall_ns": 79009404,
+     "bytes_in": 7863657,
+     "bytes_out": 8658176,
+     "inflight_max": 3,
+     "lock_wait_ns": 4645541,
+     "lock_hold_ns": 32634914,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 830,
+     "slots_published": 5069,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 3311,
+      "3": 68,
+      "4": 3308,
+      "5": 68,
+      "6": 56,
+      "7": 1648,
+      "8": 1648,
+      "9": 28,
+      "10": 14,
+      "12": 18
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 14808,
+     "handler_cpu_ns": 49102657,
+     "handler_wall_ns": 82532258,
+     "bytes_in": 7531112,
+     "bytes_out": 8327116,
+     "inflight_max": 3,
+     "lock_wait_ns": 5141427,
+     "lock_hold_ns": 34837325,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 819,
+     "slots_published": 5486,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 3265,
+      "3": 580,
+      "4": 3256,
+      "5": 68,
+      "6": 56,
+      "7": 1564,
+      "8": 1564,
+      "9": 52,
+      "10": 25,
+      "12": 17
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 13796,
+     "handler_cpu_ns": 44157343,
+     "handler_wall_ns": 72492739,
+     "bytes_in": 7550891,
+     "bytes_out": 8300550,
+     "inflight_max": 3,
+     "lock_wait_ns": 4398983,
+     "lock_hold_ns": 29559592,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 781,
+     "slots_published": 4778,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 3121,
+      "3": 42,
+      "4": 3120,
+      "5": 68,
+      "6": 56,
+      "7": 1588,
+      "8": 1588,
+      "9": 18,
+      "10": 9,
+      "12": 13
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 23890,
+     "handler_cpu_ns": 153239472,
+     "handler_wall_ns": 286978562,
+     "bytes_in": 245502594,
+     "bytes_out": 191995644,
+     "inflight_max": 4,
+     "objects": 80,
+     "bytes": 83886080,
+     "leases": 193,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 226,
+      "3": 39,
+      "11": 460,
+      "15": 22930,
+      "40": 28,
+      "42": 14,
+      "44": 193
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 22884,
+     "handler_cpu_ns": 160780614,
+     "handler_wall_ns": 314448375,
+     "bytes_in": 239457982,
+     "bytes_out": 180498257,
+     "inflight_max": 5,
+     "objects": 81,
+     "bytes": 84934656,
+     "leases": 194,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 221,
+      "3": 38,
+      "11": 504,
+      "15": 21877,
+      "40": 28,
+      "42": 22,
+      "44": 194
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 23180,
+     "handler_cpu_ns": 153071540,
+     "handler_wall_ns": 288772708,
+     "bytes_in": 240192651,
+     "bytes_out": 186156327,
+     "inflight_max": 3,
+     "objects": 79,
+     "bytes": 82837504,
+     "leases": 196,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 216,
+      "3": 38,
+      "11": 464,
+      "15": 22229,
+      "40": 28,
+      "42": 9,
+      "44": 196
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.13,
+       "sys": 0.65
+      }
+     },
+     "rss_kb": 26368,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.15,
+       "sys": 0.65
+      }
+     },
+     "rss_kb": 26208,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.09,
+       "sys": 0.65
+      }
+     },
+     "rss_kb": 25940,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.30000000000000004,
+       "sys": 1.17
+      }
+     },
+     "rss_kb": 134640,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.33,
+       "sys": 1.18
+      }
+     },
+     "rss_kb": 133716,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.30000000000000004,
+       "sys": 1.13
+      }
+     },
+     "rss_kb": 129264,
+     "node": 2
+    },
+    {
+     "pid": 9228,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.010000000000000002
+      }
+     },
+     "rss_kb": 82040,
+     "node": 2
+    },
+    {
+     "pid": 9229,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.020000000000000004
+      }
+     },
+     "rss_kb": 82044,
+     "node": 2
+    },
+    {
+     "pid": 9230,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.019999999999999997
+      }
+     },
+     "rss_kb": 82020,
+     "node": 1
+    },
+    {
+     "pid": 9231,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.03
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.020000000000000004
+      }
+     },
+     "rss_kb": 82088,
+     "node": 1
+    },
+    {
+     "pid": 9232,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.01,
+       "sys": 0.020000000000000004
+      }
+     },
+     "rss_kb": 82904,
+     "node": 0
+    },
+    {
+     "pid": 9233,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.019999999999999997
+      }
+     },
+     "rss_kb": 82044,
+     "node": 0
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 98.54,
+     "nice": 0.0,
+     "system": 47.11,
+     "idle": 4745.75,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 10.18,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  },
+  {
+   "phase": "timestamp",
+   "t": 2468.42346296,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 15212,
+     "handler_cpu_ns": 55190601,
+     "handler_wall_ns": 86847156,
+     "bytes_in": 7930314,
+     "bytes_out": 8737989,
+     "inflight_max": 3,
+     "lock_wait_ns": 5022376,
+     "lock_hold_ns": 38848769,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1428,
+     "slots_published": 5667,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 3909,
+      "3": 68,
+      "4": 3308,
+      "5": 68,
+      "6": 56,
+      "7": 1648,
+      "8": 1648,
+      "9": 28,
+      "10": 14,
+      "12": 18
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 15429,
+     "handler_cpu_ns": 55632053,
+     "handler_wall_ns": 91458692,
+     "bytes_in": 7600149,
+     "bytes_out": 8409806,
+     "inflight_max": 3,
+     "lock_wait_ns": 5551400,
+     "lock_hold_ns": 41508521,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1437,
+     "slots_published": 6104,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 3883,
+      "3": 580,
+      "4": 3256,
+      "5": 68,
+      "6": 56,
+      "7": 1564,
+      "8": 1564,
+      "9": 52,
+      "10": 25,
+      "12": 20
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 14393,
+     "handler_cpu_ns": 50786619,
+     "handler_wall_ns": 82227111,
+     "bytes_in": 7616916,
+     "bytes_out": 8379694,
+     "inflight_max": 3,
+     "lock_wait_ns": 5482468,
+     "lock_hold_ns": 36827108,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1373,
+     "slots_published": 5370,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 3713,
+      "3": 42,
+      "4": 3120,
+      "5": 68,
+      "6": 56,
+      "7": 1588,
+      "8": 1588,
+      "9": 18,
+      "10": 9,
+      "12": 18
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 23890,
+     "handler_cpu_ns": 153239472,
+     "handler_wall_ns": 286978562,
+     "bytes_in": 245502594,
+     "bytes_out": 191995644,
+     "inflight_max": 4,
+     "objects": 80,
+     "bytes": 83886080,
+     "leases": 193,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 226,
+      "3": 39,
+      "11": 460,
+      "15": 22930,
+      "40": 28,
+      "42": 14,
+      "44": 193
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 22884,
+     "handler_cpu_ns": 160780614,
+     "handler_wall_ns": 314448375,
+     "bytes_in": 239457982,
+     "bytes_out": 180498257,
+     "inflight_max": 5,
+     "objects": 81,
+     "bytes": 84934656,
+     "leases": 194,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 221,
+      "3": 38,
+      "11": 504,
+      "15": 21877,
+      "40": 28,
+      "42": 22,
+      "44": 194
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 23180,
+     "handler_cpu_ns": 153071540,
+     "handler_wall_ns": 288772708,
+     "bytes_in": 240192651,
+     "bytes_out": 186156327,
+     "inflight_max": 3,
+     "objects": 79,
+     "bytes": 82837504,
+     "leases": 196,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 216,
+      "3": 38,
+      "11": 464,
+      "15": 22229,
+      "40": 28,
+      "42": 9,
+      "44": 196
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.14,
+       "sys": 0.69
+      }
+     },
+     "rss_kb": 28776,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.15,
+       "sys": 0.71
+      }
+     },
+     "rss_kb": 28756,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.11000000000000001,
+       "sys": 0.69
+      }
+     },
+     "rss_kb": 28420,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.30000000000000004,
+       "sys": 1.17
+      }
+     },
+     "rss_kb": 134640,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.33,
+       "sys": 1.18
+      }
+     },
+     "rss_kb": 133716,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.30000000000000004,
+       "sys": 1.13
+      }
+     },
+     "rss_kb": 129264,
+     "node": 2
+    },
+    {
+     "pid": 9228,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.05
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.01,
+       "sys": 0.020000000000000004
+      }
+     },
+     "rss_kb": 82552,
+     "node": 2
+    },
+    {
+     "pid": 9229,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.05
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.03
+      }
+     },
+     "rss_kb": 82616,
+     "node": 2
+    },
+    {
+     "pid": 9230,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.05
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.03
+      }
+     },
+     "rss_kb": 82584,
+     "node": 1
+    },
+    {
+     "pid": 9231,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.030000000000000006
+      }
+     },
+     "rss_kb": 82664,
+     "node": 1
+    },
+    {
+     "pid": 9232,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.01,
+       "sys": 0.019999999999999997
+      }
+     },
+     "rss_kb": 83432,
+     "node": 0
+    },
+    {
+     "pid": 9233,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.05
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.03
+      }
+     },
+     "rss_kb": 82600,
+     "node": 0
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 98.63,
+     "nice": 0.0,
+     "system": 47.33,
+     "idle": 4749.79,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 10.25,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  },
+  {
+   "phase": "ior-hard-write",
+   "t": 2469.433018412,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 15212,
+     "handler_cpu_ns": 55190601,
+     "handler_wall_ns": 86847156,
+     "bytes_in": 7930314,
+     "bytes_out": 8737989,
+     "inflight_max": 3,
+     "lock_wait_ns": 5022376,
+     "lock_hold_ns": 38848769,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1428,
+     "slots_published": 5667,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 3909,
+      "3": 68,
+      "4": 3308,
+      "5": 68,
+      "6": 56,
+      "7": 1648,
+      "8": 1648,
+      "9": 28,
+      "10": 14,
+      "12": 18
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 15429,
+     "handler_cpu_ns": 55632053,
+     "handler_wall_ns": 91458692,
+     "bytes_in": 7600149,
+     "bytes_out": 8409806,
+     "inflight_max": 3,
+     "lock_wait_ns": 5551400,
+     "lock_hold_ns": 41508521,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1437,
+     "slots_published": 6104,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 3883,
+      "3": 580,
+      "4": 3256,
+      "5": 68,
+      "6": 56,
+      "7": 1564,
+      "8": 1564,
+      "9": 52,
+      "10": 25,
+      "12": 20
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 14393,
+     "handler_cpu_ns": 50786619,
+     "handler_wall_ns": 82227111,
+     "bytes_in": 7616916,
+     "bytes_out": 8379694,
+     "inflight_max": 3,
+     "lock_wait_ns": 5482468,
+     "lock_hold_ns": 36827108,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1373,
+     "slots_published": 5370,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 3713,
+      "3": 42,
+      "4": 3120,
+      "5": 68,
+      "6": 56,
+      "7": 1588,
+      "8": 1588,
+      "9": 18,
+      "10": 9,
+      "12": 18
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 23890,
+     "handler_cpu_ns": 153239472,
+     "handler_wall_ns": 286978562,
+     "bytes_in": 245502594,
+     "bytes_out": 191995644,
+     "inflight_max": 4,
+     "objects": 80,
+     "bytes": 83886080,
+     "leases": 193,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 226,
+      "3": 39,
+      "11": 460,
+      "15": 22930,
+      "40": 28,
+      "42": 14,
+      "44": 193
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 22884,
+     "handler_cpu_ns": 160780614,
+     "handler_wall_ns": 314448375,
+     "bytes_in": 239457982,
+     "bytes_out": 180498257,
+     "inflight_max": 5,
+     "objects": 81,
+     "bytes": 84934656,
+     "leases": 194,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 221,
+      "3": 38,
+      "11": 504,
+      "15": 21877,
+      "40": 28,
+      "42": 22,
+      "44": 194
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 23180,
+     "handler_cpu_ns": 153071540,
+     "handler_wall_ns": 288772708,
+     "bytes_in": 240192651,
+     "bytes_out": 186156327,
+     "inflight_max": 3,
+     "objects": 79,
+     "bytes": 82837504,
+     "leases": 196,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 216,
+      "3": 38,
+      "11": 464,
+      "15": 22229,
+      "40": 28,
+      "42": 9,
+      "44": 196
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.14,
+       "sys": 0.69
+      }
+     },
+     "rss_kb": 28776,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.15,
+       "sys": 0.71
+      }
+     },
+     "rss_kb": 28756,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.11000000000000001,
+       "sys": 0.69
+      }
+     },
+     "rss_kb": 28420,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.30000000000000004,
+       "sys": 1.17
+      }
+     },
+     "rss_kb": 134640,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.33,
+       "sys": 1.18
+      }
+     },
+     "rss_kb": 133716,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.30000000000000004,
+       "sys": 1.13
+      }
+     },
+     "rss_kb": 129264,
+     "node": 2
+    },
+    {
+     "pid": 9228,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.05
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.01,
+       "sys": 0.020000000000000004
+      }
+     },
+     "rss_kb": 82552,
+     "node": 2
+    },
+    {
+     "pid": 9229,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.05
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.03
+      }
+     },
+     "rss_kb": 82616,
+     "node": 2
+    },
+    {
+     "pid": 9230,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.05
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.03
+      }
+     },
+     "rss_kb": 82584,
+     "node": 1
+    },
+    {
+     "pid": 9231,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.030000000000000006
+      }
+     },
+     "rss_kb": 82664,
+     "node": 1
+    },
+    {
+     "pid": 9232,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.01,
+       "sys": 0.019999999999999997
+      }
+     },
+     "rss_kb": 83432,
+     "node": 0
+    },
+    {
+     "pid": 9233,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.05
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.03
+      }
+     },
+     "rss_kb": 82600,
+     "node": 0
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 98.63,
+     "nice": 0.0,
+     "system": 47.33,
+     "idle": 4751.79,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 10.25,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  },
+  {
+   "phase": "mdtest-hard-write",
+   "t": 2470.844201289,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 16792,
+     "handler_cpu_ns": 58792142,
+     "handler_wall_ns": 94505221,
+     "bytes_in": 8020281,
+     "bytes_out": 8878697,
+     "inflight_max": 3,
+     "lock_wait_ns": 5538940,
+     "lock_hold_ns": 39865413,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1429,
+     "slots_published": 7247,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 3915,
+      "3": 1625,
+      "4": 3308,
+      "5": 68,
+      "6": 56,
+      "7": 1648,
+      "8": 1648,
+      "9": 39,
+      "10": 20,
+      "12": 18
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 15429,
+     "handler_cpu_ns": 55632053,
+     "handler_wall_ns": 91458692,
+     "bytes_in": 7600149,
+     "bytes_out": 8409806,
+     "inflight_max": 3,
+     "lock_wait_ns": 5551400,
+     "lock_hold_ns": 41508521,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1437,
+     "slots_published": 6104,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 3883,
+      "3": 580,
+      "4": 3256,
+      "5": 68,
+      "6": 56,
+      "7": 1564,
+      "8": 1564,
+      "9": 52,
+      "10": 25,
+      "12": 20
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 14393,
+     "handler_cpu_ns": 50786619,
+     "handler_wall_ns": 82227111,
+     "bytes_in": 7616916,
+     "bytes_out": 8379694,
+     "inflight_max": 3,
+     "lock_wait_ns": 5482468,
+     "lock_hold_ns": 36827108,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1373,
+     "slots_published": 5370,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 3713,
+      "3": 42,
+      "4": 3120,
+      "5": 68,
+      "6": 56,
+      "7": 1588,
+      "8": 1588,
+      "9": 18,
+      "10": 9,
+      "12": 18
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 24853,
+     "handler_cpu_ns": 185534672,
+     "handler_wall_ns": 384947908,
+     "bytes_in": 288562544,
+     "bytes_out": 192071681,
+     "inflight_max": 6,
+     "objects": 121,
+     "bytes": 126877696,
+     "leases": 193,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 227,
+      "3": 39,
+      "11": 1417,
+      "15": 22930,
+      "40": 28,
+      "42": 19,
+      "44": 193
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 23838,
+     "handler_cpu_ns": 194265412,
+     "handler_wall_ns": 416604139,
+     "bytes_in": 282517332,
+     "bytes_out": 180573623,
+     "inflight_max": 6,
+     "objects": 122,
+     "bytes": 127926272,
+     "leases": 194,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 221,
+      "3": 38,
+      "11": 1458,
+      "15": 21877,
+      "40": 28,
+      "42": 22,
+      "44": 194
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 24127,
+     "handler_cpu_ns": 186188170,
+     "handler_wall_ns": 388234709,
+     "bytes_in": 282890544,
+     "bytes_out": 186231140,
+     "inflight_max": 6,
+     "objects": 120,
+     "bytes": 125468160,
+     "leases": 196,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 216,
+      "3": 38,
+      "11": 1411,
+      "15": 22229,
+      "40": 28,
+      "42": 9,
+      "44": 196
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.02
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.15,
+       "sys": 0.73
+      }
+     },
+     "rss_kb": 28788,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.15,
+       "sys": 0.71
+      }
+     },
+     "rss_kb": 28756,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.11000000000000001,
+       "sys": 0.69
+      }
+     },
+     "rss_kb": 28420,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.32,
+       "sys": 1.23
+      }
+     },
+     "rss_kb": 176960,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.01
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.35000000000000003,
+       "sys": 1.23
+      }
+     },
+     "rss_kb": 175928,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.18
+      }
+     },
+     "rss_kb": 171256,
+     "node": 2
+    },
+    {
+     "pid": 9228,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.02,
+       "sys": 0.06
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.05
+      }
+     },
+     "rss_kb": 90680,
+     "node": 2
+    },
+    {
+     "pid": 9229,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.06
+      }
+     },
+     "rss_kb": 90744,
+     "node": 2
+    },
+    {
+     "pid": 9230,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.01,
+       "sys": 0.039999999999999994
+      }
+     },
+     "rss_kb": 90712,
+     "node": 1
+    },
+    {
+     "pid": 9231,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.02,
+       "sys": 0.05
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.03
+      }
+     },
+     "rss_kb": 90796,
+     "node": 1
+    },
+    {
+     "pid": 9232,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.07
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.01,
+       "sys": 0.039999999999999994
+      }
+     },
+     "rss_kb": 91560,
+     "node": 0
+    },
+    {
+     "pid": 9233,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.07
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.04000000000000001
+      }
+     },
+     "rss_kb": 90724,
+     "node": 0
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 98.77,
+     "nice": 0.0,
+     "system": 47.91,
+     "idle": 4753.8,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 10.37,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  },
+  {
+   "phase": "find",
+   "t": 2473.254967689,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 17976,
+     "handler_cpu_ns": 66858847,
+     "handler_wall_ns": 105572366,
+     "bytes_in": 10448994,
+     "bytes_out": 9034468,
+     "inflight_max": 3,
+     "lock_wait_ns": 6055010,
+     "lock_hold_ns": 47622377,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2022,
+     "slots_published": 8431,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 4508,
+      "3": 1625,
+      "4": 3308,
+      "5": 68,
+      "6": 56,
+      "7": 2239,
+      "8": 1648,
+      "9": 39,
+      "10": 20,
+      "12": 18
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 16645,
+     "handler_cpu_ns": 65043015,
+     "handler_wall_ns": 104023834,
+     "bytes_in": 10098555,
+     "bytes_out": 8569844,
+     "inflight_max": 3,
+     "lock_wait_ns": 5891805,
+     "lock_hold_ns": 50854307,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2045,
+     "slots_published": 7320,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 4491,
+      "3": 580,
+      "4": 3256,
+      "5": 68,
+      "6": 56,
+      "7": 2172,
+      "8": 1564,
+      "9": 52,
+      "10": 25,
+      "12": 20
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 15596,
+     "handler_cpu_ns": 60108001,
+     "handler_wall_ns": 97892752,
+     "bytes_in": 10086664,
+     "bytes_out": 8538018,
+     "inflight_max": 3,
+     "lock_wait_ns": 5820911,
+     "lock_hold_ns": 48742065,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1975,
+     "slots_published": 6573,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 4315,
+      "3": 42,
+      "4": 3120,
+      "5": 68,
+      "6": 56,
+      "7": 2189,
+      "8": 1588,
+      "9": 18,
+      "10": 9,
+      "12": 18
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 24853,
+     "handler_cpu_ns": 185534672,
+     "handler_wall_ns": 384947908,
+     "bytes_in": 288562544,
+     "bytes_out": 192071681,
+     "inflight_max": 6,
+     "objects": 121,
+     "bytes": 126877696,
+     "leases": 193,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 227,
+      "3": 39,
+      "11": 1417,
+      "15": 22930,
+      "40": 28,
+      "42": 19,
+      "44": 193
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 23838,
+     "handler_cpu_ns": 194265412,
+     "handler_wall_ns": 416604139,
+     "bytes_in": 282517332,
+     "bytes_out": 180573623,
+     "inflight_max": 6,
+     "objects": 122,
+     "bytes": 127926272,
+     "leases": 194,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 221,
+      "3": 38,
+      "11": 1458,
+      "15": 21877,
+      "40": 28,
+      "42": 22,
+      "44": 194
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 24127,
+     "handler_cpu_ns": 186188170,
+     "handler_wall_ns": 388234709,
+     "bytes_in": 282890544,
+     "bytes_out": 186231140,
+     "inflight_max": 6,
+     "objects": 120,
+     "bytes": 125468160,
+     "leases": 196,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 216,
+      "3": 38,
+      "11": 1411,
+      "15": 22229,
+      "40": 28,
+      "42": 9,
+      "44": 196
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.060000000000000005
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.16999999999999998,
+       "sys": 0.72
+      }
+     },
+     "rss_kb": 32524,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.02
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.16,
+       "sys": 0.74
+      }
+     },
+     "rss_kb": 32416,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.10999999999999999,
+       "sys": 0.71
+      }
+     },
+     "rss_kb": 31860,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.32,
+       "sys": 1.22
+      }
+     },
+     "rss_kb": 176960,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.01
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.35000000000000003,
+       "sys": 1.23
+      }
+     },
+     "rss_kb": 175928,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.18
+      }
+     },
+     "rss_kb": 171256,
+     "node": 2
+    },
+    {
+     "pid": 9228,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.02,
+       "sys": 0.08
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.009999999999999998,
+       "sys": 0.05000000000000002
+      }
+     },
+     "rss_kb": 90756,
+     "node": 2
+    },
+    {
+     "pid": 9229,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.08
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.08
+      }
+     },
+     "rss_kb": 90776,
+     "node": 2
+    },
+    {
+     "pid": 9230,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.08
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.04000000000000001
+      }
+     },
+     "rss_kb": 90776,
+     "node": 1
+    },
+    {
+     "pid": 9231,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.02,
+       "sys": 0.07
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.009999999999999998,
+       "sys": 0.04000000000000001
+      }
+     },
+     "rss_kb": 90848,
+     "node": 1
+    },
+    {
+     "pid": 9232,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.08
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.01,
+       "sys": 0.06
+      }
+     },
+     "rss_kb": 91624,
+     "node": 0
+    },
+    {
+     "pid": 9233,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.02,
+       "sys": 0.08
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.04000000000000001
+      }
+     },
+     "rss_kb": 90772,
+     "node": 0
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 98.92,
+     "nice": 0.0,
+     "system": 48.22,
+     "idle": 4758.11,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 10.41,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  },
+  {
+   "phase": "ior-easy-read",
+   "t": 2474.463743866,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 17996,
+     "handler_cpu_ns": 67682459,
+     "handler_wall_ns": 106596780,
+     "bytes_in": 10450051,
+     "bytes_out": 9108384,
+     "inflight_max": 3,
+     "lock_wait_ns": 6105000,
+     "lock_hold_ns": 48116934,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2022,
+     "slots_published": 8431,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 4508,
+      "3": 1625,
+      "4": 3308,
+      "5": 88,
+      "6": 56,
+      "7": 2239,
+      "8": 1648,
+      "9": 39,
+      "10": 20,
+      "12": 18
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 16665,
+     "handler_cpu_ns": 65927816,
+     "handler_wall_ns": 105128515,
+     "bytes_in": 10099612,
+     "bytes_out": 8645722,
+     "inflight_max": 3,
+     "lock_wait_ns": 5957581,
+     "lock_hold_ns": 51396307,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2045,
+     "slots_published": 7320,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 4491,
+      "3": 580,
+      "4": 3256,
+      "5": 88,
+      "6": 56,
+      "7": 2172,
+      "8": 1564,
+      "9": 52,
+      "10": 25,
+      "12": 20
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 15616,
+     "handler_cpu_ns": 60986324,
+     "handler_wall_ns": 98834379,
+     "bytes_in": 10087721,
+     "bytes_out": 8611728,
+     "inflight_max": 3,
+     "lock_wait_ns": 5948081,
+     "lock_hold_ns": 49127466,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1975,
+     "slots_published": 6573,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 4315,
+      "3": 42,
+      "4": 3120,
+      "5": 88,
+      "6": 56,
+      "7": 2189,
+      "8": 1588,
+      "9": 18,
+      "10": 9,
+      "12": 18
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 24853,
+     "handler_cpu_ns": 185534672,
+     "handler_wall_ns": 384947908,
+     "bytes_in": 288562544,
+     "bytes_out": 192071681,
+     "inflight_max": 6,
+     "objects": 121,
+     "bytes": 126877696,
+     "leases": 193,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 227,
+      "3": 39,
+      "11": 1417,
+      "15": 22930,
+      "40": 28,
+      "42": 19,
+      "44": 193
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 23838,
+     "handler_cpu_ns": 194265412,
+     "handler_wall_ns": 416604139,
+     "bytes_in": 282517332,
+     "bytes_out": 180573623,
+     "inflight_max": 6,
+     "objects": 122,
+     "bytes": 127926272,
+     "leases": 194,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 221,
+      "3": 38,
+      "11": 1458,
+      "15": 21877,
+      "40": 28,
+      "42": 22,
+      "44": 194
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 24127,
+     "handler_cpu_ns": 186188170,
+     "handler_wall_ns": 388234709,
+     "bytes_in": 282890544,
+     "bytes_out": 186231140,
+     "inflight_max": 6,
+     "objects": 120,
+     "bytes": 125468160,
+     "leases": 196,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 216,
+      "3": 38,
+      "11": 1411,
+      "15": 22229,
+      "40": 28,
+      "42": 9,
+      "44": 196
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.060000000000000005
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.16999999999999998,
+       "sys": 0.72
+      }
+     },
+     "rss_kb": 32732,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.16,
+       "sys": 0.73
+      }
+     },
+     "rss_kb": 32636,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.12,
+       "sys": 0.72
+      }
+     },
+     "rss_kb": 32068,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.32,
+       "sys": 1.22
+      }
+     },
+     "rss_kb": 176960,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.01
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.35000000000000003,
+       "sys": 1.22
+      }
+     },
+     "rss_kb": 175928,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.18
+      }
+     },
+     "rss_kb": 171256,
+     "node": 2
+    },
+    {
+     "pid": 9228,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.07,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.04999999999999999
+      }
+     },
+     "rss_kb": 91140,
+     "node": 2
+    },
+    {
+     "pid": 9229,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.19
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.07
+      }
+     },
+     "rss_kb": 91072,
+     "node": 2
+    },
+    {
+     "pid": 9230,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.15
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.05000000000000002
+      }
+     },
+     "rss_kb": 91096,
+     "node": 1
+    },
+    {
+     "pid": 9231,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.05,
+       "sys": 0.17
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.03999999999999998
+      }
+     },
+     "rss_kb": 91124,
+     "node": 1
+    },
+    {
+     "pid": 9232,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.17
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.010000000000000002,
+       "sys": 0.05999999999999997
+      }
+     },
+     "rss_kb": 92496,
+     "node": 0
+    },
+    {
+     "pid": 9233,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.07,
+       "sys": 0.14
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.03999999999999998
+      }
+     },
+     "rss_kb": 91104,
+     "node": 0
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 99.13,
+     "nice": 0.0,
+     "system": 48.8,
+     "idle": 4759.74,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 10.41,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  },
+  {
+   "phase": "mdtest-easy-stat",
+   "t": 2475.672480586,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 17996,
+     "handler_cpu_ns": 67682459,
+     "handler_wall_ns": 106596780,
+     "bytes_in": 10450051,
+     "bytes_out": 9108384,
+     "inflight_max": 3,
+     "lock_wait_ns": 6105000,
+     "lock_hold_ns": 48116934,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2022,
+     "slots_published": 8431,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 4508,
+      "3": 1625,
+      "4": 3308,
+      "5": 88,
+      "6": 56,
+      "7": 2239,
+      "8": 1648,
+      "9": 39,
+      "10": 20,
+      "12": 18
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 16665,
+     "handler_cpu_ns": 65927816,
+     "handler_wall_ns": 105128515,
+     "bytes_in": 10099612,
+     "bytes_out": 8645722,
+     "inflight_max": 3,
+     "lock_wait_ns": 5957581,
+     "lock_hold_ns": 51396307,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2045,
+     "slots_published": 7320,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 4491,
+      "3": 580,
+      "4": 3256,
+      "5": 88,
+      "6": 56,
+      "7": 2172,
+      "8": 1564,
+      "9": 52,
+      "10": 25,
+      "12": 20
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 15616,
+     "handler_cpu_ns": 60986324,
+     "handler_wall_ns": 98834379,
+     "bytes_in": 10087721,
+     "bytes_out": 8611728,
+     "inflight_max": 3,
+     "lock_wait_ns": 5948081,
+     "lock_hold_ns": 49127466,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1975,
+     "slots_published": 6573,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 4315,
+      "3": 42,
+      "4": 3120,
+      "5": 88,
+      "6": 56,
+      "7": 2189,
+      "8": 1588,
+      "9": 18,
+      "10": 9,
+      "12": 18
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 24933,
+     "handler_cpu_ns": 186029619,
+     "handler_wall_ns": 385592813,
+     "bytes_in": 288569024,
+     "bytes_out": 192081681,
+     "inflight_max": 6,
+     "objects": 121,
+     "bytes": 126877696,
+     "leases": 273,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 227,
+      "3": 39,
+      "11": 1417,
+      "15": 22930,
+      "40": 28,
+      "42": 19,
+      "44": 273
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 23919,
+     "handler_cpu_ns": 194868647,
+     "handler_wall_ns": 417262995,
+     "bytes_in": 282523893,
+     "bytes_out": 180583748,
+     "inflight_max": 6,
+     "objects": 122,
+     "bytes": 127926272,
+     "leases": 275,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 221,
+      "3": 38,
+      "11": 1458,
+      "15": 21877,
+      "40": 28,
+      "42": 22,
+      "44": 275
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 24206,
+     "handler_cpu_ns": 186698293,
+     "handler_wall_ns": 389219497,
+     "bytes_in": 282896943,
+     "bytes_out": 186241015,
+     "inflight_max": 6,
+     "objects": 120,
+     "bytes": 125468160,
+     "leases": 275,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 216,
+      "3": 38,
+      "11": 1411,
+      "15": 22229,
+      "40": 28,
+      "42": 9,
+      "44": 275
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.060000000000000005
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.16999999999999998,
+       "sys": 0.72
+      }
+     },
+     "rss_kb": 32732,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.16,
+       "sys": 0.74
+      }
+     },
+     "rss_kb": 32636,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.12,
+       "sys": 0.72
+      }
+     },
+     "rss_kb": 32068,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.23
+      }
+     },
+     "rss_kb": 176960,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.03
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.35000000000000003,
+       "sys": 1.23
+      }
+     },
+     "rss_kb": 175928,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.22
+      }
+     },
+     "rss_kb": 171256,
+     "node": 2
+    },
+    {
+     "pid": 9228,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.04999999999999996
+      }
+     },
+     "rss_kb": 108736,
+     "node": 2
+    },
+    {
+     "pid": 9229,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.19
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.07999999999999999
+      }
+     },
+     "rss_kb": 107856,
+     "node": 2
+    },
+    {
+     "pid": 9230,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.05,
+       "sys": 0.15
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.04999999999999999
+      }
+     },
+     "rss_kb": 108892,
+     "node": 1
+    },
+    {
+     "pid": 9231,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.06,
+       "sys": 0.18
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.010000000000000009,
+       "sys": 0.05000000000000002
+      }
+     },
+     "rss_kb": 107904,
+     "node": 1
+    },
+    {
+     "pid": 9232,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.05,
+       "sys": 0.17
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.020000000000000004,
+       "sys": 0.06
+      }
+     },
+     "rss_kb": 109272,
+     "node": 0
+    },
+    {
+     "pid": 9233,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.15
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.07
+      }
+     },
+     "rss_kb": 107888,
+     "node": 0
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 99.23,
+     "nice": 0.0,
+     "system": 49.03,
+     "idle": 4761.76,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 10.47,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  },
+  {
+   "phase": "ior-hard-read",
+   "t": 2477.681746805,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 17996,
+     "handler_cpu_ns": 67682459,
+     "handler_wall_ns": 106596780,
+     "bytes_in": 10450051,
+     "bytes_out": 9108384,
+     "inflight_max": 3,
+     "lock_wait_ns": 6105000,
+     "lock_hold_ns": 48116934,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2022,
+     "slots_published": 8431,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 4508,
+      "3": 1625,
+      "4": 3308,
+      "5": 88,
+      "6": 56,
+      "7": 2239,
+      "8": 1648,
+      "9": 39,
+      "10": 20,
+      "12": 18
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 16665,
+     "handler_cpu_ns": 65927816,
+     "handler_wall_ns": 105128515,
+     "bytes_in": 10099612,
+     "bytes_out": 8645722,
+     "inflight_max": 3,
+     "lock_wait_ns": 5957581,
+     "lock_hold_ns": 51396307,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2045,
+     "slots_published": 7320,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 4491,
+      "3": 580,
+      "4": 3256,
+      "5": 88,
+      "6": 56,
+      "7": 2172,
+      "8": 1564,
+      "9": 52,
+      "10": 25,
+      "12": 20
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 15616,
+     "handler_cpu_ns": 60986324,
+     "handler_wall_ns": 98834379,
+     "bytes_in": 10087721,
+     "bytes_out": 8611728,
+     "inflight_max": 3,
+     "lock_wait_ns": 5948081,
+     "lock_hold_ns": 49127466,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1975,
+     "slots_published": 6573,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 4315,
+      "3": 42,
+      "4": 3120,
+      "5": 88,
+      "6": 56,
+      "7": 2189,
+      "8": 1588,
+      "9": 18,
+      "10": 9,
+      "12": 18
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 24933,
+     "handler_cpu_ns": 186029619,
+     "handler_wall_ns": 385592813,
+     "bytes_in": 288569024,
+     "bytes_out": 192081681,
+     "inflight_max": 6,
+     "objects": 121,
+     "bytes": 126877696,
+     "leases": 273,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 227,
+      "3": 39,
+      "11": 1417,
+      "15": 22930,
+      "40": 28,
+      "42": 19,
+      "44": 273
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 23919,
+     "handler_cpu_ns": 194868647,
+     "handler_wall_ns": 417262995,
+     "bytes_in": 282523893,
+     "bytes_out": 180583748,
+     "inflight_max": 6,
+     "objects": 122,
+     "bytes": 127926272,
+     "leases": 275,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 221,
+      "3": 38,
+      "11": 1458,
+      "15": 21877,
+      "40": 28,
+      "42": 22,
+      "44": 275
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 24206,
+     "handler_cpu_ns": 186698293,
+     "handler_wall_ns": 389219497,
+     "bytes_in": 282896943,
+     "bytes_out": 186241015,
+     "inflight_max": 6,
+     "objects": 120,
+     "bytes": 125468160,
+     "leases": 275,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 216,
+      "3": 38,
+      "11": 1411,
+      "15": 22229,
+      "40": 28,
+      "42": 9,
+      "44": 275
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.16999999999999998,
+       "sys": 0.71
+      }
+     },
+     "rss_kb": 32732,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.05
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.16,
+       "sys": 0.72
+      }
+     },
+     "rss_kb": 32636,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.12,
+       "sys": 0.72
+      }
+     },
+     "rss_kb": 32068,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.23
+      }
+     },
+     "rss_kb": 176960,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.03
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.35000000000000003,
+       "sys": 1.23
+      }
+     },
+     "rss_kb": 175928,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.22
+      }
+     },
+     "rss_kb": 171256,
+     "node": 2
+    },
+    {
+     "pid": 9228,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.21
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.03999999999999998
+      }
+     },
+     "rss_kb": 108884,
+     "node": 2
+    },
+    {
+     "pid": 9229,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.19
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.07999999999999999
+      }
+     },
+     "rss_kb": 107980,
+     "node": 2
+    },
+    {
+     "pid": 9230,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.05,
+       "sys": 0.15
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.010000000000000002,
+       "sys": 0.04999999999999999
+      }
+     },
+     "rss_kb": 109016,
+     "node": 1
+    },
+    {
+     "pid": 9231,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.07,
+       "sys": 0.18
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.05000000000000002
+      }
+     },
+     "rss_kb": 108032,
+     "node": 1
+    },
+    {
+     "pid": 9232,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.05,
+       "sys": 0.18
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.020000000000000004,
+       "sys": 0.05000000000000002
+      }
+     },
+     "rss_kb": 109400,
+     "node": 0
+    },
+    {
+     "pid": 9233,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.15
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.06
+      }
+     },
+     "rss_kb": 108016,
+     "node": 0
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 99.26,
+     "nice": 0.0,
+     "system": 49.06,
+     "idle": 4765.7,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 10.47,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  },
+  {
+   "phase": "mdtest-hard-stat",
+   "t": 2479.090276447,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 17996,
+     "handler_cpu_ns": 67682459,
+     "handler_wall_ns": 106596780,
+     "bytes_in": 10450051,
+     "bytes_out": 9108384,
+     "inflight_max": 3,
+     "lock_wait_ns": 6105000,
+     "lock_hold_ns": 48116934,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2022,
+     "slots_published": 8431,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 4508,
+      "3": 1625,
+      "4": 3308,
+      "5": 88,
+      "6": 56,
+      "7": 2239,
+      "8": 1648,
+      "9": 39,
+      "10": 20,
+      "12": 18
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 16665,
+     "handler_cpu_ns": 65927816,
+     "handler_wall_ns": 105128515,
+     "bytes_in": 10099612,
+     "bytes_out": 8645722,
+     "inflight_max": 3,
+     "lock_wait_ns": 5957581,
+     "lock_hold_ns": 51396307,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2045,
+     "slots_published": 7320,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 4491,
+      "3": 580,
+      "4": 3256,
+      "5": 88,
+      "6": 56,
+      "7": 2172,
+      "8": 1564,
+      "9": 52,
+      "10": 25,
+      "12": 20
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 15616,
+     "handler_cpu_ns": 60986324,
+     "handler_wall_ns": 98834379,
+     "bytes_in": 10087721,
+     "bytes_out": 8611728,
+     "inflight_max": 3,
+     "lock_wait_ns": 5948081,
+     "lock_hold_ns": 49127466,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1975,
+     "slots_published": 6573,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 4315,
+      "3": 42,
+      "4": 3120,
+      "5": 88,
+      "6": 56,
+      "7": 2189,
+      "8": 1588,
+      "9": 18,
+      "10": 9,
+      "12": 18
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 25179,
+     "handler_cpu_ns": 186746882,
+     "handler_wall_ns": 386698162,
+     "bytes_in": 288584522,
+     "bytes_out": 192108003,
+     "inflight_max": 6,
+     "objects": 121,
+     "bytes": 126877696,
+     "leases": 519,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 227,
+      "3": 39,
+      "11": 1417,
+      "15": 22930,
+      "40": 28,
+      "42": 19,
+      "44": 519
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 24166,
+     "handler_cpu_ns": 195451647,
+     "handler_wall_ns": 417821157,
+     "bytes_in": 282539454,
+     "bytes_out": 180610177,
+     "inflight_max": 6,
+     "objects": 122,
+     "bytes": 127926272,
+     "leases": 522,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 221,
+      "3": 38,
+      "11": 1458,
+      "15": 21877,
+      "40": 28,
+      "42": 22,
+      "44": 522
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 24452,
+     "handler_cpu_ns": 187362219,
+     "handler_wall_ns": 389881008,
+     "bytes_in": 282912441,
+     "bytes_out": 186267337,
+     "inflight_max": 6,
+     "objects": 120,
+     "bytes": 125468160,
+     "leases": 521,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 216,
+      "3": 38,
+      "11": 1411,
+      "15": 22229,
+      "40": 28,
+      "42": 9,
+      "44": 521
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.16999999999999998,
+       "sys": 0.71
+      }
+     },
+     "rss_kb": 32732,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.05
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.16,
+       "sys": 0.72
+      }
+     },
+     "rss_kb": 32636,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.12,
+       "sys": 0.72
+      }
+     },
+     "rss_kb": 32068,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.02,
+       "sys": 0.060000000000000005
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.26
+      }
+     },
+     "rss_kb": 176980,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.060000000000000005
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.36,
+       "sys": 1.25
+      }
+     },
+     "rss_kb": 175948,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.21
+      }
+     },
+     "rss_kb": 171256,
+     "node": 2
+    },
+    {
+     "pid": 9228,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.22
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.020000000000000004,
+       "sys": 0.06999999999999995
+      }
+     },
+     "rss_kb": 166768,
+     "node": 2
+    },
+    {
+     "pid": 9229,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.11000000000000001
+      }
+     },
+     "rss_kb": 165984,
+     "node": 2
+    },
+    {
+     "pid": 9230,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.06,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 1.3877787807814457e-17,
+       "sys": 0.05999999999999997
+      }
+     },
+     "rss_kb": 166900,
+     "node": 1
+    },
+    {
+     "pid": 9231,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.06
+      }
+     },
+     "rss_kb": 165916,
+     "node": 1
+    },
+    {
+     "pid": 9232,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.06,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.03,
+       "sys": 0.06999999999999998
+      }
+     },
+     "rss_kb": 167268,
+     "node": 0
+    },
+    {
+     "pid": 9233,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.09,
+       "sys": 0.19
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.020000000000000004,
+       "sys": 0.06
+      }
+     },
+     "rss_kb": 165876,
+     "node": 0
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 99.35,
+     "nice": 0.0,
+     "system": 49.42,
+     "idle": 4767.95,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 10.57,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  },
+  {
+   "phase": "mdtest-easy-delete",
+   "t": 2481.100986161,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 17996,
+     "handler_cpu_ns": 67682459,
+     "handler_wall_ns": 106596780,
+     "bytes_in": 10450051,
+     "bytes_out": 9108384,
+     "inflight_max": 3,
+     "lock_wait_ns": 6105000,
+     "lock_hold_ns": 48116934,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2022,
+     "slots_published": 8431,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 4508,
+      "3": 1625,
+      "4": 3308,
+      "5": 88,
+      "6": 56,
+      "7": 2239,
+      "8": 1648,
+      "9": 39,
+      "10": 20,
+      "12": 18
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 16665,
+     "handler_cpu_ns": 65927816,
+     "handler_wall_ns": 105128515,
+     "bytes_in": 10099612,
+     "bytes_out": 8645722,
+     "inflight_max": 3,
+     "lock_wait_ns": 5957581,
+     "lock_hold_ns": 51396307,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2045,
+     "slots_published": 7320,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 4491,
+      "3": 580,
+      "4": 3256,
+      "5": 88,
+      "6": 56,
+      "7": 2172,
+      "8": 1564,
+      "9": 52,
+      "10": 25,
+      "12": 20
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 15616,
+     "handler_cpu_ns": 60986324,
+     "handler_wall_ns": 98834379,
+     "bytes_in": 10087721,
+     "bytes_out": 8611728,
+     "inflight_max": 3,
+     "lock_wait_ns": 5948081,
+     "lock_hold_ns": 49127466,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1975,
+     "slots_published": 6573,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 4315,
+      "3": 42,
+      "4": 3120,
+      "5": 88,
+      "6": 56,
+      "7": 2189,
+      "8": 1588,
+      "9": 18,
+      "10": 9,
+      "12": 18
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 25179,
+     "handler_cpu_ns": 186746882,
+     "handler_wall_ns": 386698162,
+     "bytes_in": 288584522,
+     "bytes_out": 192108003,
+     "inflight_max": 6,
+     "objects": 121,
+     "bytes": 126877696,
+     "leases": 519,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 227,
+      "3": 39,
+      "11": 1417,
+      "15": 22930,
+      "40": 28,
+      "42": 19,
+      "44": 519
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 24166,
+     "handler_cpu_ns": 195451647,
+     "handler_wall_ns": 417821157,
+     "bytes_in": 282539454,
+     "bytes_out": 180610177,
+     "inflight_max": 6,
+     "objects": 122,
+     "bytes": 127926272,
+     "leases": 522,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 221,
+      "3": 38,
+      "11": 1458,
+      "15": 21877,
+      "40": 28,
+      "42": 22,
+      "44": 522
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 24452,
+     "handler_cpu_ns": 187362219,
+     "handler_wall_ns": 389881008,
+     "bytes_in": 282912441,
+     "bytes_out": 186267337,
+     "inflight_max": 6,
+     "objects": 120,
+     "bytes": 125468160,
+     "leases": 521,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 216,
+      "3": 38,
+      "11": 1411,
+      "15": 22229,
+      "40": 28,
+      "42": 9,
+      "44": 521
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.16999999999999998,
+       "sys": 0.72
+      }
+     },
+     "rss_kb": 32732,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.060000000000000005
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.16,
+       "sys": 0.72
+      }
+     },
+     "rss_kb": 32636,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.12,
+       "sys": 0.73
+      }
+     },
+     "rss_kb": 32068,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.02,
+       "sys": 0.060000000000000005
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.26
+      }
+     },
+     "rss_kb": 176980,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.060000000000000005
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.36,
+       "sys": 1.25
+      }
+     },
+     "rss_kb": 175948,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.21
+      }
+     },
+     "rss_kb": 171256,
+     "node": 2
+    },
+    {
+     "pid": 9228,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.23
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.020000000000000004,
+       "sys": 0.05999999999999994
+      }
+     },
+     "rss_kb": 166768,
+     "node": 2
+    },
+    {
+     "pid": 9229,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.21
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.10999999999999999
+      }
+     },
+     "rss_kb": 165984,
+     "node": 2
+    },
+    {
+     "pid": 9230,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.06,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.010000000000000009,
+       "sys": 0.06999999999999998
+      }
+     },
+     "rss_kb": 166900,
+     "node": 1
+    },
+    {
+     "pid": 9231,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.06
+      }
+     },
+     "rss_kb": 165916,
+     "node": 1
+    },
+    {
+     "pid": 9232,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.06,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.03,
+       "sys": 0.06999999999999998
+      }
+     },
+     "rss_kb": 167268,
+     "node": 0
+    },
+    {
+     "pid": 9233,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.09,
+       "sys": 0.19
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.020000000000000004,
+       "sys": 0.06
+      }
+     },
+     "rss_kb": 165876,
+     "node": 0
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 99.37,
+     "nice": 0.0,
+     "system": 49.46,
+     "idle": 4771.88,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 10.58,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  },
+  {
+   "phase": "mdtest-hard-read",
+   "t": 2483.111724439,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 18601,
+     "handler_cpu_ns": 68923418,
+     "handler_wall_ns": 108123706,
+     "bytes_in": 10506501,
+     "bytes_out": 9188755,
+     "inflight_max": 3,
+     "lock_wait_ns": 6297986,
+     "lock_hold_ns": 48618284,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2022,
+     "slots_published": 8431,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 4508,
+      "3": 1625,
+      "4": 3906,
+      "5": 88,
+      "6": 63,
+      "7": 2239,
+      "8": 1648,
+      "9": 39,
+      "10": 20,
+      "12": 18
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 17290,
+     "handler_cpu_ns": 67225447,
+     "handler_wall_ns": 106914286,
+     "bytes_in": 10157975,
+     "bytes_out": 8728838,
+     "inflight_max": 3,
+     "lock_wait_ns": 6151582,
+     "lock_hold_ns": 51889771,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2045,
+     "slots_published": 7320,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 4491,
+      "3": 580,
+      "4": 3874,
+      "5": 88,
+      "6": 63,
+      "7": 2172,
+      "8": 1564,
+      "9": 52,
+      "10": 25,
+      "12": 20
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 16214,
+     "handler_cpu_ns": 62330143,
+     "handler_wall_ns": 100680641,
+     "bytes_in": 10143491,
+     "bytes_out": 8691139,
+     "inflight_max": 3,
+     "lock_wait_ns": 6131106,
+     "lock_hold_ns": 49610436,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1975,
+     "slots_published": 6573,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 4315,
+      "3": 42,
+      "4": 3711,
+      "5": 88,
+      "6": 63,
+      "7": 2189,
+      "8": 1588,
+      "9": 18,
+      "10": 9,
+      "12": 18
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 25179,
+     "handler_cpu_ns": 186746882,
+     "handler_wall_ns": 386698162,
+     "bytes_in": 288584522,
+     "bytes_out": 192108003,
+     "inflight_max": 6,
+     "objects": 121,
+     "bytes": 126877696,
+     "leases": 519,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 227,
+      "3": 39,
+      "11": 1417,
+      "15": 22930,
+      "40": 28,
+      "42": 19,
+      "44": 519
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 24166,
+     "handler_cpu_ns": 195451647,
+     "handler_wall_ns": 417821157,
+     "bytes_in": 282539454,
+     "bytes_out": 180610177,
+     "inflight_max": 6,
+     "objects": 122,
+     "bytes": 127926272,
+     "leases": 522,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 221,
+      "3": 38,
+      "11": 1458,
+      "15": 21877,
+      "40": 28,
+      "42": 22,
+      "44": 522
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 24452,
+     "handler_cpu_ns": 187362219,
+     "handler_wall_ns": 389881008,
+     "bytes_in": 282912441,
+     "bytes_out": 186267337,
+     "inflight_max": 6,
+     "objects": 120,
+     "bytes": 125468160,
+     "leases": 521,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 216,
+      "3": 38,
+      "11": 1411,
+      "15": 22229,
+      "40": 28,
+      "42": 9,
+      "44": 521
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.1
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.18,
+       "sys": 0.71
+      }
+     },
+     "rss_kb": 32732,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "server": {
+       "user": 0.02,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.15999999999999998,
+       "sys": 0.71
+      }
+     },
+     "rss_kb": 32636,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.060000000000000005
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.12,
+       "sys": 0.7100000000000001
+      }
+     },
+     "rss_kb": 32068,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.02,
+       "sys": 0.060000000000000005
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.26
+      }
+     },
+     "rss_kb": 176980,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.060000000000000005
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.36,
+       "sys": 1.25
+      }
+     },
+     "rss_kb": 175948,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.21
+      }
+     },
+     "rss_kb": 171256,
+     "node": 2
+    },
+    {
+     "pid": 9228,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.09,
+       "sys": 0.23
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.020000000000000004,
+       "sys": 0.06999999999999995
+      }
+     },
+     "rss_kb": 166768,
+     "node": 2
+    },
+    {
+     "pid": 9229,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.21
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.10999999999999999
+      }
+     },
+     "rss_kb": 165984,
+     "node": 2
+    },
+    {
+     "pid": 9230,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.06,
+       "sys": 0.21
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.010000000000000009,
+       "sys": 0.07
+      }
+     },
+     "rss_kb": 166900,
+     "node": 1
+    },
+    {
+     "pid": 9231,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.21
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.020000000000000004,
+       "sys": 0.04999999999999999
+      }
+     },
+     "rss_kb": 165916,
+     "node": 1
+    },
+    {
+     "pid": 9232,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.06,
+       "sys": 0.21
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.04000000000000001,
+       "sys": 0.07
+      }
+     },
+     "rss_kb": 167268,
+     "node": 0
+    },
+    {
+     "pid": 9233,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.1,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.04999999999999999
+      }
+     },
+     "rss_kb": 165876,
+     "node": 0
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 99.44,
+     "nice": 0.0,
+     "system": 49.59,
+     "idle": 4775.68,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 10.61,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  },
+  {
+   "phase": "mdtest-hard-delete",
+   "t": 2485.32156358,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 19192,
+     "handler_cpu_ns": 70608414,
+     "handler_wall_ns": 110261340,
+     "bytes_in": 10567170,
+     "bytes_out": 11576782,
+     "inflight_max": 3,
+     "lock_wait_ns": 6460714,
+     "lock_hold_ns": 49532088,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2022,
+     "slots_published": 8431,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 4508,
+      "3": 1625,
+      "4": 3906,
+      "5": 88,
+      "6": 63,
+      "7": 2239,
+      "8": 2239,
+      "9": 39,
+      "10": 20,
+      "12": 18
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 17898,
+     "handler_cpu_ns": 69121116,
+     "handler_wall_ns": 110655741,
+     "bytes_in": 10220362,
+     "bytes_out": 11185529,
+     "inflight_max": 3,
+     "lock_wait_ns": 6314897,
+     "lock_hold_ns": 53261300,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2045,
+     "slots_published": 7320,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 4491,
+      "3": 580,
+      "4": 3874,
+      "5": 88,
+      "6": 63,
+      "7": 2172,
+      "8": 2172,
+      "9": 52,
+      "10": 25,
+      "12": 20
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 16815,
+     "handler_cpu_ns": 64183585,
+     "handler_wall_ns": 103404724,
+     "bytes_in": 10205175,
+     "bytes_out": 11119561,
+     "inflight_max": 3,
+     "lock_wait_ns": 6301301,
+     "lock_hold_ns": 50551109,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1975,
+     "slots_published": 6573,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 4315,
+      "3": 42,
+      "4": 3711,
+      "5": 88,
+      "6": 63,
+      "7": 2189,
+      "8": 2189,
+      "9": 18,
+      "10": 9,
+      "12": 18
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 25179,
+     "handler_cpu_ns": 186746882,
+     "handler_wall_ns": 386698162,
+     "bytes_in": 288584522,
+     "bytes_out": 192108003,
+     "inflight_max": 6,
+     "objects": 121,
+     "bytes": 126877696,
+     "leases": 519,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 227,
+      "3": 39,
+      "11": 1417,
+      "15": 22930,
+      "40": 28,
+      "42": 19,
+      "44": 519
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 24166,
+     "handler_cpu_ns": 195451647,
+     "handler_wall_ns": 417821157,
+     "bytes_in": 282539454,
+     "bytes_out": 180610177,
+     "inflight_max": 6,
+     "objects": 122,
+     "bytes": 127926272,
+     "leases": 522,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 221,
+      "3": 38,
+      "11": 1458,
+      "15": 21877,
+      "40": 28,
+      "42": 22,
+      "44": 522
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 24452,
+     "handler_cpu_ns": 187362219,
+     "handler_wall_ns": 389881008,
+     "bytes_in": 282912441,
+     "bytes_out": 186267337,
+     "inflight_max": 6,
+     "objects": 120,
+     "bytes": 125468160,
+     "leases": 521,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 216,
+      "3": 38,
+      "11": 1411,
+      "15": 22229,
+      "40": 28,
+      "42": 9,
+      "44": 521
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.12000000000000001
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.08
+      },
+      "exited": {
+       "user": 0.18,
+       "sys": 0.71
+      }
+     },
+     "rss_kb": 32736,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.08
+      },
+      "server": {
+       "user": 0.02,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.16999999999999998,
+       "sys": 0.72
+      }
+     },
+     "rss_kb": 32640,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.06999999999999999
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.12,
+       "sys": 0.72
+      }
+     },
+     "rss_kb": 32068,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.02,
+       "sys": 0.060000000000000005
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.27
+      }
+     },
+     "rss_kb": 176980,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.060000000000000005
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.36,
+       "sys": 1.25
+      }
+     },
+     "rss_kb": 175948,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.21
+      }
+     },
+     "rss_kb": 171256,
+     "node": 2
+    },
+    {
+     "pid": 9228,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.1,
+       "sys": 0.23
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.07999999999999996
+      }
+     },
+     "rss_kb": 166768,
+     "node": 2
+    },
+    {
+     "pid": 9229,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.05,
+       "sys": 0.22
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.08999999999999997
+      }
+     },
+     "rss_kb": 165984,
+     "node": 2
+    },
+    {
+     "pid": 9230,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.06,
+       "sys": 0.21
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.010000000000000009,
+       "sys": 0.08000000000000002
+      }
+     },
+     "rss_kb": 166900,
+     "node": 1
+    },
+    {
+     "pid": 9231,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.22
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.020000000000000004,
+       "sys": 0.03999999999999998
+      }
+     },
+     "rss_kb": 165916,
+     "node": 1
+    },
+    {
+     "pid": 9232,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.07,
+       "sys": 0.21
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.03,
+       "sys": 0.08000000000000002
+      }
+     },
+     "rss_kb": 167268,
+     "node": 0
+    },
+    {
+     "pid": 9233,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.1,
+       "sys": 0.21
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.06
+      }
+     },
+     "rss_kb": 165876,
+     "node": 0
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 99.56,
+     "nice": 0.0,
+     "system": 49.69,
+     "idle": 4779.78,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 10.7,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  },
+  {
+   "phase": "ior-rnd4K-easy-read",
+   "t": 2487.5310796,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 19786,
+     "handler_cpu_ns": 72080537,
+     "handler_wall_ns": 112430974,
+     "bytes_in": 10621530,
+     "bytes_out": 11654820,
+     "inflight_max": 3,
+     "lock_wait_ns": 6627141,
+     "lock_hold_ns": 50196387,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2022,
+     "slots_published": 8431,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 4508,
+      "3": 1625,
+      "4": 4498,
+      "5": 88,
+      "6": 65,
+      "7": 2239,
+      "8": 2239,
+      "9": 39,
+      "10": 20,
+      "12": 18
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 18508,
+     "handler_cpu_ns": 70620355,
+     "handler_wall_ns": 112436972,
+     "bytes_in": 10276193,
+     "bytes_out": 11265694,
+     "inflight_max": 3,
+     "lock_wait_ns": 6487296,
+     "lock_hold_ns": 53941462,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2045,
+     "slots_published": 7320,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 4491,
+      "3": 580,
+      "4": 4482,
+      "5": 88,
+      "6": 65,
+      "7": 2172,
+      "8": 2172,
+      "9": 52,
+      "10": 25,
+      "12": 20
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 17419,
+     "handler_cpu_ns": 65748165,
+     "handler_wall_ns": 105497158,
+     "bytes_in": 10260454,
+     "bytes_out": 11198918,
+     "inflight_max": 3,
+     "lock_wait_ns": 6479619,
+     "lock_hold_ns": 51240346,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1975,
+     "slots_published": 6573,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 4315,
+      "3": 42,
+      "4": 4313,
+      "5": 88,
+      "6": 65,
+      "7": 2189,
+      "8": 2189,
+      "9": 18,
+      "10": 9,
+      "12": 18
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 25179,
+     "handler_cpu_ns": 186746882,
+     "handler_wall_ns": 386698162,
+     "bytes_in": 288584522,
+     "bytes_out": 192108003,
+     "inflight_max": 6,
+     "objects": 121,
+     "bytes": 126877696,
+     "leases": 519,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 227,
+      "3": 39,
+      "11": 1417,
+      "15": 22930,
+      "40": 28,
+      "42": 19,
+      "44": 519
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 24166,
+     "handler_cpu_ns": 195451647,
+     "handler_wall_ns": 417821157,
+     "bytes_in": 282539454,
+     "bytes_out": 180610177,
+     "inflight_max": 6,
+     "objects": 122,
+     "bytes": 127926272,
+     "leases": 522,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 221,
+      "3": 38,
+      "11": 1458,
+      "15": 21877,
+      "40": 28,
+      "42": 22,
+      "44": 522
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 24452,
+     "handler_cpu_ns": 187362219,
+     "handler_wall_ns": 389881008,
+     "bytes_in": 282912441,
+     "bytes_out": 186267337,
+     "inflight_max": 6,
+     "objects": 120,
+     "bytes": 125468160,
+     "leases": 521,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 216,
+      "3": 38,
+      "11": 1411,
+      "15": 22229,
+      "40": 28,
+      "42": 9,
+      "44": 521
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.13
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.1
+      },
+      "exited": {
+       "user": 0.19,
+       "sys": 0.71
+      }
+     },
+     "rss_kb": 32736,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.1
+      },
+      "server": {
+       "user": 0.03,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.16,
+       "sys": 0.74
+      }
+     },
+     "rss_kb": 32640,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.08
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.13,
+       "sys": 0.73
+      }
+     },
+     "rss_kb": 32068,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.02,
+       "sys": 0.060000000000000005
+      },
+      "server": {
+       "user": 0.01,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.27
+      }
+     },
+     "rss_kb": 176980,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.060000000000000005
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.36,
+       "sys": 1.25
+      }
+     },
+     "rss_kb": 175948,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.31,
+       "sys": 1.21
+      }
+     },
+     "rss_kb": 171256,
+     "node": 2
+    },
+    {
+     "pid": 9228,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.1,
+       "sys": 0.24
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.020000000000000004,
+       "sys": 0.07
+      }
+     },
+     "rss_kb": 166768,
+     "node": 2
+    },
+    {
+     "pid": 9229,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.05,
+       "sys": 0.22
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.10999999999999999
+      }
+     },
+     "rss_kb": 165984,
+     "node": 2
+    },
+    {
+     "pid": 9230,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.06,
+       "sys": 0.22
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.01,
+       "sys": 0.060000000000000005
+      },
+      "exited": {
+       "user": 0.010000000000000009,
+       "sys": 0.07999999999999996
+      }
+     },
+     "rss_kb": 166900,
+     "node": 1
+    },
+    {
+     "pid": 9231,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.22
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.03,
+       "sys": 0.04999999999999993
+      }
+     },
+     "rss_kb": 165916,
+     "node": 1
+    },
+    {
+     "pid": 9232,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.07,
+       "sys": 0.22
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.03,
+       "sys": 0.07
+      }
+     },
+     "rss_kb": 167268,
+     "node": 0
+    },
+    {
+     "pid": 9233,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.1,
+       "sys": 0.21
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.08
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.07
+      }
+     },
+     "rss_kb": 165876,
+     "node": 0
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 99.64,
+     "nice": 0.0,
+     "system": 49.84,
+     "idle": 4783.9,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 10.77,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  },
+  {
+   "phase": "end",
+   "t": 2490.745224496,
+   "servers": {
+    "10.99.1.1:19901": {
+     "kind": "mdt",
+     "reqs": 19796,
+     "handler_cpu_ns": 72108009,
+     "handler_wall_ns": 112457450,
+     "bytes_in": 10622016,
+     "bytes_out": 11655509,
+     "inflight_max": 3,
+     "lock_wait_ns": 6630747,
+     "lock_hold_ns": 50202171,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2022,
+     "slots_published": 8431,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4447,
+      "2": 4508,
+      "3": 1625,
+      "4": 4503,
+      "5": 88,
+      "6": 70,
+      "7": 2239,
+      "8": 2239,
+      "9": 39,
+      "10": 20,
+      "12": 18
+     }
+    },
+    "10.99.1.2:19901": {
+     "kind": "mdt",
+     "reqs": 18518,
+     "handler_cpu_ns": 70664042,
+     "handler_wall_ns": 112480595,
+     "bytes_in": 10276685,
+     "bytes_out": 11266389,
+     "inflight_max": 3,
+     "lock_wait_ns": 6508223,
+     "lock_hold_ns": 53948613,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 2045,
+     "slots_published": 7320,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4361,
+      "2": 4491,
+      "3": 580,
+      "4": 4487,
+      "5": 88,
+      "6": 70,
+      "7": 2172,
+      "8": 2172,
+      "9": 52,
+      "10": 25,
+      "12": 20
+     }
+    },
+    "10.99.1.3:19901": {
+     "kind": "mdt",
+     "reqs": 17426,
+     "handler_cpu_ns": 65779905,
+     "handler_wall_ns": 105541945,
+     "bytes_in": 10260780,
+     "bytes_out": 11199343,
+     "inflight_max": 3,
+     "lock_wait_ns": 6480835,
+     "lock_hold_ns": 51242818,
+     "lock_stripes": 64,
+     "table_slots": 1048576,
+     "table_used": 1975,
+     "slots_published": 6573,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 4173,
+      "2": 4315,
+      "3": 42,
+      "4": 4315,
+      "5": 88,
+      "6": 70,
+      "7": 2189,
+      "8": 2189,
+      "9": 18,
+      "10": 9,
+      "12": 18
+     }
+    },
+    "10.99.1.1:19951": {
+     "kind": "ost",
+     "reqs": 25266,
+     "handler_cpu_ns": 187289765,
+     "handler_wall_ns": 387597672,
+     "bytes_in": 288598446,
+     "bytes_out": 192118804,
+     "inflight_max": 6,
+     "objects": 0,
+     "bytes": 0,
+     "leases": 599,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 227,
+      "3": 39,
+      "11": 1417,
+      "15": 22930,
+      "40": 35,
+      "42": 19,
+      "44": 599
+     }
+    },
+    "10.99.1.2:19951": {
+     "kind": "ost",
+     "reqs": 24254,
+     "handler_cpu_ns": 195981806,
+     "handler_wall_ns": 420243992,
+     "bytes_in": 282553525,
+     "bytes_out": 180621108,
+     "inflight_max": 6,
+     "objects": 0,
+     "bytes": 0,
+     "leases": 603,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 221,
+      "3": 38,
+      "11": 1458,
+      "15": 21877,
+      "40": 35,
+      "42": 22,
+      "44": 603
+     }
+    },
+    "10.99.1.3:19951": {
+     "kind": "ost",
+     "reqs": 24538,
+     "handler_cpu_ns": 187828535,
+     "handler_wall_ns": 390739600,
+     "bytes_in": 282926218,
+     "bytes_out": 186278008,
+     "inflight_max": 6,
+     "objects": 0,
+     "bytes": 0,
+     "leases": 600,
+     "lease_misses": 0,
+     "arena_bytes": 134217728,
+     "by_op": {
+      "1": 216,
+      "3": 38,
+      "11": 1411,
+      "15": 22229,
+      "40": 35,
+      "42": 9,
+      "44": 600
+     }
+    }
+   },
+   "procs": [
+    {
+     "pid": 7915,
+     "role": "mdt",
+     "addr": "10.99.1.1:19901",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.2,
+       "sys": 0.9199999999999999
+      }
+     },
+     "rss_kb": 32636,
+     "node": 0
+    },
+    {
+     "pid": 7916,
+     "role": "mdt",
+     "addr": "10.99.1.2:19901",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.02,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.16999999999999998,
+       "sys": 0.89
+      }
+     },
+     "rss_kb": 32540,
+     "node": 1
+    },
+    {
+     "pid": 7917,
+     "role": "mdt",
+     "addr": "10.99.1.3:19901",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.14,
+       "sys": 0.86
+      }
+     },
+     "rss_kb": 31968,
+     "node": 2
+    },
+    {
+     "pid": 7918,
+     "role": "ost",
+     "addr": "10.99.1.1:19951",
+     "mntns": "mnt:[4026532313]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.38,
+       "sys": 1.91
+      }
+     },
+     "rss_kb": 176748,
+     "node": 0
+    },
+    {
+     "pid": 7919,
+     "role": "ost",
+     "addr": "10.99.1.2:19951",
+     "mntns": "mnt:[4026532365]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.02
+      },
+      "exited": {
+       "user": 0.41000000000000003,
+       "sys": 1.92
+      }
+     },
+     "rss_kb": 173796,
+     "node": 1
+    },
+    {
+     "pid": 7920,
+     "role": "ost",
+     "addr": "10.99.1.3:19951",
+     "mntns": "mnt:[4026532417]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.0
+      },
+      "emulator": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "server": {
+       "user": 0.0,
+       "sys": 0.01
+      },
+      "exited": {
+       "user": 0.37,
+       "sys": 1.8699999999999999
+      }
+     },
+     "rss_kb": 171060,
+     "node": 2
+    }
+   ],
+   "hosts": {
+    "shared": {
+     "user": 100.33,
+     "nice": 0.0,
+     "system": 52.45,
+     "idle": 4785.78,
+     "iowait": 22.21,
+     "irq": 0.0,
+     "softirq": 11.97,
+     "steal": 0.67,
+     "cores": 2
+    }
+   }
+  }
+ ],
+ "node_facts": [],
+ "analysis": {
+  "measured_per_op": {
+   "ior-easy-write": {
+    "ops": 251658218.10573313,
+    "nodes": 3,
+    "unit": "byte",
+    "measured": 1.356172,
+    "measured_unit": "GiB/s",
+    "time_s": 0.265,
+    "cpu_s_per_op": {
+     "client": 0.0,
+     "ranks": 1.2318294325272335e-09,
+     "server_handler": 3.5313278330001594e-10,
+     "server_transport": 4.0185944953925603e-10,
+     "emulator": 0.0
+    },
+    "emulator_share": 0.0,
+    "kinds": {
+     "mdt": {
+      "rpcs_per_op": 3.6557518642743705e-07,
+      "bytes_per_op": 6.29186684988265e-05,
+      "hot_share": 0.4782608695652174,
+      "servers": 3,
+      "cpu_us_per_req": 4.8621739130434785,
+      "hold_us_per_req_hot": 1.5410000000000001,
+      "lock_stripes": 64,
+      "hot_cpu_us_per_req": 4.116159090909091
+     },
+     "ost": {
+      "rpcs_per_op": 1.0013581193447188e-06,
+      "bytes_per_op": 1.0001869356567052,
+      "hot_share": 0.34523809523809523,
+      "servers": 3,
+      "cpu_us_per_req": 350.87875793650795,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 1,
+      "hot_cpu_us_per_req": 343.8841264367816
+     }
+    },
+    "missing_data": [],
+    "fuse": {
+     "reqs_per_op": 0.0,
+     "mix_per_op": {},
+     "client_cpu_us_per_req": 0.0,
+     "writes_per_op": 0.0
+    },
+    "host_busy": 0.20833333333336668,
+    "host_softirq_share": 0.11999999999999972
+   },
+   "mdtest-easy-write": {
+    "ops": 1800.091928,
+    "nodes": 3,
+    "unit": "op",
+    "measured": 10.112876,
+    "measured_unit": "kIOPS",
+    "time_s": 1.185,
+    "cpu_s_per_op": {
+     "client": 0.0,
+     "ranks": 8.332907762475118e-05,
+     "server_handler": 1.0816945344360214e-05,
+     "server_transport": 8.362267596369101e-05,
+     "emulator": 0.0
+    },
+    "emulator_share": 0.0,
+    "kinds": {
+     "mdt": {
+      "rpcs_per_op": 1.008837366443654,
+      "bytes_per_op": 246.30186553450284,
+      "hot_share": 0.3419603524229075,
+      "servers": 3,
+      "cpu_us_per_req": 10.722189427312776,
+      "hold_us_per_req_hot": 10.742666666666667,
+      "lock_stripes": 64,
+      "hot_cpu_us_per_req": 10.514325281803542
+     },
+     "ost": {
+      "rpcs_per_op": 0.0,
+      "bytes_per_op": 0.0,
+      "hot_share": 0.0,
+      "servers": 3,
+      "cpu_us_per_req": 0.0,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 1,
+      "hot_cpu_us_per_req": 0.0
+     }
+    },
+    "missing_data": [],
+    "fuse": {
+     "reqs_per_op": 0.0,
+     "mix_per_op": {},
+     "client_cpu_us_per_req": 0.0,
+     "writes_per_op": 0.0
+    },
+    "host_busy": 0.08597285067873132,
+    "host_softirq_share": 0.18421052631579587
+   },
+   "ior-hard-write": {
+    "ops": 128611997.71238399,
+    "nodes": 3,
+    "unit": "byte",
+    "measured": 0.279203,
+    "measured_unit": "GiB/s",
+    "time_s": 0.432,
+    "cpu_s_per_op": {
+     "client": 0.0,
+     "ranks": 1.2440518990911662e-09,
+     "server_handler": 7.96956511236358e-10,
+     "server_transport": 1.9555083155028485e-09,
+     "emulator": 2.145989525932262e-09
+    },
+    "emulator_share": 0.3493670886075949,
+    "kinds": {
+     "mdt": {
+      "rpcs_per_op": 1.2285012503525264e-05,
+      "bytes_per_op": 0.0017935729488928421,
+      "hot_share": 1.0,
+      "servers": 3,
+      "cpu_us_per_req": 2.2794563291139243,
+      "hold_us_per_req_hot": 0.6434455696202531,
+      "lock_stripes": 64,
+      "hot_cpu_us_per_req": 2.2794563291139243
+     },
+     "ost": {
+      "rpcs_per_op": 2.2268528993731873e-05,
+      "bytes_per_op": 1.0033543626978003,
+      "hot_share": 0.3362430167597765,
+      "servers": 3,
+      "cpu_us_per_req": 34.53094553072626,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 1,
+      "hot_cpu_us_per_req": 33.536033229491174
+     }
+    },
+    "missing_data": [],
+    "fuse": {
+     "reqs_per_op": 0.0,
+     "mix_per_op": {},
+     "client_cpu_us_per_req": 0.0,
+     "writes_per_op": 0.0
+    },
+    "host_busy": 0.2947368421052401,
+    "host_softirq_share": 0.14285714285714227
+   },
+   "mdtest-hard-write": {
+    "ops": 1798.956852,
+    "nodes": 3,
+    "unit": "op",
+    "measured": 7.787692,
+    "measured_unit": "kIOPS",
+    "time_s": 1.235,
+    "cpu_s_per_op": {
+     "client": 0.0,
+     "ranks": 6.114654716576826e-05,
+     "server_handler": 1.4896993760693043e-05,
+     "server_transport": 4.368396401350451e-05,
+     "emulator": 0.00013041746073817707
+    },
+    "emulator_share": 0.5213675213675214,
+    "kinds": {
+     "mdt": {
+      "rpcs_per_op": 2.002827358529664,
+      "bytes_per_op": 4375.3133885614725,
+      "hot_share": 0.337496530668887,
+      "servers": 3,
+      "cpu_us_per_req": 7.437981959478212,
+      "hold_us_per_req_hot": 7.685679276315789,
+      "lock_stripes": 64,
+      "hot_cpu_us_per_req": 7.739277960526316
+     },
+     "ost": {
+      "rpcs_per_op": 0.0,
+      "bytes_per_op": 0.0,
+      "hot_share": 0.0,
+      "servers": 3,
+      "cpu_us_per_req": 0.0,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 1,
+      "hot_cpu_us_per_req": 0.0
+     }
+    },
+    "missing_data": [],
+    "fuse": {
+     "reqs_per_op": 0.0,
+     "mix_per_op": {},
+     "client_cpu_us_per_req": 0.0,
+     "writes_per_op": 0.0
+    },
+    "host_busy": 0.10395010395011661,
+    "host_softirq_share": 0.08000000000000043
+   },
+   "find": {
+    "ops": 3606.9982426635224,
+    "nodes": 3,
+    "unit": "op",
+    "measured": 10.217633,
+    "measured_unit": "kIOPS",
+    "time_s": 0.386,
+    "cpu_s_per_op": {
+     "client": 0.0,
+     "ranks": 0.00020792912819557574,
+     "server_handler": 7.171436818028145e-07,
+     "server_transport": 4.827633070079209e-06,
+     "emulator": 1.3861941879705045e-05
+    },
+    "emulator_share": 0.060975609756097546,
+    "kinds": {
+     "mdt": {
+      "rpcs_per_op": 0.01663433025564606,
+      "bytes_per_op": 62.84311351164284,
+      "hot_share": 0.3333333333333333,
+      "servers": 3,
+      "cpu_us_per_req": 43.11226666666666,
+      "hold_us_per_req_hot": 24.72785,
+      "lock_stripes": 64,
+      "hot_cpu_us_per_req": 41.1806
+     },
+     "ost": {
+      "rpcs_per_op": 0.0,
+      "bytes_per_op": 0.0,
+      "hot_share": 0.0,
+      "servers": 3,
+      "cpu_us_per_req": 0.0,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 1,
+      "hot_cpu_us_per_req": 0.0
+     }
+    },
+    "missing_data": [],
+    "fuse": {
+     "reqs_per_op": 0.0,
+     "mix_per_op": {},
+     "client_cpu_us_per_req": 0.0,
+     "writes_per_op": 0.0
+    },
+    "host_busy": 0.3264462809917186,
+    "host_softirq_share": 0.0
+   },
+   "ior-easy-read": {
+    "ops": 251658857.7161216,
+    "nodes": 3,
+    "unit": "byte",
+    "measured": 1.23658,
+    "measured_unit": "GiB/s",
+    "time_s": 0.197,
+    "cpu_s_per_op": {
+     "client": 0.0,
+     "ranks": 3.576269908270924e-10,
+     "server_handler": 6.3908141942462996e-12,
+     "server_transport": 2.1215901353342152e-10,
+     "emulator": 8.940674770677317e-10
+    },
+    "emulator_share": 0.6081081081081082,
+    "kinds": {
+     "mdt": {
+      "rpcs_per_op": 0.0,
+      "bytes_per_op": 0.0,
+      "hot_share": 0.0,
+      "servers": 3,
+      "cpu_us_per_req": 0.0,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 64,
+      "hot_cpu_us_per_req": 0.0
+     },
+     "ost": {
+      "rpcs_per_op": 9.536719755389133e-07,
+      "bytes_per_op": 0.00019645642696101615,
+      "hot_share": 0.3375,
+      "servers": 3,
+      "cpu_us_per_req": 6.701270833333334,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 1,
+      "hot_cpu_us_per_req": 7.447345679012346
+     }
+    },
+    "missing_data": [],
+    "fuse": {
+     "reqs_per_op": 0.0,
+     "mix_per_op": {},
+     "client_cpu_us_per_req": 0.0,
+     "writes_per_op": 0.0
+    },
+    "host_busy": 0.16182572614105406,
+    "host_softirq_share": 0.15384615384615
+   },
+   "mdtest-easy-stat": {
+    "ops": 1836.5717579999998,
+    "nodes": 3,
+    "unit": "op",
+    "measured": 79.850946,
+    "measured_unit": "kIOPS",
+    "time_s": 1.025,
+    "cpu_s_per_op": {
+     "client": 0.0,
+     "ranks": 1.63347823842557e-05,
+     "server_handler": 0.0,
+     "server_transport": 0.0,
+     "emulator": 3.266956476851149e-05
+    },
+    "emulator_share": 0.6666666666666673,
+    "kinds": {
+     "mdt": {
+      "rpcs_per_op": 0.0,
+      "bytes_per_op": 0.0,
+      "hot_share": 0.0,
+      "servers": 3,
+      "cpu_us_per_req": 0.0,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 64,
+      "hot_cpu_us_per_req": 0.0
+     },
+     "ost": {
+      "rpcs_per_op": 0.0,
+      "bytes_per_op": 0.0,
+      "hot_share": 0.0,
+      "servers": 3,
+      "cpu_us_per_req": 0.0,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 1,
+      "hot_cpu_us_per_req": 0.0
+     }
+    },
+    "missing_data": [],
+    "fuse": {
+     "reqs_per_op": 0.0,
+     "mix_per_op": {},
+     "client_cpu_us_per_req": 0.0,
+     "writes_per_op": 0.0
+    },
+    "host_busy": 0.01500000000000206,
+    "host_softirq_share": 0.0
+   },
+   "ior-hard-read": {
+    "ops": 128613284.2627072,
+    "nodes": 3,
+    "unit": "byte",
+    "measured": 0.400558,
+    "measured_unit": "GiB/s",
+    "time_s": 0.302,
+    "cpu_s_per_op": {
+     "client": 0.0,
+     "ranks": 1.839956568245994e-09,
+     "server_handler": 1.5272053826010083e-11,
+     "server_transport": 1.820995904029356e-10,
+     "emulator": 2.2390574124855625e-09
+    },
+    "emulator_share": 0.5235864135864133,
+    "kinds": {
+     "mdt": {
+      "rpcs_per_op": 0.0,
+      "bytes_per_op": 0.0,
+      "hot_share": 0.0,
+      "servers": 3,
+      "cpu_us_per_req": 0.0,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 64,
+      "hot_cpu_us_per_req": 0.0
+     },
+     "ost": {
+      "rpcs_per_op": 5.745907230628749e-06,
+      "bytes_per_op": 0.0009768042292068874,
+      "hot_share": 0.3342354533152909,
+      "servers": 3,
+      "cpu_us_per_req": 2.657901217861976,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 1,
+      "hot_cpu_us_per_req": 2.360323886639676
+     }
+    },
+    "missing_data": [],
+    "fuse": {
+     "reqs_per_op": 0.0,
+     "mix_per_op": {},
+     "client_cpu_us_per_req": 0.0,
+     "writes_per_op": 0.0
+    },
+    "host_busy": 0.19642857142856807,
+    "host_softirq_share": 0.18181818181818504
+   },
+   "mdtest-hard-stat": {
+    "ops": 1812.6160289999998,
+    "nodes": 3,
+    "unit": "op",
+    "measured": 67.133927,
+    "measured_unit": "kIOPS",
+    "time_s": 1.03,
+    "cpu_s_per_op": {
+     "client": 0.0,
+     "ranks": 1.1033776420389357e-05,
+     "server_handler": 0.0,
+     "server_transport": 5.516888210194686e-06,
+     "emulator": 2.7584441050973418e-05
+    },
+    "emulator_share": 0.6250000000000001,
+    "kinds": {
+     "mdt": {
+      "rpcs_per_op": 0.0,
+      "bytes_per_op": 0.0,
+      "hot_share": 0.0,
+      "servers": 3,
+      "cpu_us_per_req": 0.0,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 64,
+      "hot_cpu_us_per_req": 0.0
+     },
+     "ost": {
+      "rpcs_per_op": 0.0,
+      "bytes_per_op": 0.0,
+      "hot_share": 0.0,
+      "servers": 3,
+      "cpu_us_per_req": 0.0,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 1,
+      "hot_cpu_us_per_req": 0.0
+     }
+    },
+    "missing_data": [],
+    "fuse": {
+     "reqs_per_op": 0.0,
+     "mix_per_op": {},
+     "client_cpu_us_per_req": 0.0,
+     "writes_per_op": 0.0
+    },
+    "host_busy": 0.017500000000000977,
+    "host_softirq_share": 0.14285714285712112
+   },
+   "mdtest-easy-delete": {
+    "ops": 1799.00448,
+    "nodes": 3,
+    "unit": "op",
+    "measured": 18.73963,
+    "measured_unit": "kIOPS",
+    "time_s": 1.101,
+    "cpu_s_per_op": {
+     "client": 0.0,
+     "ranks": 3.414586906897054e-05,
+     "server_handler": 2.158087455124069e-06,
+     "server_transport": 3.6752321483935376e-05,
+     "emulator": 6.03508383544596e-05
+    },
+    "emulator_share": 0.45238095238095255,
+    "kinds": {
+     "mdt": {
+      "rpcs_per_op": 1.0161175362942954,
+      "bytes_per_op": 229.8387828361606,
+      "hot_share": 0.34190371991247265,
+      "servers": 3,
+      "cpu_us_per_req": 2.123856126914661,
+      "hold_us_per_req_hot": 0.7895424,
+      "lock_stripes": 64,
+      "hot_cpu_us_per_req": 2.0762096000000003
+     },
+     "ost": {
+      "rpcs_per_op": 0.0,
+      "bytes_per_op": 0.0,
+      "hot_share": 0.0,
+      "servers": 3,
+      "cpu_us_per_req": 0.0,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 1,
+      "hot_cpu_us_per_req": 0.0
+     }
+    },
+    "missing_data": [],
+    "fuse": {
+     "reqs_per_op": 0.0,
+     "mix_per_op": {},
+     "client_cpu_us_per_req": 0.0,
+     "writes_per_op": 0.0
+    },
+    "host_busy": 0.05707196029776303,
+    "host_softirq_share": 0.13043478260869565
+   },
+   "mdtest-hard-read": {
+    "ops": 1794.242466,
+    "nodes": 3,
+    "unit": "op",
+    "measured": 15.738969,
+    "measured_unit": "kIOPS",
+    "time_s": 1.117,
+    "cpu_s_per_op": {
+     "client": 0.0,
+     "ranks": 3.344029646882742e-05,
+     "server_handler": 3.0286358187221725e-06,
+     "server_transport": 2.360927555644632e-05,
+     "emulator": 7.92563607761183e-05
+    },
+    "emulator_share": 0.5688205128205128,
+    "kinds": {
+     "mdt": {
+      "rpcs_per_op": 1.0032088940648225,
+      "bytes_per_op": 4156.56197048231,
+      "hot_share": 0.3377777777777778,
+      "servers": 3,
+      "cpu_us_per_req": 3.0189483333333333,
+      "hold_us_per_req_hot": 2.2558042763157893,
+      "lock_stripes": 64,
+      "hot_cpu_us_per_req": 3.1178766447368425
+     },
+     "ost": {
+      "rpcs_per_op": 0.0,
+      "bytes_per_op": 0.0,
+      "hot_share": 0.0,
+      "servers": 3,
+      "cpu_us_per_req": 0.0,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 1,
+      "hot_cpu_us_per_req": 0.0
+     }
+    },
+    "missing_data": [],
+    "fuse": {
+     "reqs_per_op": 0.0,
+     "mix_per_op": {},
+     "client_cpu_us_per_req": 0.0,
+     "writes_per_op": 0.0
+    },
+    "host_busy": 0.0702947845805073,
+    "host_softirq_share": 0.29032258064516203
+   },
+   "mdtest-hard-delete": {
+    "ops": 1802.642668,
+    "nodes": 3,
+    "unit": "op",
+    "measured": 15.540023,
+    "measured_unit": "kIOPS",
+    "time_s": 1.119,
+    "cpu_s_per_op": {
+     "client": 0.0,
+     "ranks": 1.9614060781314442e-05,
+     "server_handler": 2.516273513614624e-06,
+     "server_transport": 3.577627275922099e-05,
+     "emulator": 8.077867119756841e-05
+    },
+    "emulator_share": 0.5824603174603177,
+    "kinds": {
+     "mdt": {
+      "rpcs_per_op": 1.0029719323164275,
+      "bytes_per_op": 223.57731077516024,
+      "hot_share": 0.33738938053097345,
+      "servers": 3,
+      "cpu_us_per_req": 2.5088174778761063,
+      "hold_us_per_req_hot": 1.1150196721311476,
+      "lock_stripes": 64,
+      "hot_cpu_us_per_req": 2.4577688524590164
+     },
+     "ost": {
+      "rpcs_per_op": 0.0,
+      "bytes_per_op": 0.0,
+      "hot_share": 0.0,
+      "servers": 3,
+      "cpu_us_per_req": 0.0,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 1,
+      "hot_cpu_us_per_req": 0.0
+     }
+    },
+    "missing_data": [],
+    "fuse": {
+     "reqs_per_op": 0.0,
+     "mix_per_op": {},
+     "client_cpu_us_per_req": 0.0,
+     "writes_per_op": 0.0
+    },
+    "host_busy": 0.06787330316742339,
+    "host_softirq_share": 0.23333333333333098
+   }
+  },
+  "profile": {
+   "nodes": 10,
+   "cores": 32,
+   "cpu_speed": 1.0,
+   "nic_gbps": 100,
+   "ram_gib": 512,
+   "ranks_per_node": 32,
+   "client_threads": 16,
+   "rtt_us": 6.0,
+   "rdma_msg_cpu_us": 2.0,
+   "memcpy_gb_s": 10.0,
+   "cpu_util": 0.85,
+   "nic_eff": 0.85,
+   "mem_usable": 0.6,
+   "fuse_mount_kops": 150.0,
+   "fuse_mount_gib_s": 4.0,
+   "fuse_req_overhead_us": 25.0,
+   "lock_convoy": 1.5,
+   "nvme_gib": 7150.0,
+   "nvme_gib_s": 5.0,
+   "name": "10x32c-100g",
+   "intercept": true
+  },
+  "projection": {
+   "phases": {
+    "ior-easy-write": {
+     "value": 7.68,
+     "unit": "GiB/s",
+     "bottleneck": "capacity",
+     "next_limit": {
+      "name": "nic",
+      "value": 109.94780394766066
+     },
+     "limits": {
+      "cpu_cluster": 141.48147514962497,
+      "mdt_lock": 132035.27890534585,
+      "cpu_hot_node": 141.48147514962497,
+      "client_threads": 642.1623960155118,
+      "nic": 109.94780394766066,
+      "latency": 165.68982368728268,
+      "capacity": 7.68
+     }
+    },
+    "mdtest-easy-write": {
+     "value": 2768.993665465501,
+     "unit": "kIOPS",
+     "bottleneck": "cpu_cluster",
+     "next_limit": {
+      "name": "cpu_hot_node",
+      "value": 2768.993665465501
+     },
+     "limits": {
+      "cpu_cluster": 2768.993665465501,
+      "mdt_lock": 20112.041239302336,
+      "cpu_hot_node": 2768.993665465501,
+      "client_threads": 16920.228216608026,
+      "latency": 3068.5536850666763
+     }
+    },
+    "ior-hard-write": {
+     "value": 2.56,
+     "unit": "GiB/s",
+     "bottleneck": "capacity",
+     "next_limit": {
+      "name": "cpu_hot_node",
+      "value": 88.72768005819468
+     },
+     "limits": {
+      "cpu_cluster": 106.42558976973227,
+      "mdt_lock": 709.4992983558981,
+      "cpu_hot_node": 88.72768005819468,
+      "client_threads": 253.87453453402676,
+      "nic": 109.94780394766066,
+      "latency": 115.17478980321704,
+      "capacity": 2.56
+     }
+    },
+    "mdtest-hard-write": {
+     "value": 3202.6407454033733,
+     "unit": "kIOPS",
+     "bottleneck": "cpu_hot_node",
+     "next_limit": {
+      "name": "cpu_cluster",
+      "value": 3202.640745403374
+     },
+     "limits": {
+      "cpu_cluster": 3202.640745403374,
+      "mdt_lock": 13763.052267442103,
+      "cpu_hot_node": 3202.6407454033733,
+      "client_threads": 10205.011028068728,
+      "latency": 3300.776768441969
+     }
+    },
+    "find": {
+     "value": 1303.147718976121,
+     "unit": "kIOPS",
+     "bottleneck": "cpu_cluster",
+     "next_limit": {
+      "name": "cpu_hot_node",
+      "value": 1303.147718976121
+     },
+     "limits": {
+      "cpu_cluster": 1303.147718976121,
+      "mdt_lock": 311430.20355656336,
+      "cpu_hot_node": 1303.147718976121,
+      "client_threads": 373612.3939952574,
+      "latency": 1532.38222599835
+     }
+    },
+    "ior-easy-read": {
+     "value": 109.94780394766066,
+     "unit": "GiB/s",
+     "bottleneck": "nic",
+     "next_limit": {
+      "name": "cpu_cluster",
+      "value": 688.6087793881171
+     },
+     "limits": {
+      "cpu_cluster": 688.6087793881171,
+      "cpu_hot_node": 688.6087793881171,
+      "client_threads": 21226.97384015392,
+      "nic": 109.94780394766066,
+      "latency": 797.7199061223185
+     }
+    },
+    "mdtest-easy-stat": {
+     "value": 16651.583939200045,
+     "unit": "kIOPS",
+     "bottleneck": "cpu_cluster",
+     "next_limit": {
+      "name": "cpu_hot_node",
+      "value": 16651.583939200045
+     },
+     "limits": {
+      "cpu_cluster": 16651.583939200045,
+      "cpu_hot_node": 16651.583939200045,
+      "client_threads": Infinity,
+      "latency": 19590.098752000053
+     }
+    },
+    "ior-hard-read": {
+     "value": 109.94780394766066,
+     "unit": "GiB/s",
+     "bottleneck": "nic",
+     "next_limit": {
+      "name": "cpu_cluster",
+      "value": 134.8587701085929
+     },
+     "limits": {
+      "cpu_cluster": 134.8587701085929,
+      "cpu_hot_node": 134.8587701085929,
+      "client_threads": 4858.784457842636,
+      "nic": 109.94780394766066,
+      "latency": 155.7979318511103
+     }
+    },
+    "mdtest-hard-stat": {
+     "value": 24651.57799440001,
+     "unit": "kIOPS",
+     "bottleneck": "cpu_cluster",
+     "next_limit": {
+      "name": "cpu_hot_node",
+      "value": 24651.57799440001
+     },
+     "limits": {
+      "cpu_cluster": 24651.57799440001,
+      "cpu_hot_node": 24651.57799440001,
+      "client_threads": Infinity,
+      "latency": 29001.85646400001
+     }
+    },
+    "mdtest-easy-delete": {
+     "value": 6730.275285928725,
+     "unit": "kIOPS",
+     "bottleneck": "cpu_cluster",
+     "next_limit": {
+      "name": "cpu_hot_node",
+      "value": 6730.275285928726
+     },
+     "limits": {
+      "cpu_cluster": 6730.275285928725,
+      "mdt_lock": 101121.517407432,
+      "cpu_hot_node": 6730.275285928726,
+      "client_threads": 31037.792359271305,
+      "latency": 6880.078141605484
+     }
+    },
+    "mdtest-hard-read": {
+     "value": 6583.871217105682,
+     "unit": "kIOPS",
+     "bottleneck": "cpu_cluster",
+     "next_limit": {
+      "name": "cpu_hot_node",
+      "value": 6583.871217105682
+     },
+     "limits": {
+      "cpu_cluster": 6583.871217105682,
+      "mdt_lock": 68203.77557024284,
+      "cpu_hot_node": 6583.871217105682,
+      "client_threads": 27898.956195840652,
+      "latency": 6760.706170829383
+     }
+    },
+    "mdtest-hard-delete": {
+     "value": 9936.41653516033,
+     "unit": "kIOPS",
+     "bottleneck": "latency",
+     "next_limit": {
+      "name": "cpu_cluster",
+      "value": 10386.85795701703
+     },
+     "limits": {
+      "cpu_cluster": 10386.85795701703,
+      "mdt_lock": 86542.39374512482,
+      "cpu_hot_node": 10386.85795701703,
+      "client_threads": 30296.125588720097,
+      "latency": 9936.41653516033
+     }
+    }
+   },
+   "bw_gib_s": 22.079720729710413,
+   "md_kiops": 6165.71585999947,
+   "score": 368.96786348886076
+  },
+  "score_band": {
+   "pessimistic": 235.75251998313217,
+   "optimistic": 451.1678345991613
+  },
+  "sensitivity": {
+   "fuse_mount_kops": [
+    368.96786348886076,
+    368.96786348886076
+   ],
+   "fuse_mount_gib_s": [
+    368.96786348886076,
+    368.96786348886076
+   ],
+   "fuse_req_overhead_us": [
+    368.96786348886076,
+    368.96786348886076
+   ],
+   "nvme_gib_s": [
+    368.96786348886076,
+    368.96786348886076
+   ],
+   "lock_convoy": [
+    368.96786348886076,
+    368.96786348886076
+   ],
+   "rdma_msg_cpu_us": [
+    359.03463295551586,
+    374.4251089141981
+   ],
+   "cpu_speed": [
+    243.0250667643175,
+    433.6090981215883
+   ],
+   "rtt_us": [
+    362.4932799293845,
+    369.9916659282146
+   ]
+  },
+  "scenarios": [
+   {
+    "key": "as_is",
+    "text": "as measured, valid 300 s run",
+    "score": 368.96786348886076,
+    "bw_gib_s": 22.079720729710413,
+    "md_kiops": 6165.71585999947,
+    "bottlenecks": {
+     "ior-easy-write": "capacity",
+     "mdtest-easy-write": "cpu_cluster",
+     "ior-hard-write": "capacity",
+     "mdtest-hard-write": "cpu_hot_node",
+     "find": "cpu_cluster",
+     "ior-easy-read": "nic",
+     "mdtest-easy-stat": "cpu_cluster",
+     "ior-hard-read": "nic",
+     "mdtest-hard-stat": "cpu_cluster",
+     "mdtest-easy-delete": "cpu_cluster",
+     "mdtest-hard-read": "cpu_cluster",
+     "mdtest-hard-delete": "latency"
+    }
+   },
+   {
+    "key": "dir_sharding",
+    "text": "+ one directory's entries spread over all MDTs (name hash), finer MDT locks (done: ROCEPOOL_DIR_STRIPE=1 + MD_BUCKETS; a no-op on a run that already has them)",
+    "score": 368.96786348886076,
+    "bw_gib_s": 22.079720729710413,
+    "md_kiops": 6165.71585999947,
+    "bottlenecks": {
+     "ior-easy-write": "capacity",
+     "mdtest-easy-write": "cpu_cluster",
+     "ior-hard-write": "capacity",
+     "mdtest-hard-write": "cpu_hot_node",
+     "find": "cpu_cluster",
+     "ior-easy-read": "nic",
+     "mdtest-easy-stat": "cpu_cluster",
+     "ior-hard-read": "nic",
+     "mdtest-hard-stat": "cpu_cluster",
+     "mdtest-easy-delete": "cpu_cluster",
+     "mdtest-hard-read": "cpu_cluster",
+     "mdtest-hard-delete": "latency"
+    }
+   },
+   {
+    "key": "parallel_writes",
+    "text": "+ FOPEN_PARALLEL_DIRECT_WRITES: no per-node inode lock on a shared file",
+    "score": 368.96786348886076,
+    "bw_gib_s": 22.079720729710413,
+    "md_kiops": 6165.71585999947,
+    "bottlenecks": {
+     "ior-easy-write": "capacity",
+     "mdtest-easy-write": "cpu_cluster",
+     "ior-hard-write": "capacity",
+     "mdtest-hard-write": "cpu_hot_node",
+     "find": "cpu_cluster",
+     "ior-easy-read": "nic",
+     "mdtest-easy-stat": "cpu_cluster",
+     "ior-hard-read": "nic",
+     "mdtest-hard-stat": "cpu_cluster",
+     "mdtest-easy-delete": "cpu_cluster",
+     "mdtest-hard-read": "cpu_cluster",
+     "mdtest-hard-delete": "latency"
+    }
+   },
+   {
+    "key": "fuse_uring",
+    "text": "+ FUSE over io_uring (per-core queues, Linux 6.14+): ~3x per-mount rate, less wake-up cost (implemented: io500_run.py probes it against /dev/fuse on the hosts and uses the faster; a no-op on a run that already used it)",
+    "score": 368.96786348886076,
+    "bw_gib_s": 22.079720729710413,
+    "md_kiops": 6165.71585999947,
+    "bottlenecks": {
+     "ior-easy-write": "capacity",
+     "mdtest-easy-write": "cpu_cluster",
+     "ior-hard-write": "capacity",
+     "mdtest-hard-write": "cpu_hot_node",
+     "find": "cpu_cluster",
+     "ior-easy-read": "nic",
+     "mdtest-easy-stat": "cpu_cluster",
+     "ior-hard-read": "nic",
+     "mdtest-hard-stat": "cpu_cluster",
+     "mdtest-easy-delete": "cpu_cluster",
+     "mdtest-hard-read": "cpu_cluster",
+     "mdtest-hard-delete": "latency"
+    }
+   },
+   {
+    "key": "intercept",
+    "text": "+ the LD_PRELOAD interception library in every rank (no FUSE channel, no kernel on the I/O path; implemented: io500_run.py --client auto probes it against FUSE and uses the faster; a no-op on a run that already used it)",
+    "score": 368.96786348886076,
+    "bw_gib_s": 22.079720729710413,
+    "md_kiops": 6165.71585999947,
+    "bottlenecks": {
+     "ior-easy-write": "capacity",
+     "mdtest-easy-write": "cpu_cluster",
+     "ior-hard-write": "capacity",
+     "mdtest-hard-write": "cpu_hot_node",
+     "find": "cpu_cluster",
+     "ior-easy-read": "nic",
+     "mdtest-easy-stat": "cpu_cluster",
+     "ior-hard-read": "nic",
+     "mdtest-hard-stat": "cpu_cluster",
+     "mdtest-easy-delete": "cpu_cluster",
+     "mdtest-hard-read": "cpu_cluster",
+     "mdtest-hard-delete": "latency"
+    }
+   },
+   {
+    "key": "one_sided",
+    "text": "+ one-sided reads and lookups (client RDMA READs stripes and MDT entries; implemented: io500_run.py --direct-read auto probes it; a no-op on a run that already used it -- its effect is in the measured per-op server CPU)",
+    "score": 368.96786348886076,
+    "bw_gib_s": 22.079720729710413,
+    "md_kiops": 6165.71585999947,
+    "bottlenecks": {
+     "ior-easy-write": "capacity",
+     "mdtest-easy-write": "cpu_cluster",
+     "ior-hard-write": "capacity",
+     "mdtest-hard-write": "cpu_hot_node",
+     "find": "cpu_cluster",
+     "ior-easy-read": "nic",
+     "mdtest-easy-stat": "cpu_cluster",
+     "ior-hard-read": "nic",
+     "mdtest-hard-stat": "cpu_cluster",
+     "mdtest-easy-delete": "cpu_cluster",
+     "mdtest-hard-read": "cpu_cluster",
+     "mdtest-hard-delete": "latency"
+    }
+   },
+   {
+    "key": "nvme_tier",
+    "text": "+ the OST's NVMe tier for the 300 s write phases (implemented: roce/native/ost_tier.c, io500_run.py --ost-tier auto; a no-op on a run that already had it -- its limits are then the drives' capacity and write bandwidth)",
+    "score": 676.1310715559756,
+    "bw_gib_s": 74.14438749752428,
+    "md_kiops": 6165.71585999947,
+    "bottlenecks": {
+     "ior-easy-write": "nvme_bw",
+     "mdtest-easy-write": "cpu_cluster",
+     "ior-hard-write": "nvme_bw",
+     "mdtest-hard-write": "cpu_hot_node",
+     "find": "cpu_cluster",
+     "ior-easy-read": "nic",
+     "mdtest-easy-stat": "cpu_cluster",
+     "ior-hard-read": "nic",
+     "mdtest-hard-stat": "cpu_cluster",
+     "mdtest-easy-delete": "cpu_cluster",
+     "mdtest-hard-read": "cpu_cluster",
+     "mdtest-hard-delete": "latency"
+    }
+   }
+  ],
+  "calibration": {
+   "ior-easy-write": {
+    "predicted": 0.9374999184375001,
+    "measured": 1.356172,
+    "ratio": 0.6912839362835247
+   },
+   "mdtest-easy-write": {
+    "predicted": 11.250574550000007,
+    "measured": 10.112876,
+    "ratio": 1.1125000000000007
+   },
+   "ior-hard-write": {
+    "predicted": 0.3032386249011074,
+    "measured": 0.279203,
+    "ratio": 1.086086556738672
+   },
+   "mdtest-hard-write": {
+    "predicted": 7.995363786666666,
+    "measured": 7.787692,
+    "ratio": 1.0266666666666666
+   },
+   "find": {
+    "predicted": 8.797556689423224,
+    "measured": 10.217633,
+    "ratio": 0.8610170955859566
+   },
+   "ior-easy-read": {
+    "predicted": 1.2668950015836145,
+    "measured": 1.23658,
+    "ratio": 1.0245151964156096
+   },
+   "mdtest-easy-stat": {
+    "predicted": 40.81270573333337,
+    "measured": 79.850946,
+    "ratio": 0.5111111111111116
+   },
+   "ior-hard-read": {
+    "predicted": 0.4355652910156251,
+    "measured": 0.400558,
+    "ratio": 1.0873963096870491
+   },
+   "mdtest-hard-stat": {
+    "predicted": 45.31540072499998,
+    "measured": 67.133927,
+    "ratio": 0.6749999999999997
+   },
+   "mdtest-easy-delete": {
+    "predicted": 14.991703999999999,
+    "measured": 18.73963,
+    "ratio": 0.8
+   },
+   "mdtest-hard-read": {
+    "predicted": 14.353939728000002,
+    "measured": 15.738969,
+    "ratio": 0.912
+   },
+   "mdtest-hard-delete": {
+    "predicted": 14.42114134399999,
+    "measured": 15.540023,
+    "ratio": 0.9279999999999994
+   }
+  },
+  "vs_weka": {
+   "score_ratio": 0.28712527697740364,
+   "bw_ratio": 1.5072654408721087,
+   "md_ratio": 0.05470411022152244
+  }
+ }
+}

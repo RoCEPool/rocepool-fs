@@ -1,0 +1,27 @@
+# build outputs (roce/native/build.sh, build_lib.py)
+*.o
+*.a
+*.so
+*.so.*
+*.buildinfo
+__pycache__/
+*.pyc
+roce/native/rocepool-fuse
+roce/native/rocepool-kv-bench
+roce/native/softverbs/rocepool-fuse
+roce/native/softverbs/rocepool-kv-bench
+roce/native/ofi/
+roce/native/.backend
+# run outputs
+.bench_cache/
+mnt/
+aws_runs/
+onsite_*.json
+io500_report.json
+roce_env.sh
+run.log
+selftest.log
+rocepool-results-*.tar.gz
+rocepool-full-*.tar.gz
+# holds a password
+cluster.conf
