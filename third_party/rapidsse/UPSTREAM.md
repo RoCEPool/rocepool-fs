@@ -4,9 +4,10 @@
 Data. Apache License 2.0 (`LICENSE`, `COPYRIGHT`, `README.md` here are the
 upstream files, unmodified).
 
-**Version**: source archive `rapidsdataproject-rapidsse-90012081f5a9`
-(repository `rapidsdataproject/rapidsse`, commit `90012081f5a9`), supplied by
-the project owner.
+**Upstream**: https://bitbucket.org/rapidsdataproject/rapidsse/
+
+**Version**: commit `90012081f5a9` (source archive
+`rapidsdataproject-rapidsse-90012081f5a9`).
 
 **What is here**: only the upstream files that rocepool's code was written
 against, copied byte for byte (no change of any kind), at their upstream

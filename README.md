@@ -58,7 +58,8 @@ Full guide (Chinese): [docs/运行说明书.md](docs/运行说明书.md).
 
 `storage_engine/rapidsse_engine.py` and `wlp/` speak the client wire protocol
 (WLP v5) of RapidsSE, the Rapids Storage Engine (Apache License 2.0,
-Copyright (C) 2026 Boray Data). The RapidsSE sources they were written
+Copyright (C) 2026 Boray Data; https://bitbucket.org/rapidsdataproject/rapidsse/).
+The RapidsSE sources they were written
 against are kept unmodified in [third_party/rapidsse/](third_party/rapidsse/UPSTREAM.md),
 with RapidsSE's license, and a test checks the two agree.
 

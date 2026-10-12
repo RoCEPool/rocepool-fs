@@ -27,7 +27,8 @@ version and which rocepool file uses which upstream file, and
 |---|---|
 | project | RapidsSE, the Rapids Storage Engine -- Copyright (C) 2026 Boray Data |
 | license | Apache License 2.0 (`third_party/rapidsse/LICENSE`) |
-| version | `rapidsdataproject/rapidsse` at commit `90012081f5a9` |
+| upstream | https://bitbucket.org/rapidsdataproject/rapidsse/ |
+| version | commit `90012081f5a9` |
 | files | `src/wlp/thrift/messageDefinitions/**`, `src/wlp/thrift/supports/WlpHeader.hpp`, `src/wlp/thrift/supports/BufferTransport.hpp`, `src/store/AdaptorWL.cpp` |
 
 ## Interfaces implemented against (not included)
