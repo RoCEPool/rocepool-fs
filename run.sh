@@ -120,7 +120,8 @@ fi
 RES="rocepool-results-$(hostname -s)-$(date +%Y%m%d-%H%M%S).tar.gz"
 FILES=$(ls -d run.log selftest.log io500_report.json onsite_*.json roce_env.sh .bench_cache/io500_run/*.log \
             .bench_cache/io500_run/*.out .bench_cache/io500_run/results \
-            .bench_cache/io500_run/probe_*/io500.out 2>/dev/null)
+            .bench_cache/io500_run/probe_*/io500.out .bench_cache/io500_run_prev/*.log .bench_cache/io500_run_prev/*.out \
+            .bench_cache/io500_run_prev/probe_*/io500.out 2>/dev/null)
 if [ -n "$FILES" ]; then
   tar czf "$RES" $FILES 2>/dev/null && echo "== 结果包：$(pwd)/$RES（把这个文件发回来即可）"
 fi
