@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""`ssh [options] [user@]host command...` against tests/fakes/fake_sshd.py
+(port 2222 on the host's IP; FAKE_SSH_PORT overrides). Options are accepted
+and ignored, like BatchMode. The command words are joined with spaces, as
+ssh does. Exit status: the remote command's, or 255 if the host cannot be
+reached (like ssh)."""
+import os
+import socket
+import struct
+import sys
+import threading
+
+args = sys.argv[1:]
+while args and args[0].startswith("-"):
+    opt = args.pop(0)
+    if opt in ("-o", "-p", "-i", "-l", "-F", "-J") and args:
+        args.pop(0)
+if not args:
+    print("usage: ssh [opts] host cmd", file=sys.stderr)
+    sys.exit(255)
+host = args.pop(0).split("@")[-1]
+cmd = " ".join(args)
+try:
+    s = socket.create_connection((host, int(os.environ.get("FAKE_SSH_PORT", "2222"))), timeout=10)
+    s.settimeout(None)
+except OSError as exc:
+    print(f"ssh: connect to host {host}: {exc}", file=sys.stderr)
+    sys.exit(255)
+lock = threading.Lock()
+data = cmd.encode()
+s.sendall(struct.pack("!I", len(data)) + data)
+
+
+def stdin_pump():
+    try:
+        for chunk in iter(lambda: os.read(0, 65536), b""):
+            with lock:
+                s.sendall(struct.pack("!BI", 0, len(chunk)) + chunk)
+        with lock:
+            s.sendall(struct.pack("!BI", 4, 0))
+    except OSError:
+        pass
+
+
+threading.Thread(target=stdin_pump, daemon=True).start()
+
+
+def recv_exact(n):
+    buf = b""
+    while len(buf) < n:
+        chunk = s.recv(n - len(buf))
+        if not chunk:
+            raise EOFError
+        buf += chunk
+    return buf
+
+
+rc = 255
+try:
+    while True:
+        ch, n = struct.unpack("!BI", recv_exact(5))
+        payload = recv_exact(n) if n else b""
+        if ch == 1:
+            os.write(1, payload)
+        elif ch == 2:
+            os.write(2, payload)
+        elif ch == 3:
+            rc = struct.unpack("!i", payload)[0]
+            rc = rc if rc >= 0 else 128 - rc
+            break
+except (EOFError, OSError):
+    pass
+os._exit(rc)

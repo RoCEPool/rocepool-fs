@@ -1,0 +1,203 @@
+{
+ "config": {
+  "workload": "md",
+  "ladder": "50",
+  "threads_per_proc": 10,
+  "duration": 90.0,
+  "attr_ttl": 0.0,
+  "file_bytes": 1048576,
+  "mdts": 2,
+  "osts": 4,
+  "batcher_workers": 4,
+  "batcher_per_peer": 2,
+  "server_env": {},
+  "gdb_servers": false,
+  "core_dumps": false,
+  "log_dir": "/tmp/stress_logs",
+  "report": "/tmp/stress_run10.json"
+ },
+ "steps": [
+  {
+   "clients": 50,
+   "workload": "md",
+   "ops_ok": 173814,
+   "ops_err": 0,
+   "ops_per_s": 1931.3,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "latency_ms": {
+    "create": {
+     "p50": 31.2,
+     "p99": 79.3,
+     "max": 154.2
+    },
+    "stat": {
+     "p50": 12.9,
+     "p99": 46.5,
+     "max": 109.8
+    },
+    "unlink": {
+     "p50": 26.7,
+     "p99": 74.5,
+     "max": 187.9
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 82,
+      "peak_rss_mb": 20.3,
+      "peak_fds": 50,
+      "cpu_pct": 47.9
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 53,
+      "peak_rss_mb": 19.9,
+      "peak_fds": 37,
+      "cpu_pct": 40.6
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 80,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 59,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 7082.0,
+    "peak_loadavg1": 41.03
+   },
+   "ops_per_second_timeline": [
+    1855,
+    1960,
+    1931,
+    1940,
+    1844,
+    1977,
+    2010,
+    1888,
+    1950,
+    1869,
+    1953,
+    1986,
+    2019,
+    1822,
+    1654,
+    1768,
+    1822,
+    1965,
+    1959,
+    1890,
+    1950,
+    1813,
+    1942,
+    1997,
+    2007,
+    1960,
+    2011,
+    1998,
+    1925,
+    1974,
+    1934,
+    1951,
+    1949,
+    2028,
+    1960,
+    1898,
+    1930,
+    1678,
+    1785,
+    1826,
+    1842,
+    1893,
+    1936,
+    1959,
+    1953,
+    1817,
+    2002,
+    1947,
+    1999,
+    1972,
+    1930,
+    1883,
+    1848,
+    1845,
+    1935,
+    1889,
+    1884,
+    1957,
+    2017,
+    1937,
+    2024,
+    1966,
+    1989,
+    1915,
+    2051,
+    1909,
+    1894,
+    1919,
+    1888,
+    1890,
+    1931,
+    1982,
+    1864,
+    1901,
+    1987,
+    1943,
+    1993,
+    2018,
+    1987,
+    1967,
+    1965,
+    1904,
+    1939,
+    1983,
+    1992,
+    1934,
+    1943,
+    1800,
+    1549,
+    1757
+   ]
+  }
+ ]
+}

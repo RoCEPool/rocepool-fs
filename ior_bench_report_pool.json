@@ -1,0 +1,92 @@
+{
+  "benchmark": "IOR/mdtest (real upstream github.com/hpc/ior, unmodified)",
+  "backend": "pool",
+  "mountpoint": "/mnt/rocepool_iorbench",
+  "cases": [
+    {
+      "name": "shared_1m",
+      "tasks": 2,
+      "block": "4m",
+      "xfer": "1m",
+      "file_per_process": false,
+      "elapsed_s": 0.22,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 67.55,
+      "write_iops": 104.59,
+      "read_bw_mib_s": 575.62,
+      "read_iops": 711.74
+    },
+    {
+      "name": "shared_64k",
+      "tasks": 2,
+      "block": "2m",
+      "xfer": "64k",
+      "file_per_process": false,
+      "elapsed_s": 0.23,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 37.55,
+      "write_iops": 1762.51,
+      "read_bw_mib_s": 164.96,
+      "read_iops": 4741.0
+    },
+    {
+      "name": "fpp_1m",
+      "tasks": 4,
+      "block": "2m",
+      "xfer": "1m",
+      "file_per_process": true,
+      "elapsed_s": 0.38,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 49.38,
+      "write_iops": 88.32,
+      "read_bw_mib_s": 291.88,
+      "read_iops": 393.93
+    },
+    {
+      "name": "shared_4m_large",
+      "tasks": 2,
+      "block": "32m",
+      "xfer": "4m",
+      "file_per_process": false,
+      "elapsed_s": 9.46,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 8.53,
+      "write_iops": 23.95,
+      "read_bw_mib_s": 72.34,
+      "read_iops": 33.97
+    },
+    {
+      "name": "fpp_256k",
+      "tasks": 4,
+      "block": "4m",
+      "xfer": "256k",
+      "file_per_process": true,
+      "elapsed_s": 0.6,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 57.7,
+      "write_iops": 451.48,
+      "read_bw_mib_s": 282.32,
+      "read_iops": 1553.47
+    }
+  ],
+  "mdtest": {
+    "tasks": 2,
+    "n": 200,
+    "elapsed_s": 17.5,
+    "returncode": 0,
+    "ops_per_sec": {
+      "File creation": 91.312,
+      "File stat": 125.718,
+      "File read": 91.367,
+      "File removal": 89.518,
+      "Tree creation": 527.718,
+      "Tree removal": 226.145
+    }
+  },
+  "ok": true
+}

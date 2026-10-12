@@ -1,0 +1,209 @@
+{
+ "config": {
+  "workload": "md",
+  "ladder": "50",
+  "threads_per_proc": 10,
+  "duration": 90.0,
+  "attr_ttl": 0.0,
+  "file_bytes": 1048576,
+  "mdts": 2,
+  "osts": 4,
+  "batcher_workers": 4,
+  "batcher_per_peer": 2,
+  "server_env": {},
+  "gdb_servers": false,
+  "core_dumps": false,
+  "log_dir": "/tmp/stress_logs",
+  "report": "/tmp/stress_run8.json"
+ },
+ "steps": [
+  {
+   "clients": 50,
+   "workload": "md",
+   "ops_ok": 99849,
+   "ops_err": 0,
+   "ops_per_s": 1109.4,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "latency_ms": {
+    "create": {
+     "p50": 46.3,
+     "p99": 138.0,
+     "max": 194.1
+    },
+    "stat": {
+     "p50": 20.6,
+     "p99": 75.9,
+     "max": 116.0
+    },
+    "unlink": {
+     "p50": 41.9,
+     "p99": 134.8,
+     "max": 183.3
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 73,
+      "peak_rss_mb": 20.2,
+      "peak_fds": 45,
+      "cpu_pct": 28.0
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 41,
+      "peak_rss_mb": 19.9,
+      "peak_fds": 36,
+      "cpu_pct": 22.4
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 32791,
+      "peak_time_wait_by_dst": {
+       "10.99.0.2:19902": 18012,
+       "10.99.0.1:19901": 15341
+      },
+      "peak_established": 374,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 32768,
+      "peak_time_wait_by_dst": {
+       "10.99.0.1:19901": 21802,
+       "10.99.0.2:19902": 11436
+      },
+      "peak_established": 152,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 7226.0,
+    "peak_loadavg1": 59.43
+   },
+   "ops_per_second_timeline": [
+    1615,
+    1813,
+    1868,
+    1880,
+    1849,
+    1870,
+    1817,
+    1826,
+    1845,
+    1909,
+    1879,
+    1917,
+    1807,
+    1618,
+    1247,
+    1377,
+    1314,
+    1166,
+    813,
+    701,
+    731,
+    703,
+    726,
+    688,
+    673,
+    694,
+    672,
+    684,
+    692,
+    692,
+    688,
+    701,
+    689,
+    681,
+    671,
+    717,
+    693,
+    673,
+    714,
+    714,
+    711,
+    716,
+    697,
+    693,
+    666,
+    668,
+    680,
+    677,
+    700,
+    692,
+    612,
+    668,
+    668,
+    634,
+    642,
+    635,
+    684,
+    701,
+    696,
+    682,
+    681,
+    1412,
+    1484,
+    1481,
+    1905,
+    1800,
+    1886,
+    1814,
+    1971,
+    1780,
+    1958,
+    1872,
+    1954,
+    1946,
+    1945,
+    1583,
+    1349,
+    1291,
+    1424,
+    1180,
+    825,
+    710,
+    699,
+    657,
+    659,
+    676,
+    695,
+    687,
+    705,
+    703
+   ]
+  }
+ ]
+}

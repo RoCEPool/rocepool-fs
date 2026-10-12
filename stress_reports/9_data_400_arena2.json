@@ -1,0 +1,115 @@
+{
+ "config": {
+  "workload": "data",
+  "ladder": "400",
+  "threads_per_proc": 20,
+  "duration": 15.0,
+  "attr_ttl": 0.0,
+  "file_bytes": 1048576,
+  "mdts": 2,
+  "osts": 4,
+  "batcher_workers": 4,
+  "batcher_per_peer": 2,
+  "server_env": {
+   "MALLOC_ARENA_MAX": "2"
+  },
+  "gdb_servers": false,
+  "core_dumps": false,
+  "log_dir": "/tmp/stress_logs",
+  "report": "/tmp/stress_run6.json"
+ },
+ "steps": [
+  {
+   "clients": 400,
+   "workload": "data",
+   "ops_ok": 713,
+   "ops_err": 600,
+   "ops_per_s": 47.5,
+   "error_rate": 0.457,
+   "errors_top": {
+    "write:PeerUnreachable:timed out": 512,
+    "unlink:PeerUnreachable:timed out": 45,
+    "read:PeerUnreachable:timed out": 43
+   },
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "latency_ms": {
+    "write": {
+     "p50": 6410.6,
+     "p99": 8511.7,
+     "max": 8689.7
+    },
+    "read": {
+     "p50": 214.2,
+     "p99": 6477.9,
+     "max": 7042.5
+    },
+    "unlink": {
+     "p50": 87.7,
+     "p99": 6185.5,
+     "max": 6666.8
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 491,
+      "peak_rss_mb": 28.0,
+      "peak_fds": 293,
+      "cpu_pct": 7.2
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 47,
+      "peak_rss_mb": 19.8,
+      "peak_fds": 36,
+      "cpu_pct": 3.3
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 260,
+      "peak_rss_mb": 535.8,
+      "peak_fds": 180,
+      "cpu_pct": 9.5
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 298,
+      "peak_rss_mb": 528.5,
+      "peak_fds": 207,
+      "cpu_pct": 12.6
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 267,
+      "peak_rss_mb": 523.5,
+      "peak_fds": 191,
+      "cpu_pct": 11.6
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 296,
+      "peak_rss_mb": 524.0,
+      "peak_fds": 190,
+      "cpu_pct": 9.9
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 1952,
+      "peak_established": 530,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 1959,
+      "peak_established": 439,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 2928.0,
+    "peak_loadavg1": 100.21
+   }
+  }
+ ]
+}

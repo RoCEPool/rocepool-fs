@@ -1,0 +1,477 @@
+{
+ "config": {
+  "workload": "md,md_shared,data",
+  "ladder": "200",
+  "threads_per_proc": 10,
+  "duration": 60.0,
+  "attr_ttl": 0.0,
+  "file_bytes": 1048576,
+  "mdts": 2,
+  "osts": 4,
+  "batcher_workers": 4,
+  "batcher_per_peer": 2,
+  "server_env": {},
+  "gdb_servers": false,
+  "core_dumps": true,
+  "log_dir": "/tmp/stress_logs",
+  "report": "/tmp/stress_final_200x60.json"
+ },
+ "steps": [
+  {
+   "clients": 200,
+   "workload": "md",
+   "ops_ok": 59661,
+   "ops_err": 0,
+   "ops_per_s": 994.4,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "latency_ms": {
+    "create": {
+     "p50": 265.3,
+     "p99": 758.8,
+     "max": 1237.1
+    },
+    "stat": {
+     "p50": 59.2,
+     "p99": 430.8,
+     "max": 836.9
+    },
+    "unlink": {
+     "p50": 139.2,
+     "p99": 754.5,
+     "max": 1233.1
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 370,
+      "peak_rss_mb": 25.4,
+      "peak_fds": 189,
+      "cpu_pct": 31.1
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 128,
+      "peak_rss_mb": 21.1,
+      "peak_fds": 80,
+      "cpu_pct": 33.0
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 277,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 170,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 7048.0,
+    "peak_loadavg1": 57.84
+   },
+   "ops_per_second_timeline": [
+    599,
+    965,
+    964,
+    1033,
+    1011,
+    980,
+    1006,
+    965,
+    959,
+    1018,
+    987,
+    971,
+    972,
+    979,
+    1062,
+    965,
+    1012,
+    1014,
+    965,
+    1025,
+    1056,
+    925,
+    972,
+    934,
+    918,
+    1024,
+    924,
+    912,
+    917,
+    994,
+    1014,
+    980,
+    962,
+    978,
+    977,
+    995,
+    1033,
+    940,
+    939,
+    945,
+    938,
+    951,
+    945,
+    966,
+    948,
+    1073,
+    971,
+    958,
+    984,
+    956,
+    994,
+    926,
+    998,
+    963,
+    980,
+    955,
+    921,
+    933,
+    1105,
+    947
+   ]
+  },
+  {
+   "clients": 200,
+   "workload": "md_shared",
+   "ops_ok": 53973,
+   "ops_err": 0,
+   "ops_per_s": 899.5,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "latency_ms": {
+    "create": {
+     "p50": 167.8,
+     "p99": 592.6,
+     "max": 1964.8
+    },
+    "stat": {
+     "p50": 160.6,
+     "p99": 566.1,
+     "max": 1702.9
+    },
+    "unlink": {
+     "p50": 320.5,
+     "p99": 920.4,
+     "max": 3173.8
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 26,
+      "peak_rss_mb": 20.1,
+      "peak_fds": 16,
+      "cpu_pct": 9.3
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 404,
+      "peak_rss_mb": 26.1,
+      "peak_fds": 214,
+      "cpu_pct": 49.4
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 4,
+      "cpu_pct": 0.0
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 115,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 304,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 7052.0,
+    "peak_loadavg1": 58.72
+   },
+   "ops_per_second_timeline": [
+    669,
+    880,
+    730,
+    739,
+    742,
+    680,
+    663,
+    724,
+    758,
+    840,
+    793,
+    926,
+    936,
+    863,
+    925,
+    930,
+    919,
+    949,
+    959,
+    945,
+    962,
+    867,
+    902,
+    866,
+    903,
+    933,
+    915,
+    919,
+    892,
+    937,
+    897,
+    699,
+    893,
+    917,
+    950,
+    924,
+    942,
+    889,
+    860,
+    897,
+    928,
+    862,
+    863,
+    948,
+    861,
+    933,
+    991,
+    936,
+    958,
+    970,
+    966,
+    864,
+    824,
+    875,
+    870,
+    902,
+    926,
+    959,
+    976,
+    947
+   ]
+  },
+  {
+   "clients": 200,
+   "workload": "data",
+   "ops_ok": 18303,
+   "ops_err": 0,
+   "ops_per_s": 305.1,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "latency_ms": {
+    "write": {
+     "p50": 1013.3,
+     "p99": 3074.4,
+     "max": 5735.9
+    },
+    "read": {
+     "p50": 514.9,
+     "p99": 1171.6,
+     "max": 4321.4
+    },
+    "unlink": {
+     "p50": 349.7,
+     "p99": 858.4,
+     "max": 1689.2
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 231,
+      "peak_rss_mb": 23.3,
+      "peak_fds": 173,
+      "cpu_pct": 18.6
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 134,
+      "peak_rss_mb": 21.5,
+      "peak_fds": 88,
+      "cpu_pct": 16.7
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 83,
+      "peak_rss_mb": 267.8,
+      "peak_fds": 44,
+      "cpu_pct": 9.5
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 117,
+      "peak_rss_mb": 356.7,
+      "peak_fds": 61,
+      "cpu_pct": 8.9
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 195,
+      "peak_rss_mb": 423.0,
+      "peak_fds": 100,
+      "cpu_pct": 9.2
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 89,
+      "peak_rss_mb": 310.4,
+      "peak_fds": 47,
+      "cpu_pct": 9.1
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 255,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 202,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 4721.0,
+    "peak_loadavg1": 83.91
+   },
+   "ops_per_second_timeline": [
+    40,
+    198,
+    227,
+    251,
+    250,
+    353,
+    286,
+    343,
+    348,
+    303,
+    333,
+    315,
+    309,
+    344,
+    289,
+    303,
+    294,
+    271,
+    292,
+    252,
+    252,
+    226,
+    329,
+    299,
+    299,
+    339,
+    303,
+    319,
+    254,
+    295,
+    314,
+    307,
+    321,
+    328,
+    345,
+    271,
+    327,
+    324,
+    251,
+    363,
+    339,
+    343,
+    334,
+    342,
+    298,
+    311,
+    303,
+    295,
+    286,
+    309,
+    329,
+    376,
+    289,
+    297,
+    257,
+    272,
+    269,
+    341,
+    259,
+    300
+   ]
+  }
+ ]
+}

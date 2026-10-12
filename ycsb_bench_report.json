@@ -1,0 +1,330 @@
+{
+  "benchmark": "YCSB (real upstream 0.17.0, unmodified) via tools/ycsb_bridge.py",
+  "backend": "pool",
+  "recordcount": 200,
+  "operationcount": 500,
+  "workloads": {
+    "workloada": {
+      "load": {
+        "phase": "load",
+        "elapsed_s": 0.74,
+        "returncode": 0,
+        "ok": true,
+        "ops": {
+          "OVERALL": {
+            "RunTime(ms)": 453.0,
+            "Throughput(ops/sec)": 441.5011037527594
+          },
+          "TOTAL_GC_TIME": {
+            "Time(ms)": 0.0
+          },
+          "CLEANUP": {
+            "Operations": 1.0,
+            "AverageLatency(us)": 271.0,
+            "MinLatency(us)": 271.0,
+            "MaxLatency(us)": 271.0,
+            "95thPercentileLatency(us)": 271.0,
+            "99thPercentileLatency(us)": 271.0
+          },
+          "INSERT": {
+            "Operations": 200.0,
+            "AverageLatency(us)": 2020.105,
+            "MinLatency(us)": 83.0,
+            "MaxLatency(us)": 8703.0,
+            "95thPercentileLatency(us)": 3955.0,
+            "99thPercentileLatency(us)": 6363.0,
+            "returns": {
+              "OK": 200
+            }
+          }
+        }
+      },
+      "run": {
+        "phase": "run",
+        "elapsed_s": 1.24,
+        "returncode": 0,
+        "ok": true,
+        "ops": {
+          "OVERALL": {
+            "RunTime(ms)": 1044.0,
+            "Throughput(ops/sec)": 478.9272030651341
+          },
+          "TOTAL_GC_TIME": {
+            "Time(ms)": 0.0
+          },
+          "READ": {
+            "Operations": 260.0,
+            "AverageLatency(us)": 1489.2730769230768,
+            "MinLatency(us)": 57.0,
+            "MaxLatency(us)": 4591.0,
+            "95thPercentileLatency(us)": 3021.0,
+            "99thPercentileLatency(us)": 3863.0,
+            "returns": {
+              "OK": 260
+            }
+          },
+          "CLEANUP": {
+            "Operations": 1.0,
+            "AverageLatency(us)": 184.0,
+            "MinLatency(us)": 184.0,
+            "MaxLatency(us)": 184.0,
+            "95thPercentileLatency(us)": 184.0,
+            "99thPercentileLatency(us)": 184.0
+          },
+          "UPDATE": {
+            "Operations": 240.0,
+            "AverageLatency(us)": 2494.829166666667,
+            "MinLatency(us)": 74.0,
+            "MaxLatency(us)": 7863.0,
+            "95thPercentileLatency(us)": 5591.0,
+            "99thPercentileLatency(us)": 6047.0,
+            "returns": {
+              "OK": 240
+            }
+          }
+        }
+      },
+      "recordcount": 200,
+      "operationcount": 500
+    },
+    "workloadb": {
+      "load": {
+        "phase": "load",
+        "elapsed_s": 0.52,
+        "returncode": 0,
+        "ok": true,
+        "ops": {
+          "OVERALL": {
+            "RunTime(ms)": 363.0,
+            "Throughput(ops/sec)": 550.9641873278237
+          },
+          "TOTAL_GC_TIME": {
+            "Time(ms)": 0.0
+          },
+          "CLEANUP": {
+            "Operations": 1.0,
+            "AverageLatency(us)": 151.0,
+            "MinLatency(us)": 151.0,
+            "MaxLatency(us)": 151.0,
+            "95thPercentileLatency(us)": 151.0,
+            "99thPercentileLatency(us)": 151.0
+          },
+          "INSERT": {
+            "Operations": 200.0,
+            "AverageLatency(us)": 1620.38,
+            "MinLatency(us)": 96.0,
+            "MaxLatency(us)": 5835.0,
+            "95thPercentileLatency(us)": 3089.0,
+            "99thPercentileLatency(us)": 4619.0,
+            "returns": {
+              "OK": 200
+            }
+          }
+        }
+      },
+      "run": {
+        "phase": "run",
+        "elapsed_s": 1.05,
+        "returncode": 0,
+        "ok": true,
+        "ops": {
+          "OVERALL": {
+            "RunTime(ms)": 873.0,
+            "Throughput(ops/sec)": 572.737686139748
+          },
+          "TOTAL_GC_TIME": {
+            "Time(ms)": 0.0
+          },
+          "READ": {
+            "Operations": 477.0,
+            "AverageLatency(us)": 1566.9454926624737,
+            "MinLatency(us)": 42.0,
+            "MaxLatency(us)": 7339.0,
+            "95thPercentileLatency(us)": 3035.0,
+            "99thPercentileLatency(us)": 4787.0,
+            "returns": {
+              "OK": 477
+            }
+          },
+          "CLEANUP": {
+            "Operations": 1.0,
+            "AverageLatency(us)": 198.0,
+            "MinLatency(us)": 198.0,
+            "MaxLatency(us)": 198.0,
+            "95thPercentileLatency(us)": 198.0,
+            "99thPercentileLatency(us)": 198.0
+          },
+          "UPDATE": {
+            "Operations": 23.0,
+            "AverageLatency(us)": 3601.086956521739,
+            "MinLatency(us)": 122.0,
+            "MaxLatency(us)": 6379.0,
+            "95thPercentileLatency(us)": 6091.0,
+            "99thPercentileLatency(us)": 6379.0,
+            "returns": {
+              "OK": 23
+            }
+          }
+        }
+      },
+      "recordcount": 200,
+      "operationcount": 500
+    },
+    "workloadc": {
+      "load": {
+        "phase": "load",
+        "elapsed_s": 0.53,
+        "returncode": 0,
+        "ok": true,
+        "ops": {
+          "OVERALL": {
+            "RunTime(ms)": 389.0,
+            "Throughput(ops/sec)": 514.1388174807198
+          },
+          "TOTAL_GC_TIME": {
+            "Time(ms)": 0.0
+          },
+          "CLEANUP": {
+            "Operations": 1.0,
+            "AverageLatency(us)": 143.0,
+            "MinLatency(us)": 143.0,
+            "MaxLatency(us)": 143.0,
+            "95thPercentileLatency(us)": 143.0,
+            "99thPercentileLatency(us)": 143.0
+          },
+          "INSERT": {
+            "Operations": 200.0,
+            "AverageLatency(us)": 1774.9,
+            "MinLatency(us)": 89.0,
+            "MaxLatency(us)": 6347.0,
+            "95thPercentileLatency(us)": 3257.0,
+            "99thPercentileLatency(us)": 4999.0,
+            "returns": {
+              "OK": 200
+            }
+          }
+        }
+      },
+      "run": {
+        "phase": "run",
+        "elapsed_s": 1.0,
+        "returncode": 0,
+        "ok": true,
+        "ops": {
+          "OVERALL": {
+            "RunTime(ms)": 841.0,
+            "Throughput(ops/sec)": 594.5303210463734
+          },
+          "TOTAL_GC_TIME": {
+            "Time(ms)": 0.0
+          },
+          "READ": {
+            "Operations": 500.0,
+            "AverageLatency(us)": 1581.128,
+            "MinLatency(us)": 42.0,
+            "MaxLatency(us)": 10343.0,
+            "95thPercentileLatency(us)": 3163.0,
+            "99thPercentileLatency(us)": 4967.0,
+            "returns": {
+              "OK": 500
+            }
+          },
+          "CLEANUP": {
+            "Operations": 1.0,
+            "AverageLatency(us)": 256.0,
+            "MinLatency(us)": 256.0,
+            "MaxLatency(us)": 256.0,
+            "95thPercentileLatency(us)": 256.0,
+            "99thPercentileLatency(us)": 256.0
+          }
+        }
+      },
+      "recordcount": 200,
+      "operationcount": 500
+    },
+    "workloadf": {
+      "load": {
+        "phase": "load",
+        "elapsed_s": 0.54,
+        "returncode": 0,
+        "ok": true,
+        "ops": {
+          "OVERALL": {
+            "RunTime(ms)": 373.0,
+            "Throughput(ops/sec)": 536.1930294906166
+          },
+          "TOTAL_GC_TIME": {
+            "Time(ms)": 0.0
+          },
+          "CLEANUP": {
+            "Operations": 1.0,
+            "AverageLatency(us)": 275.0,
+            "MinLatency(us)": 275.0,
+            "MaxLatency(us)": 275.0,
+            "95thPercentileLatency(us)": 275.0,
+            "99thPercentileLatency(us)": 275.0
+          },
+          "INSERT": {
+            "Operations": 200.0,
+            "AverageLatency(us)": 1670.29,
+            "MinLatency(us)": 85.0,
+            "MaxLatency(us)": 5919.0,
+            "95thPercentileLatency(us)": 3185.0,
+            "99thPercentileLatency(us)": 4467.0,
+            "returns": {
+              "OK": 200
+            }
+          }
+        }
+      },
+      "run": {
+        "phase": "run",
+        "elapsed_s": 1.77,
+        "returncode": 0,
+        "ok": true,
+        "ops": {
+          "OVERALL": {
+            "RunTime(ms)": 1609.0,
+            "Throughput(ops/sec)": 310.75201988812927
+          },
+          "TOTAL_GC_TIME": {
+            "Time(ms)": 1.0
+          },
+          "READ": {
+            "Operations": 500.0,
+            "AverageLatency(us)": 1636.176,
+            "MinLatency(us)": 41.0,
+            "MaxLatency(us)": 7767.0,
+            "95thPercentileLatency(us)": 3203.0,
+            "99thPercentileLatency(us)": 4711.0,
+            "returns": {
+              "OK": 500
+            }
+          },
+          "CLEANUP": {
+            "Operations": 1.0,
+            "AverageLatency(us)": 207.0,
+            "MinLatency(us)": 207.0,
+            "MaxLatency(us)": 207.0,
+            "95thPercentileLatency(us)": 207.0,
+            "99thPercentileLatency(us)": 207.0
+          },
+          "UPDATE": {
+            "Operations": 255.0,
+            "AverageLatency(us)": 2875.364705882353,
+            "MinLatency(us)": 50.0,
+            "MaxLatency(us)": 8247.0,
+            "95thPercentileLatency(us)": 5743.0,
+            "99thPercentileLatency(us)": 6579.0,
+            "returns": {
+              "OK": 255
+            }
+          }
+        }
+      },
+      "recordcount": 200,
+      "operationcount": 500
+    }
+  },
+  "ok": true
+}

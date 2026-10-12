@@ -1,0 +1,92 @@
+{
+  "benchmark": "IOR/mdtest (real upstream github.com/hpc/ior, unmodified)",
+  "backend": "local",
+  "mountpoint": "/mnt/rocepool_iorbench",
+  "cases": [
+    {
+      "name": "shared_1m",
+      "tasks": 2,
+      "block": "4m",
+      "xfer": "1m",
+      "file_per_process": false,
+      "elapsed_s": 0.2,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 63.79,
+      "write_iops": 81.79,
+      "read_bw_mib_s": 1202.67,
+      "read_iops": 1508.88
+    },
+    {
+      "name": "shared_64k",
+      "tasks": 2,
+      "block": "2m",
+      "xfer": "64k",
+      "file_per_process": false,
+      "elapsed_s": 0.1,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 88.58,
+      "write_iops": 1776.94,
+      "read_bw_mib_s": 1369.9,
+      "read_iops": 27803.0
+    },
+    {
+      "name": "fpp_1m",
+      "tasks": 4,
+      "block": "2m",
+      "xfer": "1m",
+      "file_per_process": true,
+      "elapsed_s": 0.13,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 129.97,
+      "write_iops": 168.69,
+      "read_bw_mib_s": 1645.07,
+      "read_iops": 1799.74
+    },
+    {
+      "name": "shared_4m_large",
+      "tasks": 2,
+      "block": "32m",
+      "xfer": "4m",
+      "file_per_process": false,
+      "elapsed_s": 1.74,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 44.3,
+      "write_iops": 24.41,
+      "read_bw_mib_s": 532.64,
+      "read_iops": 212.38
+    },
+    {
+      "name": "fpp_256k",
+      "tasks": 4,
+      "block": "4m",
+      "xfer": "256k",
+      "file_per_process": true,
+      "elapsed_s": 0.2,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 128.78,
+      "write_iops": 691.21,
+      "read_bw_mib_s": 1965.58,
+      "read_iops": 8614.0
+    }
+  ],
+  "mdtest": {
+    "tasks": 2,
+    "n": 200,
+    "elapsed_s": 1.11,
+    "returncode": 0,
+    "ops_per_sec": {
+      "File creation": 8828.859,
+      "File stat": 1329414.897,
+      "File read": 26371.392,
+      "File removal": 29173.708,
+      "Tree creation": 4369.067,
+      "Tree removal": 4832.147
+    }
+  },
+  "ok": true
+}

@@ -1,0 +1,1748 @@
+{
+ "config": {
+  "workload": "md,md_shared,data",
+  "ladder": "1,10,50,100,200",
+  "threads_per_proc": 10,
+  "duration": 15.0,
+  "attr_ttl": 0.0,
+  "file_bytes": 1048576,
+  "mdts": 2,
+  "osts": 4,
+  "batcher_workers": 4,
+  "batcher_per_peer": 2,
+  "server_env": {},
+  "gdb_servers": false,
+  "core_dumps": false,
+  "mem_probe_at": [],
+  "python_servers": false,
+  "log_dir": "/tmp/stress_logs",
+  "report": "stress_reports/16_abc_ladder_1_to_200.json"
+ },
+ "steps": [
+  {
+   "clients": 1,
+   "workload": "md",
+   "ops_ok": 85797,
+   "ops_err": 0,
+   "ops_per_s": 5719.8,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [],
+    "ost1@10.99.0.2:19952": [],
+    "ost2@10.99.0.1:19953": [],
+    "ost3@10.99.0.2:19954": []
+   },
+   "latency_ms": {
+    "create": {
+     "p50": 0.2,
+     "p99": 0.4,
+     "max": 4.3
+    },
+    "stat": {
+     "p50": 0.1,
+     "p99": 0.2,
+     "max": 2.6
+    },
+    "unlink": {
+     "p50": 0.2,
+     "p99": 0.3,
+     "max": 5.3
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 5,
+      "peak_rss_mb": 18.7,
+      "peak_fds": 8,
+      "cpu_pct": 8.9
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 5,
+      "peak_rss_mb": 18.7,
+      "peak_fds": 8,
+      "cpu_pct": 34.0
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.1
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.4,
+      "peak_fds": 5,
+      "cpu_pct": 0.1
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 3,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 1,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 7345.0,
+    "peak_loadavg1": 26.71
+   },
+   "ops_per_second_timeline": [
+    4910,
+    5317,
+    5610,
+    5547,
+    5468,
+    5611,
+    5438,
+    5714,
+    5546,
+    5483,
+    5549,
+    5477,
+    5334,
+    5616,
+    5597
+   ]
+  },
+  {
+   "clients": 10,
+   "workload": "md",
+   "ops_ok": 94965,
+   "ops_err": 0,
+   "ops_per_s": 6331.0,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [],
+    "ost1@10.99.0.2:19952": [],
+    "ost2@10.99.0.1:19953": [],
+    "ost3@10.99.0.2:19954": []
+   },
+   "latency_ms": {
+    "create": {
+     "p50": 1.7,
+     "p99": 5.6,
+     "max": 8.0
+    },
+    "stat": {
+     "p50": 0.8,
+     "p99": 3.4,
+     "max": 7.3
+    },
+    "unlink": {
+     "p50": 1.7,
+     "p99": 5.4,
+     "max": 13.8
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 23,
+      "peak_rss_mb": 19.1,
+      "peak_fds": 35,
+      "cpu_pct": 33.3
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 9,
+      "peak_rss_mb": 18.9,
+      "peak_fds": 14,
+      "cpu_pct": 10.6
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 23,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 3,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 7366.0,
+    "peak_loadavg1": 21.17
+   },
+   "ops_per_second_timeline": [
+    6484,
+    5741,
+    5520,
+    5127,
+    4762,
+    4810,
+    5608,
+    6491,
+    6738,
+    6570,
+    6875,
+    6729,
+    6694,
+    6674,
+    6604
+   ]
+  },
+  {
+   "clients": 50,
+   "workload": "md",
+   "ops_ok": 183633,
+   "ops_err": 0,
+   "ops_per_s": 12242.2,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [],
+    "ost1@10.99.0.2:19952": [],
+    "ost2@10.99.0.1:19953": [],
+    "ost3@10.99.0.2:19954": []
+   },
+   "latency_ms": {
+    "create": {
+     "p50": 4.6,
+     "p99": 13.7,
+     "max": 42.5
+    },
+    "stat": {
+     "p50": 2.1,
+     "p99": 8.7,
+     "max": 21.2
+    },
+    "unlink": {
+     "p50": 4.5,
+     "p99": 13.3,
+     "max": 36.0
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 103,
+      "peak_rss_mb": 20.6,
+      "peak_fds": 155,
+      "cpu_pct": 34.3
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 55,
+      "peak_rss_mb": 19.7,
+      "peak_fds": 83,
+      "cpu_pct": 24.2
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.1
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.4,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.4,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 99,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 53,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 7293.0,
+    "peak_loadavg1": 29.17
+   },
+   "ops_per_second_timeline": [
+    12121,
+    11949,
+    10425,
+    11450,
+    11578,
+    11796,
+    12502,
+    12440,
+    9856,
+    12097,
+    12562,
+    12677,
+    12186,
+    12082,
+    11732
+   ]
+  },
+  {
+   "clients": 100,
+   "workload": "md",
+   "ops_ok": 146364,
+   "ops_err": 0,
+   "ops_per_s": 9757.6,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [],
+    "ost1@10.99.0.2:19952": [],
+    "ost2@10.99.0.1:19953": [],
+    "ost3@10.99.0.2:19954": []
+   },
+   "latency_ms": {
+    "create": {
+     "p50": 11.0,
+     "p99": 45.6,
+     "max": 205.5
+    },
+    "stat": {
+     "p50": 4.8,
+     "p99": 28.6,
+     "max": 202.0
+    },
+    "unlink": {
+     "p50": 10.6,
+     "p99": 45.3,
+     "max": 203.6
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 203,
+      "peak_rss_mb": 22.5,
+      "peak_fds": 305,
+      "cpu_pct": 39.3
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 95,
+      "peak_rss_mb": 20.6,
+      "peak_fds": 143,
+      "cpu_pct": 23.4
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 173,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 119,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 7212.0,
+    "peak_loadavg1": 51.86
+   },
+   "ops_per_second_timeline": [
+    6499,
+    10918,
+    10493,
+    8107,
+    8243,
+    8731,
+    9442,
+    9418,
+    9315,
+    9238,
+    9678,
+    9793,
+    9145,
+    9446,
+    9606
+   ]
+  },
+  {
+   "clients": 200,
+   "workload": "md",
+   "ops_ok": 117876,
+   "ops_err": 0,
+   "ops_per_s": 7858.4,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [],
+    "ost1@10.99.0.2:19952": [],
+    "ost2@10.99.0.1:19953": [],
+    "ost3@10.99.0.2:19954": []
+   },
+   "latency_ms": {
+    "create": {
+     "p50": 27.5,
+     "p99": 121.9,
+     "max": 396.9
+    },
+    "stat": {
+     "p50": 12.4,
+     "p99": 69.6,
+     "max": 316.8
+    },
+    "unlink": {
+     "p50": 26.4,
+     "p99": 116.4,
+     "max": 313.0
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 403,
+      "peak_rss_mb": 26.2,
+      "peak_fds": 605,
+      "cpu_pct": 34.6
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 181,
+      "peak_rss_mb": 22.1,
+      "peak_fds": 272,
+      "cpu_pct": 19.5
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.4,
+      "peak_fds": 5,
+      "cpu_pct": 0.1
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.4,
+      "peak_fds": 5,
+      "cpu_pct": 0.1
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 345,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 233,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 7057.0,
+    "peak_loadavg1": 111.57
+   },
+   "ops_per_second_timeline": [
+    7294,
+    9676,
+    9651,
+    9556,
+    8975,
+    7252,
+    7439,
+    6383,
+    7201,
+    6200,
+    5626,
+    5659,
+    7149,
+    6581,
+    7620
+   ]
+  },
+  {
+   "clients": 1,
+   "workload": "md_shared",
+   "ops_ok": 86511,
+   "ops_err": 0,
+   "ops_per_s": 5767.4,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [],
+    "ost1@10.99.0.2:19952": [],
+    "ost2@10.99.0.1:19953": [],
+    "ost3@10.99.0.2:19954": []
+   },
+   "latency_ms": {
+    "create": {
+     "p50": 0.2,
+     "p99": 0.4,
+     "max": 2.7
+    },
+    "stat": {
+     "p50": 0.1,
+     "p99": 0.2,
+     "max": 2.4
+    },
+    "unlink": {
+     "p50": 0.2,
+     "p99": 0.4,
+     "max": 5.3
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 5,
+      "peak_rss_mb": 18.8,
+      "peak_fds": 8,
+      "cpu_pct": 8.5
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 5,
+      "peak_rss_mb": 18.8,
+      "peak_fds": 8,
+      "cpu_pct": 34.7
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.4,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.4,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.4,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 3,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 1,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 7363.0,
+    "peak_loadavg1": 111.57
+   },
+   "ops_per_second_timeline": [
+    5011,
+    5336,
+    5690,
+    5808,
+    5682,
+    5411,
+    5778,
+    5698,
+    5849,
+    5778,
+    5661,
+    5630,
+    5503,
+    5805,
+    5506
+   ]
+  },
+  {
+   "clients": 10,
+   "workload": "md_shared",
+   "ops_ok": 123054,
+   "ops_err": 0,
+   "ops_per_s": 8203.6,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [],
+    "ost1@10.99.0.2:19952": [],
+    "ost2@10.99.0.1:19953": [],
+    "ost3@10.99.0.2:19954": []
+   },
+   "latency_ms": {
+    "create": {
+     "p50": 1.4,
+     "p99": 3.8,
+     "max": 10.7
+    },
+    "stat": {
+     "p50": 0.6,
+     "p99": 2.6,
+     "max": 4.5
+    },
+    "unlink": {
+     "p50": 1.3,
+     "p99": 3.9,
+     "max": 6.8
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 23,
+      "peak_rss_mb": 19.1,
+      "peak_fds": 35,
+      "cpu_pct": 9.4
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 23,
+      "peak_rss_mb": 19.1,
+      "peak_fds": 35,
+      "cpu_pct": 36.6
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.4,
+      "peak_fds": 5,
+      "cpu_pct": 0.1
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.4,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.4,
+      "peak_fds": 5,
+      "cpu_pct": 0.1
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 30,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 10,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 7376.0,
+    "peak_loadavg1": 87.38
+   },
+   "ops_per_second_timeline": [
+    4874,
+    8053,
+    8423,
+    7959,
+    8024,
+    8242,
+    8227,
+    8336,
+    7982,
+    7641,
+    8580,
+    8380,
+    7345,
+    7193,
+    7578
+   ]
+  },
+  {
+   "clients": 50,
+   "workload": "md_shared",
+   "ops_ok": 191004,
+   "ops_err": 0,
+   "ops_per_s": 12733.6,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [],
+    "ost1@10.99.0.2:19952": [],
+    "ost2@10.99.0.1:19953": [],
+    "ost3@10.99.0.2:19954": []
+   },
+   "latency_ms": {
+    "create": {
+     "p50": 4.5,
+     "p99": 12.4,
+     "max": 50.8
+    },
+    "stat": {
+     "p50": 2.1,
+     "p99": 8.1,
+     "max": 15.3
+    },
+    "unlink": {
+     "p50": 4.3,
+     "p99": 12.1,
+     "max": 26.8
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 103,
+      "peak_rss_mb": 20.6,
+      "peak_fds": 155,
+      "cpu_pct": 12.9
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 103,
+      "peak_rss_mb": 20.6,
+      "peak_fds": 155,
+      "cpu_pct": 46.6
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.1
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 110,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 90,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 7313.0,
+    "peak_loadavg1": 71.62
+   },
+   "ops_per_second_timeline": [
+    7381,
+    12214,
+    12078,
+    12169,
+    12038,
+    12323,
+    12624,
+    12229,
+    12209,
+    12512,
+    12446,
+    11816,
+    12508,
+    13039,
+    12636
+   ]
+  },
+  {
+   "clients": 100,
+   "workload": "md_shared",
+   "ops_ok": 169539,
+   "ops_err": 0,
+   "ops_per_s": 11302.6,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [],
+    "ost1@10.99.0.2:19952": [],
+    "ost2@10.99.0.1:19953": [],
+    "ost3@10.99.0.2:19954": []
+   },
+   "latency_ms": {
+    "create": {
+     "p50": 10.4,
+     "p99": 27.3,
+     "max": 303.4
+    },
+    "stat": {
+     "p50": 4.8,
+     "p99": 17.4,
+     "max": 41.3
+    },
+    "unlink": {
+     "p50": 9.7,
+     "p99": 26.0,
+     "max": 75.3
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 203,
+      "peak_rss_mb": 22.3,
+      "peak_fds": 305,
+      "cpu_pct": 13.3
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 203,
+      "peak_rss_mb": 22.5,
+      "peak_fds": 305,
+      "cpu_pct": 44.3
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.4,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 200,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 200,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 7219.0,
+    "peak_loadavg1": 89.43
+   },
+   "ops_per_second_timeline": [
+    10123,
+    11030,
+    11028,
+    10784,
+    10833,
+    10748,
+    10882,
+    10658,
+    11383,
+    11340,
+    11248,
+    10572,
+    11155,
+    11147,
+    11188
+   ]
+  },
+  {
+   "clients": 200,
+   "workload": "md_shared",
+   "ops_ok": 151566,
+   "ops_err": 0,
+   "ops_per_s": 10104.4,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [],
+    "ost1@10.99.0.2:19952": [],
+    "ost2@10.99.0.1:19953": [],
+    "ost3@10.99.0.2:19954": []
+   },
+   "latency_ms": {
+    "create": {
+     "p50": 23.0,
+     "p99": 77.8,
+     "max": 403.0
+    },
+    "stat": {
+     "p50": 10.2,
+     "p99": 44.7,
+     "max": 138.1
+    },
+    "unlink": {
+     "p50": 22.4,
+     "p99": 70.9,
+     "max": 219.8
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 403,
+      "peak_rss_mb": 26.0,
+      "peak_fds": 605,
+      "cpu_pct": 14.1
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 403,
+      "peak_rss_mb": 26.2,
+      "peak_fds": 605,
+      "cpu_pct": 41.7
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.4,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.1
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.4,
+      "peak_fds": 5,
+      "cpu_pct": 0.0
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 3,
+      "peak_rss_mb": 18.3,
+      "peak_fds": 5,
+      "cpu_pct": 0.1
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 400,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 400,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 7037.0,
+    "peak_loadavg1": 144.9
+   },
+   "ops_per_second_timeline": [
+    8165,
+    10129,
+    10227,
+    9869,
+    9039,
+    9520,
+    9793,
+    9754,
+    9954,
+    9481,
+    10042,
+    10197,
+    9988,
+    10113,
+    10321
+   ]
+  },
+  {
+   "clients": 1,
+   "workload": "data",
+   "ops_ok": 8778,
+   "ops_err": 0,
+   "ops_per_s": 585.2,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [],
+    "ost1@10.99.0.2:19952": [],
+    "ost2@10.99.0.1:19953": [],
+    "ost3@10.99.0.2:19954": []
+   },
+   "latency_ms": {
+    "write": {
+     "p50": 2.3,
+     "p99": 3.9,
+     "max": 7.0
+    },
+    "read": {
+     "p50": 2.2,
+     "p99": 4.0,
+     "max": 7.6
+    },
+    "unlink": {
+     "p50": 0.5,
+     "p99": 1.1,
+     "max": 5.4
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 5,
+      "peak_rss_mb": 18.8,
+      "peak_fds": 8,
+      "cpu_pct": 1.1
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 5,
+      "peak_rss_mb": 18.7,
+      "peak_fds": 8,
+      "cpu_pct": 8.7
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 5,
+      "peak_rss_mb": 56.8,
+      "peak_fds": 8,
+      "cpu_pct": 4.7
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 5,
+      "peak_rss_mb": 56.8,
+      "peak_fds": 8,
+      "cpu_pct": 6.5
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 5,
+      "peak_rss_mb": 56.8,
+      "peak_fds": 8,
+      "cpu_pct": 4.9
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 5,
+      "peak_rss_mb": 56.8,
+      "peak_fds": 8,
+      "cpu_pct": 11.8
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 9,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 3,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 7160.0,
+    "peak_loadavg1": 144.9
+   },
+   "ops_per_second_timeline": [
+    536,
+    580,
+    578,
+    568,
+    575,
+    564,
+    568,
+    564,
+    531,
+    558,
+    597,
+    573,
+    569,
+    574,
+    569
+   ]
+  },
+  {
+   "clients": 10,
+   "workload": "data",
+   "ops_ok": 17535,
+   "ops_err": 0,
+   "ops_per_s": 1169.0,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [],
+    "ost1@10.99.0.2:19952": [],
+    "ost2@10.99.0.1:19953": [],
+    "ost3@10.99.0.2:19954": []
+   },
+   "latency_ms": {
+    "write": {
+     "p50": 12.5,
+     "p99": 23.8,
+     "max": 51.4
+    },
+    "read": {
+     "p50": 7.3,
+     "p99": 16.0,
+     "max": 22.9
+    },
+    "unlink": {
+     "p50": 5.8,
+     "p99": 13.8,
+     "max": 17.5
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 23,
+      "peak_rss_mb": 19.2,
+      "peak_fds": 35,
+      "cpu_pct": 11.7
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 9,
+      "peak_rss_mb": 18.8,
+      "peak_fds": 14,
+      "cpu_pct": 4.4
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 23,
+      "peak_rss_mb": 96.2,
+      "peak_fds": 35,
+      "cpu_pct": 11.2
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 23,
+      "peak_rss_mb": 94.1,
+      "peak_fds": 35,
+      "cpu_pct": 13.4
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 23,
+      "peak_rss_mb": 95.2,
+      "peak_fds": 35,
+      "cpu_pct": 10.9
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 23,
+      "peak_rss_mb": 93.2,
+      "peak_fds": 35,
+      "cpu_pct": 13.5
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 83,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 23,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 6892.0,
+    "peak_loadavg1": 113.38
+   },
+   "ops_per_second_timeline": [
+    1204,
+    1195,
+    1147,
+    1132,
+    1179,
+    1222,
+    1150,
+    1165,
+    1108,
+    1052,
+    1081,
+    1055,
+    1057,
+    1104,
+    1153
+   ]
+  },
+  {
+   "clients": 50,
+   "workload": "data",
+   "ops_ok": 16770,
+   "ops_err": 0,
+   "ops_per_s": 1118.0,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [],
+    "ost1@10.99.0.2:19952": [],
+    "ost2@10.99.0.1:19953": [],
+    "ost3@10.99.0.2:19954": []
+   },
+   "latency_ms": {
+    "write": {
+     "p50": 56.7,
+     "p99": 142.8,
+     "max": 262.1
+    },
+    "read": {
+     "p50": 28.3,
+     "p99": 115.6,
+     "max": 315.5
+    },
+    "unlink": {
+     "p50": 42.7,
+     "p99": 91.5,
+     "max": 145.7
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 103,
+      "peak_rss_mb": 20.6,
+      "peak_fds": 155,
+      "cpu_pct": 7.7
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 55,
+      "peak_rss_mb": 19.7,
+      "peak_fds": 83,
+      "cpu_pct": 6.7
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 103,
+      "peak_rss_mb": 132.1,
+      "peak_fds": 155,
+      "cpu_pct": 16.0
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 103,
+      "peak_rss_mb": 137.5,
+      "peak_fds": 155,
+      "cpu_pct": 15.3
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 103,
+      "peak_rss_mb": 133.5,
+      "peak_fds": 155,
+      "cpu_pct": 15.6
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 103,
+      "peak_rss_mb": 128.5,
+      "peak_fds": 155,
+      "cpu_pct": 16.3
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 319,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 233,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 6381.0,
+    "peak_loadavg1": 83.92
+   },
+   "ops_per_second_timeline": [
+    924,
+    1105,
+    1058,
+    986,
+    1053,
+    1096,
+    1080,
+    1081,
+    1131,
+    1111,
+    1141,
+    1132,
+    1120,
+    1143,
+    1111
+   ]
+  },
+  {
+   "clients": 100,
+   "workload": "data",
+   "ops_ok": 16314,
+   "ops_err": 0,
+   "ops_per_s": 1087.6,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [],
+    "ost1@10.99.0.2:19952": [],
+    "ost2@10.99.0.1:19953": [],
+    "ost3@10.99.0.2:19954": []
+   },
+   "latency_ms": {
+    "write": {
+     "p50": 118.4,
+     "p99": 285.4,
+     "max": 570.5
+    },
+    "read": {
+     "p50": 57.9,
+     "p99": 232.1,
+     "max": 409.7
+    },
+    "unlink": {
+     "p50": 86.6,
+     "p99": 183.4,
+     "max": 278.9
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 203,
+      "peak_rss_mb": 22.4,
+      "peak_fds": 305,
+      "cpu_pct": 8.7
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 95,
+      "peak_rss_mb": 20.6,
+      "peak_fds": 143,
+      "cpu_pct": 6.1
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 203,
+      "peak_rss_mb": 158.1,
+      "peak_fds": 305,
+      "cpu_pct": 16.1
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 203,
+      "peak_rss_mb": 184.6,
+      "peak_fds": 305,
+      "cpu_pct": 14.9
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 203,
+      "peak_rss_mb": 160.4,
+      "peak_fds": 305,
+      "cpu_pct": 14.5
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 203,
+      "peak_rss_mb": 173.8,
+      "peak_fds": 305,
+      "cpu_pct": 14.2
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 573,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 519,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 5779.0,
+    "peak_loadavg1": 93.12
+   },
+   "ops_per_second_timeline": [
+    357,
+    943,
+    1050,
+    1077,
+    1064,
+    1027,
+    1042,
+    1072,
+    1100,
+    1100,
+    1089,
+    1074,
+    1097,
+    1040,
+    1073
+   ]
+  },
+  {
+   "clients": 200,
+   "workload": "data",
+   "ops_ok": 14868,
+   "ops_err": 0,
+   "ops_per_s": 991.2,
+   "error_rate": 0.0,
+   "errors_top": {},
+   "hung_clients": 0,
+   "failed_workers": 0,
+   "setup_errors": 0,
+   "setup_error_sample": [],
+   "dead_servers": [],
+   "dead_detail": {},
+   "mem_probes": {
+    "mdt0@10.99.0.1:19901": [],
+    "mdt1@10.99.0.2:19902": [],
+    "ost0@10.99.0.1:19951": [],
+    "ost1@10.99.0.2:19952": [],
+    "ost2@10.99.0.1:19953": [],
+    "ost3@10.99.0.2:19954": []
+   },
+   "latency_ms": {
+    "write": {
+     "p50": 263.7,
+     "p99": 888.8,
+     "max": 2563.4
+    },
+    "read": {
+     "p50": 126.9,
+     "p99": 560.3,
+     "max": 1003.3
+    },
+    "unlink": {
+     "p50": 175.9,
+     "p99": 423.7,
+     "max": 601.5
+    }
+   },
+   "resources": {
+    "servers": {
+     "mdt0@10.99.0.1:19901": {
+      "peak_threads": 403,
+      "peak_rss_mb": 26.2,
+      "peak_fds": 605,
+      "cpu_pct": 8.5
+     },
+     "mdt1@10.99.0.2:19902": {
+      "peak_threads": 181,
+      "peak_rss_mb": 22.1,
+      "peak_fds": 272,
+      "cpu_pct": 5.6
+     },
+     "ost0@10.99.0.1:19951": {
+      "peak_threads": 403,
+      "peak_rss_mb": 209.7,
+      "peak_fds": 605,
+      "cpu_pct": 14.3
+     },
+     "ost1@10.99.0.2:19952": {
+      "peak_threads": 403,
+      "peak_rss_mb": 216.8,
+      "peak_fds": 605,
+      "cpu_pct": 13.4
+     },
+     "ost2@10.99.0.1:19953": {
+      "peak_threads": 403,
+      "peak_rss_mb": 218.8,
+      "peak_fds": 605,
+      "cpu_pct": 12.6
+     },
+     "ost3@10.99.0.2:19954": {
+      "peak_threads": 403,
+      "peak_rss_mb": 220.1,
+      "peak_fds": 605,
+      "cpu_pct": 12.7
+     }
+    },
+    "ns": {
+     "rocepool_nodeA": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 1145,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     },
+     "rocepool_nodeB": {
+      "peak_time_wait": 0,
+      "peak_time_wait_by_dst": {},
+      "peak_established": 1033,
+      "listen_overflows": 0,
+      "listen_drops": 0
+     }
+    },
+    "min_mem_available_mb": 4637.0,
+    "peak_loadavg1": 129.98
+   },
+   "ops_per_second_timeline": [
+    636,
+    835,
+    869,
+    963,
+    959,
+    993,
+    1021,
+    993,
+    981,
+    1013,
+    1003,
+    994,
+    999,
+    1028,
+    1019
+   ]
+  }
+ ]
+}

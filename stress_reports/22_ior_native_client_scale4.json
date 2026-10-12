@@ -1,0 +1,101 @@
+{
+  "benchmark": "IOR/mdtest (real upstream github.com/hpc/ior, unmodified)",
+  "scale": 4,
+  "backend": "dist",
+  "mountpoint": "/mnt/rocepool_iorbench",
+  "cases": [
+    {
+      "name": "shared_1m",
+      "tasks": 8,
+      "block": "4m",
+      "xfer": "1m",
+      "file_per_process": false,
+      "elapsed_s": 0.43,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 229.06,
+      "write_iops": 718.89,
+      "read_bw_mib_s": 414.6,
+      "read_iops": 425.04
+    },
+    {
+      "name": "shared_64k",
+      "tasks": 8,
+      "block": "2m",
+      "xfer": "64k",
+      "file_per_process": false,
+      "elapsed_s": 0.23,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 421.42,
+      "write_iops": 14226.0,
+      "read_bw_mib_s": 301.54,
+      "read_iops": 5068.0
+    },
+    {
+      "name": "fpp_1m",
+      "tasks": 16,
+      "block": "2m",
+      "xfer": "1m",
+      "file_per_process": true,
+      "elapsed_s": 0.28,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 501.73,
+      "write_iops": 1470.32,
+      "read_bw_mib_s": 769.97,
+      "read_iops": 776.93
+    },
+    {
+      "name": "shared_4m_large",
+      "tasks": 8,
+      "block": "32m",
+      "xfer": "4m",
+      "file_per_process": false,
+      "elapsed_s": 1.79,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 341.5,
+      "write_iops": 195.96,
+      "read_bw_mib_s": 592.38,
+      "read_iops": 160.7
+    },
+    {
+      "name": "fpp_256k",
+      "tasks": 16,
+      "block": "4m",
+      "xfer": "256k",
+      "file_per_process": true,
+      "elapsed_s": 0.41,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 569.58,
+      "write_iops": 9062.0,
+      "read_bw_mib_s": 767.48,
+      "read_iops": 3087.2
+    }
+  ],
+  "dist_config": {
+    "fuse_threads": 4,
+    "attr_ttl_s": 3.0,
+    "osts": 4,
+    "mdts": 2,
+    "servers": "native",
+    "client": "native"
+  },
+  "mdtest": {
+    "tasks": 8,
+    "n": 500,
+    "elapsed_s": 2.36,
+    "returncode": 0,
+    "ops_per_sec": {
+      "File creation": 4997.489,
+      "File stat": 774428.36,
+      "File read": 55402.348,
+      "File removal": 9852.682,
+      "Tree creation": 1804.778,
+      "Tree removal": 518.135
+    }
+  },
+  "ok": true
+}
