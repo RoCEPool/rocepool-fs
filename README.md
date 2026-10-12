@@ -51,15 +51,18 @@ Full guide (Chinese): [docs/运行说明书.md](docs/运行说明书.md).
 | `tools/` | deployment and benchmarking: `run.sh`'s steps, IO500 driver and model, preflight, cluster setup, AWS |
 | `tests/` | the test suite (runs on the RDMA emulator: `python3 -m unittest discover -s tests -t .`, as root) |
 | `deps/` | pinned third-party sources for offline builds (see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)) |
+| `third_party/rapidsse/` | the RapidsSE sources `wlp/` was written against, unmodified, with their license |
 | `docs/` | design notes and the record of each development round |
 
 ## Storage-engine adapters
 
 `storage_engine/rapidsse_engine.py` and `wlp/` speak the client wire protocol
 (WLP v5) of RapidsSE, the Rapids Storage Engine (Apache License 2.0,
-Copyright (C) 2026 Boray Data). No RapidsSE source is included here.
+Copyright (C) 2026 Boray Data). The RapidsSE sources they were written
+against are kept unmodified in [third_party/rapidsse/](third_party/rapidsse/UPSTREAM.md),
+with RapidsSE's license, and a test checks the two agree.
 
 ## License
 
-Apache License 2.0, see [LICENSE](LICENSE). The third-party sources bundled in
-`deps/` keep their own licenses: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Apache License 2.0, see [LICENSE](LICENSE). The third-party sources in `deps/` and
+`third_party/` keep their own licenses: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

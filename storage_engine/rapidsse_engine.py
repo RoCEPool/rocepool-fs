@@ -8,8 +8,9 @@ the client without touching this file, and everything above this layer
 `RapidsSEClient` today: `tests/fakes/sqlite_dbapi_client.py` (a unit-test
 double, no wire protocol involved) and `wlp/wlp_client.py` -- a real
 implementation of RapidsSE's own client wire protocol (WLP v5), built
-directly from the `.thrift` IDL and C++ framing code in RapidsSE's actual
-uploaded source. See `wlp/wlp_client.py`'s docstring for what that
+directly from the `.thrift` IDL and C++ framing code in RapidsSE's own
+source (kept unmodified in third_party/rapidsse/, see its UPSTREAM.md).
+See `wlp/wlp_client.py`'s docstring for what that
 implementation confirms versus assumes.
 
 Why a DB-API2-shaped interface specifically: it's the near-universal

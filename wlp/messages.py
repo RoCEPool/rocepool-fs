@@ -1,5 +1,5 @@
 """WLP v5 message structs, field-for-field against the real .thrift IDL
-files shipped in the uploaded RapidsSE source tree
+files shipped in RapidsSE's source (kept in third_party/rapidsse/)
 (`src/wlp/thrift/messageDefinitions/{compatibility,v5}/*.thrift`).
 
 Only the messages this client actually needs for schema DDL and simple

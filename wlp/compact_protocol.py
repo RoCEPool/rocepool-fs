@@ -10,7 +10,7 @@ subset of the publicly documented Compact Protocol wire format
 (THRIFT-110) actually needed by RapidsSE's own WLP v5 message definitions
 (bool, i16, i32, i64, double, string/binary, struct, list-of-struct,
 enum-as-i32) -- verified against the real `.thrift` IDL files shipped in
-the uploaded RapidsSE source
+RapidsSE's source (third_party/rapidsse/) source
 (`src/wlp/thrift/messageDefinitions/{compatibility,v5}/*.thrift`) and
 against how RapidsSE's own C++ server actually frames a message
 (`src/store/AdaptorWL.cpp::vSerialiseAndSendMsg`, `src/wlp/thrift/supports/

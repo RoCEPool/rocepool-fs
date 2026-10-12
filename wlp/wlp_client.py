@@ -6,7 +6,7 @@ client or the earlier injected fake/sqlite client with zero code changes,
 exactly matching the interface-first architecture requested for this
 project.
 
-Message flow (from the .thrift IDL comments in the uploaded RapidsSE
+Message flow (from the .thrift IDL comments in RapidsSE's source (third_party/rapidsse/)
 source):
   connect -> ProtocolCompatibleRequest -> ProtocolCompatibleResponse
           -> PlainAuthenticationRequest -> AuthenticationOkResponse
