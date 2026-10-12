@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: packages
         run: sudo apt-get update && sudo apt-get install -y gcc make cmake pkg-config libibverbs-dev librdmacm-dev
       - name: verbs backend
@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: packages
         run: |
           sudo apt-get update
