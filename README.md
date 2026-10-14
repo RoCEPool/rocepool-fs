@@ -9,6 +9,11 @@ hosts and is moved with RDMA (RoCE v2, or AWS EFA through libfabric).
 - **Three clients**: a native FUSE client (classic `/dev/fuse` or FUSE over
   io_uring), an `LD_PRELOAD` interception library (no mount, no kernel on the
   I/O path), and a key-value API (`librocepool_kv`).
+- **GPUDirect Storage**: a cuFile-compatible `libcufile.so.0`. A GDS
+  program's reads go from the OSTs' memory straight into GPU memory
+  (RDMA into a dma-buf / peer-memory registration of the buffer), and its
+  writes are RDMA-read by the OSTs out of GPU memory, with no host bounce
+  buffer and no CPU copy. See [docs/GPUDIRECT_STORAGE.md](docs/GPUDIRECT_STORAGE.md).
 - **Two transports, one API** (`roce/native/roce_transport.h`): verbs/rdma_cm
   for RoCE NICs and Soft-RoCE, libfabric `FI_EP_RDM` for EFA. A software RDMA
   emulator (`roce/native/softverbs/`) runs the whole system, tests included,
@@ -31,7 +36,7 @@ sudo ./run.sh                            # on any one of them
 `run.sh` installs packages, builds, runs the self-test, sets up root SSH between
 the hosts (once, from the login in `cluster.conf`), then runs
 `tools/roce_onsite.py`: preflight of every host (RoCE mode, MTU, PFC/ECN,
-power states, NVMe), transport and functional checks, benchmarks, a 60 s IO500
+power states, NVMe, GPUs), transport and functional checks, benchmarks (GPU streaming included), a 60 s IO500
 and the official 300 s IO500. Results: `onsite_report.json`,
 `onsite_io500*.json`, and one `rocepool-results-*.tar.gz` with every host's logs.
 
@@ -46,7 +51,7 @@ Full guide (Chinese): [docs/运行说明书.md](docs/运行说明书.md).
 
 | path | |
 |---|---|
-| `roce/native/` | the C code: transports, servers, FUSE client, interception library, KV API, NVMe tier |
+| `roce/native/` | the C code: transports, servers, FUSE client, interception library, KV API, GPUDirect (cuFile) library, NVMe tier |
 | `fs/`, `storage_engine/`, `mpi/`, `wlp/` | Python reference implementations, the MPI-IO layer, the storage-engine adapters |
 | `tools/` | deployment and benchmarking: `run.sh`'s steps, IO500 driver and model, preflight, cluster setup, AWS |
 | `tests/` | the test suite (runs on the RDMA emulator: `python3 -m unittest discover -s tests -t .`, as root) |

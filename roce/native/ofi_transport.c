@@ -186,6 +186,11 @@ static struct ofi_dom *dom_get(const char *src_ip) {
     if (!hints) { set_error("fi_allocinfo failed"); return NULL; }
     hints->ep_attr->type = FI_EP_RDM;
     hints->caps = FI_MSG | FI_RMA | FI_READ | FI_REMOTE_READ | FI_SEND | FI_RECV;
+    /* device (GPU) memory in RDMA: requested only where asked for
+     * (tools/roce_preflight.py sets it on EFA hosts with GPUs), since a
+     * provider without it would otherwise not be offered at all */
+    const char *hm = getenv("ROCE_OFI_HMEM");
+    if (hm && !strcmp(hm, "1")) hints->caps |= FI_HMEM;
     hints->mode = FI_CONTEXT | FI_CONTEXT2;
     hints->domain_attr->mr_mode = FI_MR_LOCAL | FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
     hints->domain_attr->threading = FI_THREAD_SAFE;
@@ -261,17 +266,62 @@ struct roce_mem {
     size_t len;
     pthread_mutex_t lock;
     int n;
+    int dev, dmabuf_fd, cuda_device;   /* device memory (roce_mem_register_device) */
+    uint64_t dmabuf_off;
     struct { struct ofi_dom *d; struct fid_mr *mr; void *desc; uint64_t key; } e[ROCE_MEM_DOMS];
 };
+
+/* device memory: FI_HMEM_CUDA, as a dma-buf when there is one */
+static int mr_reg_dev(struct ofi_dom *d, const struct roce_mem *m, struct fid_mr **mr, void **desc, uint64_t *key) {
+    struct iovec iov = {m->addr, m->len};
+    struct fi_mr_attr attr;
+    memset(&attr, 0, sizeof(attr));
+    attr.mr_iov = &iov;
+    attr.iov_count = 1;
+    attr.access = FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
+    attr.requested_key = atomic_fetch_add(&g_req_key, 1);
+    attr.iface = FI_HMEM_CUDA;
+    attr.device.cuda = m->cuda_device;
+    uint64_t flags = 0;
+#ifdef FI_MR_DMABUF
+    struct fi_mr_dmabuf dmabuf = {.fd = m->dmabuf_fd, .offset = m->dmabuf_off, .len = m->len, .base_addr = m->addr};
+    if (m->dmabuf_fd >= 0) { attr.dmabuf = &dmabuf; flags |= FI_MR_DMABUF; }
+#endif
+    int rc = fi_mr_regattr(d->domain, &attr, flags, mr);
+    if (rc) { set_fi_error("fi_mr_regattr (device memory; ROCE_OFI_HMEM=1 needed)", rc); return -1; }
+    *desc = fi_mr_desc(*mr);
+    *key = fi_mr_key(*mr);
+    if (*key == FI_KEY_NOTAVAIL || *key > UINT32_MAX) {
+        set_error("memory key %llu does not fit 32 bits", (unsigned long long)*key);
+        fi_close(&(*mr)->fid);
+        return -1;
+    }
+    return 0;
+}
 
 roce_mem_t *roce_mem_register(void *addr, size_t len) {
     struct roce_mem *m = calloc(1, sizeof(*m));
     if (!m) { set_error("out of memory"); return NULL; }
     m->addr = addr;
     m->len = len;
+    m->dmabuf_fd = -1;
     pthread_mutex_init(&m->lock, NULL);
     return m;
 }
+roce_mem_t *roce_mem_register_device(void *addr, size_t len, int dmabuf_fd, uint64_t dmabuf_offset, int cuda_device) {
+    /* the endpoints were opened with FI_HMEM only under ROCE_OFI_HMEM=1 (EFA
+     * with GPUs); without it no provider registers device memory */
+    const char *hm = getenv("ROCE_OFI_HMEM");
+    if (!hm || strcmp(hm, "1")) { set_error("device memory needs ROCE_OFI_HMEM=1 (a provider with FI_HMEM)"); return NULL; }
+    struct roce_mem *m = roce_mem_register(addr, len);
+    if (!m) return NULL;
+    m->dev = 1;
+    m->dmabuf_fd = dmabuf_fd;
+    m->dmabuf_off = dmabuf_offset;
+    m->cuda_device = cuda_device;
+    return m;
+}
+int roce_mem_is_device(const roce_mem_t *m) { return m && m->dev; }
 void roce_mem_release(roce_mem_t *m) {
     if (!m) return;
     for (int i = 0; i < m->n; i++) fi_close(&m->e[i].mr->fid);
@@ -285,7 +335,8 @@ static int mem_keys(struct roce_mem *m, struct ofi_dom *d, void **desc, uint32_t
         if (m->e[i].d == d) { *desc = m->e[i].desc; *key = (uint32_t)m->e[i].key; rc = 0; break; }
     if (rc && m->n < ROCE_MEM_DOMS) {
         uint64_t k;
-        if (!mr_reg(d, m->addr, m->len, &m->e[m->n].mr, &m->e[m->n].desc, &k)) {
+        if (!(m->dev ? mr_reg_dev(d, m, &m->e[m->n].mr, &m->e[m->n].desc, &k)
+                     : mr_reg(d, m->addr, m->len, &m->e[m->n].mr, &m->e[m->n].desc, &k))) {
             m->e[m->n].d = d;
             m->e[m->n].key = k;
             *desc = m->e[m->n].desc;
@@ -1012,9 +1063,15 @@ void roce_client_close(roce_conn_t *c) {
 static int needs_bulk(const struct roce_conn *c, size_t head_len, const roce_seg_t *segs, int nsegs) {
     size_t body = 0;
     int registered = nsegs > 0 && nsegs <= RT_MAX_SRC;
-    for (int i = 0; i < nsegs; i++) { body += segs[i].len; if (!segs[i].mem) registered = 0; }
+    int device = 0;
+    for (int i = 0; i < nsegs; i++) {
+        body += segs[i].len;
+        if (!segs[i].mem) registered = 0;
+        else if (segs[i].mem->dev) device = 1;
+    }
     size_t total = head_len + body, cap = SMALL_FRAME - REQ_HDR;
     (void)c;
+    if (device) return 0;  /* registered segments or an error, never a copy */
     return !(total <= cap || (registered && head_len <= cap));
 }
 
@@ -1023,15 +1080,23 @@ static int build_request(struct roce_conn *c, struct ofi_ep *e, uint64_t reply_t
                          size_t head_len, const roce_seg_t *segs, int nsegs, struct rbuf **bulk, size_t *send_len) {
     struct req_hdr h = {.magic = REQ_MAGIC, .reply_to = reply_to, .tag = tag};
     size_t body = 0;
-    int registered = nsegs > 0 && nsegs <= RT_MAX_SRC;
-    for (int i = 0; i < nsegs; i++) { body += segs[i].len; if (!segs[i].mem) registered = 0; }
+    int registered = nsegs > 0 && nsegs <= RT_MAX_SRC, device = 0;
+    for (int i = 0; i < nsegs; i++) {
+        body += segs[i].len;
+        if (!segs[i].mem) registered = 0;
+        else if (segs[i].mem->dev) device = 1;
+    }
     size_t total = head_len + body, cap = SMALL_FRAME - REQ_HDR;
     if (total > c->max_frame) { set_error("request_len %zu exceeds max_frame_bytes %zu", total, c->max_frame); return -1; }
+    if (device && (!registered || head_len > cap)) {
+        set_error("device memory segments must all be registered, with a head that fits inline");
+        return -1;
+    }
     h.total_len = (uint32_t)total;
     uint8_t *inl = e->small + REQ_HDR;
     struct rbuf *given = *bulk;
     *bulk = NULL;
-    if (total <= cap) {  /* all inline */
+    if (total <= cap && !device) {  /* all inline */
         memcpy(inl, head, head_len);
         size_t o = head_len;
         for (int i = 0; i < nsegs; i++) { memcpy(inl + o, segs[i].addr, segs[i].len); o += segs[i].len; }
@@ -1138,6 +1203,8 @@ static int own_send(struct roce_conn *c, const void *head, size_t head_len, cons
     for (int i = 0; i < nsegs; i++) body += segs[i].len;
     size_t total = head_len + body;
     if (total > c->max_frame) { set_error("request_len %zu exceeds max_frame_bytes %zu", total, c->max_frame); return -1; }
+    for (int i = 0; i < nsegs; i++)
+        if (segs[i].mem && segs[i].mem->dev) { set_error("device memory needs a shared-pool connection"); return ROCE_ERR_NOT_DELIVERED; }
     struct req_hdr h = {.magic = REQ_MAGIC, .reply_to = c->own_reply_to, .tag = tag, .total_len = (uint32_t)total};
     if (total <= SMALL_FRAME - REQ_HDR) {
         uint8_t *inl = e->small + REQ_HDR;

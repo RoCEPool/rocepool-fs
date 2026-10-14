@@ -248,7 +248,44 @@ def ensure_intercept_lib() -> str:
     return out
 
 
+# ---- GPUDirect Storage: the cuFile-compatible library -------------------------
+CUFILE_MAIN = os.path.join(NATIVE, "rocepool_cufile.c")
+
+
+def build_cufile_lib(out: str, cc: str = "gcc") -> str:
+    """Like the interception library: the client core hidden, only the cuFile
+    API (and rocepool's rp_cufile_* / rp_devemu_* extras) exported. A copy
+    named libcufile.so.0 goes in cufile/ next to it, for LD_LIBRARY_PATH."""
+    srcs, cflags, ldflags = _transport()
+    base = [cc, "-O2", "-g", "-Wall", "-Wextra", "-Werror", "-pthread", "-fPIC", "-std=gnu11", *cflags, "-I", NATIVE]
+    objs = []
+    with tempfile.TemporaryDirectory() as td:
+        for src in CLIENT_SOURCES + srcs + [CUFILE_MAIN]:
+            o = os.path.join(td, os.path.basename(src) + ".o")
+            subprocess.run([*base, "-fvisibility=hidden", "-c", src, "-o", o], check=True)
+            objs.append(o)
+        subprocess.run([cc, "-shared", "-pthread", "-Wl,-soname,libcufile.so.0", *objs, "-o", out, *ldflags,
+                        "-ldl", "-lpthread"], check=True)
+    d = os.path.join(os.path.dirname(out), "cufile")
+    os.makedirs(d, exist_ok=True)
+    import shutil
+    shutil.copy2(out, os.path.join(d, "libcufile.so.0"))
+    link = os.path.join(d, "libcufile.so")  # for -lcufile at link time
+    if not os.path.islink(link):
+        os.symlink("libcufile.so.0", link)
+    return out
+
+
+def ensure_cufile_lib() -> str:
+    out = os.path.join(_outdir(), "librocepool_cufile.so")
+    if _stale(out, [CUFILE_MAIN] + CLIENT_SOURCES + ALL_TRANSPORTS) or \
+            not os.path.exists(os.path.join(_outdir(), "cufile", "libcufile.so.0")):
+        build_cufile_lib(out)
+        _mark(out)
+    return out
+
+
 if __name__ == "__main__":  # python3 roce/native/build_lib.py: build everything of the current backend
-    for f in (ensure_softverbs_lib, ensure_fuse_client, ensure_intercept_lib, ensure_kv_lib):
+    for f in (ensure_softverbs_lib, ensure_fuse_client, ensure_intercept_lib, ensure_kv_lib, ensure_cufile_lib):
         print(f.__name__, f())
 

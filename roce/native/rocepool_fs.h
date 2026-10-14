@@ -154,6 +154,25 @@ void sc_unref(scache_t *c);
 void sc_clear(scache_t *c);
 int sc_read(scache_t *c, const attr_t *a, uint64_t off, size_t len, uint8_t *out);
 
+/* ---- device (GPU) memory: GPUDirect-Storage-style I/O ----
+ * The runtime's copies (CUDA: rocepool_cuda.c; tests: an emulator), used
+ * only where a transfer cannot go NIC <-> device directly. 0 or -errno. */
+typedef struct {
+    int (*to_dev)(void *dev, const void *host, size_t n, void *ctx);
+    int (*from_dev)(void *host, const void *dev, size_t n, void *ctx);
+    int (*zero)(void *dev, size_t n, void *ctx);
+    void *ctx;
+} rp_devops_t;
+/* a device buffer: dev is the device pointer; mem its NIC registration
+ * (roce_mem_register_device), or NULL when the NIC refused it: then every
+ * transfer bounces through host memory */
+typedef struct { void *dev; size_t len; roce_mem_t *mem; const rp_devops_t *ops; } rp_devbuf_t;
+/* file range <-> b at boff; bytes moved (short at EOF for reads) or -errno */
+ssize_t fs_read_dev(const char *path, uint64_t off, size_t len, const rp_devbuf_t *b, size_t boff);
+ssize_t fs_write_dev(const char *path, uint64_t off, size_t len, const rp_devbuf_t *b, size_t boff);
+/* bytes moved NIC <-> device directly, and through host memory */
+void fs_dev_stats(uint64_t *direct, uint64_t *bounced);
+
 /* ---- handles ---- */
 handle_t *handle_new(const char *path, int is_dir);
 void handle_free(handle_t *h);

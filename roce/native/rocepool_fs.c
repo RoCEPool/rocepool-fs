@@ -742,7 +742,7 @@ int fs_rmdir(const char *path) {
  * than that (ior-hard: 22 x 47 KB per stripe) are gathered once into an
  * arena buffer, which is still read in place by the OST. */
 #define WSEG_MAX 4
-typedef struct { const uint8_t *data; size_t len; } wseg_t;
+typedef struct { const uint8_t *data; size_t len; roce_mem_t *mem; } wseg_t;  /* mem: device memory, else NULL */
 
 typedef struct {
     group_t *g;
@@ -781,7 +781,7 @@ static void stripe_segments(stripe_io_t *t, uint64_t s_lo, uint64_t s_hi, const 
         if (b <= s_lo || a >= s_hi) continue;
         uint64_t lo = a > s_lo ? a : s_lo, hi = b < s_hi ? b : s_hi;
         if (n == WSEG_MAX) { over = 1; break; }
-        t->seg[n++] = (rp_seg_t){ segs[i].data + (lo - a), (size_t)(hi - lo), NULL };
+        t->seg[n++] = (rp_seg_t){ segs[i].data + (lo - a), (size_t)(hi - lo), segs[i].mem };
     }
     if (!over) { t->nseg = n; return; }
     size_t total = (size_t)(s_hi - s_lo);
@@ -930,7 +930,9 @@ static int fs_write_segs(const char *path, uint64_t off, const wseg_t *segs, int
          * than a stripe) spills first instead of shipping the data to the
          * MDT just to hear INLINE_FULL -- that doubled the bytes of every
          * new large file, and a run over one frame failed with EFBIG. */
-        if (off + len > inline_hint(&a)) {
+        int device = 0;
+        for (int i = 0; i < nsegs; i++) if (segs[i].mem && roce_mem_is_device(segs[i].mem)) device = 1;
+        if (off + len > inline_hint(&a) || device) {  /* device memory: never through the CPU */
             rc = E_INLINE_FULL;
         } else if (nsegs == 1) {
             rc = mdt_write_inline(path, off, segs[0].data, len, &na);
@@ -987,7 +989,7 @@ static int fs_write_segs(const char *path, uint64_t off, const wseg_t *segs, int
 }
 
 int fs_write_range(const char *path, uint64_t off, const uint8_t *data, size_t len) {
-    wseg_t seg = { data, len };
+    wseg_t seg = { data, len, NULL };
     return fs_write_segs(path, off, &seg, 1);
 }
 
@@ -1104,7 +1106,13 @@ static void lease_drop(const char *key) {
 /* bytes [off, off+len) of the object into dst (arena memory): 0 and *got
  * (short at the object's end), -ENOENT (no such object), or -EAGAIN: no
  * one-sided path for this read, use the RPC */
+static int direct_read_mem(rp_peer_t *p, const char *key, uint64_t off, size_t len, uint8_t *dst, roce_mem_t *dmem,
+                           size_t *got);
 static int direct_read(rp_peer_t *p, const char *key, uint64_t off, size_t len, uint8_t *dst, size_t *got) {
+    return direct_read_mem(p, key, off, len, dst, NULL, got);
+}
+static int direct_read_mem(rp_peer_t *p, const char *key, uint64_t off, size_t len, uint8_t *dst, roce_mem_t *dmem,
+                           size_t *got) {
     if (!cfg.direct_read || atomic_load(&p->no_lease)) return -EAGAIN;
     pthread_once(&g_lease_once, lease_init);
     rp_lease_t l;
@@ -1119,7 +1127,7 @@ static int direct_read(rp_peer_t *p, const char *key, uint64_t off, size_t len, 
             have = 1;
         }
         size_t n = off >= l.size ? 0 : (size_t)(l.size - off < len ? l.size - off : len);
-        int rc = rp_ost_read_direct(p, &l, off, n, dst);
+        int rc = rp_ost_read_direct_mem(p, &l, off, n, dst, dmem);
         if (rc == 0) { *got = n; return 0; }
         if (rc != -EAGAIN) return -EAGAIN;
         lease_drop(key);
@@ -1184,6 +1192,143 @@ int fs_read_direct(const char *path, const attr_t *a, uint64_t off, size_t len, 
     int rc = run_all(range_read_task, args, n, &g);
     free(tasks);
     free(args);
+    return rc;
+}
+
+/* ---------------------------------------------------------------- device (GPU) memory
+ * GPUDirect-Storage-style I/O: a file range straight into / out of device
+ * memory. Every stripe goes one-sided (an OST lease + an RDMA READ that
+ * lands in the GPU; the OST RDMA READs a write's data out of the GPU), all
+ * stripes in parallel across the OSTs. What cannot go that way -- inline
+ * files (bytes in the MDT entry), an OST without leases, a buffer the NIC
+ * could not register -- bounces through host memory with the runtime's
+ * copy (cuMemcpy), counted separately so a benchmark shows which it got. */
+static atomic_ullong g_dev_direct, g_dev_bounced;
+void fs_dev_stats(uint64_t *direct, uint64_t *bounced) {
+    *direct = atomic_load(&g_dev_direct);
+    *bounced = atomic_load(&g_dev_bounced);
+}
+
+typedef struct {
+    group_t *g;
+    const char *path;
+    const attr_t *a;
+    uint64_t idx, lo, hi;
+    const rp_devbuf_t *b;
+    size_t boff;
+} dev_read_t;
+
+static void dev_read_task(void *arg) {
+    dev_read_t *t = arg;
+    char key[4200];
+    stripe_key(key, sizeof(key), t->path, t->idx);
+    rp_peer_t *peer = &g_osts[ost_for_stripe(t->a, t->idx)];
+    size_t want = (size_t)(t->hi - t->lo), got = 0;
+    uint8_t *dst = (uint8_t *)t->b->dev + t->boff;
+    int rc = -EAGAIN;
+    if (t->b->mem) {
+        rc = direct_read_mem(peer, key, t->lo, want, dst, t->b->mem, &got);
+        if (rc == 0) atomic_fetch_add(&g_dev_direct, got);
+    }
+    if (rc == -EAGAIN) {
+        rp_resp_t r;
+        uint64_t ver;
+        got = 0;
+        rc = rp_ost_read_at(peer, key, t->lo, (uint32_t)want, 0, &ver, &r);
+        if (rc == 0) {
+            got = r.vlen - 8 < want ? r.vlen - 8 : want;
+            if (got) rc = t->b->ops->to_dev(dst, r.val + 8, got, t->b->ops->ctx);
+            rp_resp_free(&r);
+            atomic_fetch_add(&g_dev_bounced, got);
+        }
+    }
+    if (rc == -ENOENT) rc = 0;  /* a hole */
+    if (rc == 0 && got < want) rc = t->b->ops->zero(dst + got, want - got, t->b->ops->ctx);
+    group_done(t->g, rc);
+}
+
+ssize_t fs_read_dev(const char *path, uint64_t off, size_t len, const rp_devbuf_t *b, size_t boff) {
+    if (boff > b->len || len > b->len - boff) return -EINVAL;
+    attr_t a;
+    int rc = fs_getattr(path, &a);
+    if (rc) return rc;
+    if (a.is_dir) return -EISDIR;
+    if (off >= a.size || !len) return 0;
+    if (len > a.size - off) len = (size_t)(a.size - off);
+    if (a.inl) {  /* Data-on-MDT: the bytes come with the entry, into host memory */
+        rp_resp_t r;
+        const uint8_t *d;
+        size_t n;
+        rc = mdt_inline_read(path, 0, off, (uint32_t)(len > UINT32_MAX ? UINT32_MAX : len), &a, &r, &d, &n);
+        if (rc) return rc;
+        if (a.inl) {
+            if (n > len) n = len;
+            rc = n ? b->ops->to_dev((uint8_t *)b->dev + boff, d, n, b->ops->ctx) : 0;
+            rp_resp_free(&r);
+            atomic_fetch_add(&g_dev_bounced, n);
+            return rc ? rc : (ssize_t)n;
+        }
+        rp_resp_free(&r);  /* spilled meanwhile: read the stripes */
+        ac_del(path);
+        if ((rc = fs_getattr(path, &a)) != 0) return rc;
+        if (off >= a.size) return 0;
+        if (len > a.size - off) len = (size_t)(a.size - off);
+    }
+    if (!a.has_layout || !a.ss) return -EIO;
+    uint64_t end = off + len, first = off / a.ss, last = (end - 1) / a.ss;
+    int n = (int)(last - first + 1);
+    dev_read_t *tasks = calloc((size_t)n, sizeof(*tasks));
+    void **args = xmalloc((size_t)n * sizeof(void *));
+    group_t g;
+    group_init(&g, n);
+    for (int i = 0; i < n; i++) {
+        uint64_t idx = first + (uint64_t)i, s0 = idx * a.ss;
+        uint64_t lo = off > s0 ? off : s0, hi = end < s0 + a.ss ? end : s0 + a.ss;
+        tasks[i] = (dev_read_t){&g, path, &a, idx, lo - s0, hi - s0, b, boff + (size_t)(lo - off)};
+        args[i] = &tasks[i];
+    }
+    rc = run_all(dev_read_task, args, n, &g);
+    free(tasks);
+    free(args);
+    return rc ? rc : (ssize_t)len;
+}
+
+/* through host memory: the device range copied out in pieces, written as usual */
+static ssize_t write_dev_bounced(const char *path, uint64_t off, size_t len, const rp_devbuf_t *b, size_t boff) {
+    size_t chunk = 16u << 20, done = 0;
+    uint8_t *tmp = rp_bulk_alloc(len < chunk ? len : chunk);
+    if (!tmp) return -ENOMEM;
+    int rc = 0;
+    while (done < len && !rc) {
+        size_t n = len - done < chunk ? len - done : chunk;
+        rc = b->ops->from_dev(tmp, (const uint8_t *)b->dev + boff + done, n, b->ops->ctx);
+        if (!rc) rc = fs_write_range(path, off + done, tmp, n);
+        if (!rc) { done += n; atomic_fetch_add(&g_dev_bounced, n); }
+    }
+    rp_bulk_free(tmp);
+    return rc ? rc : (ssize_t)len;
+}
+
+ssize_t fs_write_dev(const char *path, uint64_t off, size_t len, const rp_devbuf_t *b, size_t boff) {
+    if (boff > b->len || len > b->len - boff) return -EINVAL;
+    if (!len) return 0;
+    attr_t a;
+    int rc = fs_getattr(path, &a);
+    if (rc == -ENOENT) rc = fs_create_file(path, &a);
+    if (rc) return rc;
+    if (a.is_dir) return -EISDIR;
+    if (!b->mem || (a.inl && off + len <= inline_hint(&a)))
+        return write_dev_bounced(path, off, len, b, boff);  /* small: into the MDT entry */
+    /* striped: one segment per stripe, read by each OST out of the device
+     * (fs_write_segs spills an inline file first: device bytes never go
+     * through the CPU) */
+    wseg_t seg = { (const uint8_t *)b->dev + boff, len, b->mem };
+    rc = fs_write_segs(path, off, &seg, 1);
+    if (rc == 0) { atomic_fetch_add(&g_dev_direct, len); return (ssize_t)len; }
+    /* the NIC could not reach the device memory (its registration failed on
+     * this host): the same bytes again through host memory -- rewriting the
+     * range is idempotent */
+    if (rc == -EIO || rc == -EFAULT) return write_dev_bounced(path, off, len, b, boff);
     return rc;
 }
 
@@ -1501,7 +1646,7 @@ int handle_flush(handle_t *h) {
             if (v[order[a]].off != v[order[a - 1]].off + v[order[a - 1]].len) clean = 0;
         if (clean) {
             wseg_t *segs = xmalloc(cnt * sizeof(*segs));
-            for (size_t a = 0; a < cnt; a++) segs[a] = (wseg_t){ v[order[i + a]].data, v[order[i + a]].len };
+            for (size_t a = 0; a < cnt; a++) segs[a] = (wseg_t){ v[order[i + a]].data, v[order[i + a]].len, NULL };
             rc = fs_write_segs(h->path, run_start, segs, (int)cnt);
             free(segs);
         } else {

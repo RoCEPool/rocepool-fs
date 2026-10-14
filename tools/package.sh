@@ -15,7 +15,8 @@ tar czf "$OUT" \
   --exclude='*.buildinfo' --exclude="$N/roce/native/rocepool-fuse" --exclude="$N/roce/native/rocepool-kv-bench" \
   --exclude="$N/roce/native/softverbs/rocepool-fuse" --exclude="$N/roce/native/softverbs/rocepool-kv-bench" \
   --exclude='rocepool-results-*' --exclude='onsite_*.json' --exclude='run.log' --exclude='selftest.log' \
-  --exclude='roce_env.sh' --exclude="$N/cluster.conf" "$N"
+  --exclude='roce_env.sh' --exclude="$N/cluster.conf" --exclude="$N/roce/native/cufile" \
+  --exclude="$N/roce/native/softverbs/cufile" --exclude="$N/gds_report.json" "$N"
 # no ELF may ship
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 tar xzf "$OUT" -C "$T"

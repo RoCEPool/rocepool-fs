@@ -57,6 +57,7 @@
 #include <sys/eventfd.h>
 #include <sys/socket.h>
 #include <time.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 #define SV_RNR_TIMER_MS 10   /* per-retry RNR back-off (models min_rnr_timer) */
@@ -75,7 +76,8 @@ static int sv_trace(void) {
 struct ibv_context { int dummy; };
 static struct ibv_context g_ctx;
 
-struct sv_mr { struct ibv_mr pub; struct ibv_pd *pd; int live; int access; };
+struct sv_mr { struct ibv_mr pub; struct ibv_pd *pd; int live; int access;
+                uint8_t *view; size_t view_len;   /* dma-buf MR: the emulator's own mapping of the buffer */ };
 /* MR table, O(1) in every operation. The lkey encodes the slot in its low
  * 16 bits and a per-slot generation in the high bits, so a stale lkey whose
  * slot was reused still fails validation (a real HCA also rejects a
@@ -119,6 +121,35 @@ struct ibv_mr *ibv_reg_mr(struct ibv_pd *pd, void *addr, size_t length, int acce
     return &mr->pub;
 }
 
+/* A dma-buf MR (rdma-core v34+), the way a NIC reaches GPU memory: the
+ * buffer is the dma-buf `fd` from `offset`, addressed in work requests at
+ * `iova` (the device virtual address). The emulator maps the fd itself and
+ * moves bytes through that mapping, so nothing ever dereferences `iova`:
+ * a test's "device memory" can be a memfd whose iova range is PROT_NONE in
+ * the process, and any CPU access to it by the code under test faults. */
+struct ibv_mr *ibv_reg_dmabuf_mr(struct ibv_pd *pd, uint64_t offset, size_t length, uint64_t iova, int fd, int access) {
+    void *view = mmap(NULL, length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, (off_t)offset);
+    if (view == MAP_FAILED) return NULL;
+    struct ibv_mr *pub = ibv_reg_mr(pd, (void *)(uintptr_t)iova, length, access);
+    if (!pub) { munmap(view, length); return NULL; }
+    struct sv_mr *mr = (struct sv_mr *)pub;
+    mr->view = view;
+    mr->view_len = length;
+    return pub;
+}
+
+/* where the bytes of [addr, ...) under key really are: the dma-buf
+ * mapping for a dma-buf MR, addr itself otherwise */
+static void *sv_host(uint32_t key, uint64_t addr) {
+    int slot = (int)(key & 0xFFFF);
+    void *p = (void *)(uintptr_t)addr;
+    pthread_mutex_lock(&g_mr_lock);
+    struct sv_mr *m = slot < SV_MAX_MRS ? g_mrs[slot] : NULL;
+    if (m && m->pub.lkey == key && m->view) p = m->view + (addr - (uint64_t)(uintptr_t)m->pub.addr);
+    pthread_mutex_unlock(&g_mr_lock);
+    return p;
+}
+
 int ibv_dereg_mr(struct ibv_mr *pub) {
     int slot = (int)(pub->lkey & 0xFFFF);
     pthread_mutex_lock(&g_mr_lock);
@@ -127,6 +158,8 @@ int ibv_dereg_mr(struct ibv_mr *pub) {
         g_mr_free[g_mr_free_top++] = slot;
     }
     pthread_mutex_unlock(&g_mr_lock);
+    struct sv_mr *mr = (struct sv_mr *)pub;
+    if (mr->view) munmap(mr->view, mr->view_len);
     free(pub);
     return 0;
 }
@@ -587,7 +620,7 @@ static void deliver(struct sv_id *id, const struct sv_frame *f, const uint8_t *p
             return;
         }
         if (!(f->flags & SVF_IMM)) {  /* plain WRITE: no RECV involved, no completion here */
-            memcpy((void *)(uintptr_t)f->raddr, payload, f->len);
+            memcpy(sv_host(f->rkey, f->raddr), payload, f->len);
             send_frame(id, F_ACK, 0, f->seq, NULL, 0);
             pthread_mutex_unlock(&id->lock);
             return;
@@ -621,7 +654,7 @@ static void deliver(struct sv_id *id, const struct sv_frame *f, const uint8_t *p
     }
     if (f->type == F_WRITE) {  /* with immediate: data to raddr, the RECV's buffer untouched */
         TRACE("RDMA WRITE with immediate placed: %u bytes", f->len);
-        memcpy((void *)(uintptr_t)f->raddr, payload, f->len);
+        memcpy(sv_host(f->rkey, f->raddr), payload, f->len);
         cq_push_ex(qp->recv_cq, r.wr_id, IBV_WC_SUCCESS, f->len, IBV_WC_RECV_RDMA_WITH_IMM, IBV_WC_WITH_IMM, f->imm);
         send_frame(id, F_ACK, 0, f->seq, NULL, 0);
         pthread_mutex_unlock(&id->lock);
@@ -634,7 +667,7 @@ static void deliver(struct sv_id *id, const struct sv_frame *f, const uint8_t *p
         pthread_mutex_unlock(&id->lock);
         return;
     }
-    memcpy((void *)(uintptr_t)r.sge.addr, payload, f->len);
+    memcpy(sv_host(r.sge.lkey, r.sge.addr), payload, f->len);
     cq_push_ex(qp->recv_cq, r.wr_id, IBV_WC_SUCCESS, f->len, IBV_WC_RECV, 0, 0);
     send_frame(id, F_ACK, 0, f->seq, NULL, 0);
     pthread_mutex_unlock(&id->lock);
@@ -658,7 +691,7 @@ static void serve_read(struct sv_id *id, const struct sv_frame *f) {
     } else {
         TRACE("RDMA READ served: %u bytes", len);
         struct sv_frame r = { .type = F_READ_RESP, .len = len, .seq = f->seq };
-        send_frame_ex(id, &r, (const void *)(uintptr_t)f->raddr);
+        send_frame_ex(id, &r, sv_host(f->rkey, f->raddr));
     }
     pthread_mutex_unlock(&id->lock);
 }
@@ -669,7 +702,7 @@ static void read_response(struct sv_id *id, const struct sv_frame *f, const uint
     struct sv_send *s = NULL;
     if (id->qp) for (s = id->qp->outstanding; s && s->seq != f->seq; s = s->next) {}
     if (s && s->opcode == IBV_WR_RDMA_READ && f->len == s->sge.length) {
-        memcpy((void *)(uintptr_t)s->sge.addr, payload, f->len);
+        memcpy(sv_host(s->sge.lkey, s->sge.addr), payload, f->len);
         complete_send(id, f->seq, IBV_WC_SUCCESS);
     } else if (s) {
         complete_send(id, f->seq, IBV_WC_LOC_LEN_ERR);
@@ -947,7 +980,7 @@ int ibv_post_send(struct ibv_qp *pubqp, struct ibv_send_wr *wr, struct ibv_send_
         if (wr->opcode != IBV_WR_RDMA_READ) {
             s->len = wr->sg_list[0].length;
             s->payload = malloc(s->len ? s->len : 1);
-            memcpy(s->payload, (const void *)(uintptr_t)wr->sg_list[0].addr, s->len);
+            memcpy(s->payload, sv_host(wr->sg_list[0].lkey, wr->sg_list[0].addr), s->len);
         }
         s->next = qp->outstanding;
         qp->outstanding = s;
