@@ -13,7 +13,10 @@ hosts and is moved with RDMA (RoCE v2, or AWS EFA through libfabric).
   program's reads go from the OSTs' memory straight into GPU memory
   (RDMA into a dma-buf / peer-memory registration of the buffer), and its
   writes are RDMA-read by the OSTs out of GPU memory, with no host bounce
-  buffer and no CPU copy. See [docs/GPUDIRECT_STORAGE.md](docs/GPUDIRECT_STORAGE.md).
+  buffer and no CPU copy. The KV API does the same for LLM KV-cache blocks
+  (prefix caching, prefill/decode disaggregation), with a benchmark of the
+  time to first token (TTFT) it saves. See
+  [docs/GPUDIRECT_STORAGE.md](docs/GPUDIRECT_STORAGE.md).
 - **Two transports, one API** (`roce/native/roce_transport.h`): verbs/rdma_cm
   for RoCE NICs and Soft-RoCE, libfabric `FI_EP_RDM` for EFA. A software RDMA
   emulator (`roce/native/softverbs/`) runs the whole system, tests included,

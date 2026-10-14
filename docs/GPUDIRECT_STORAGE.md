@@ -147,3 +147,99 @@ The development machine has no GPU. The tests use an **emulated device**
 The on-site gds step does exactly this check on the first site with GPUs. It
 reports FAIL with the error if something is wrong, and WARN if the transfers
 bounce instead of going direct.
+
+## KV cache: blocks straight into GPU memory (prefix caching, prefill/decode)
+
+### Why files are the wrong unit for the KV cache
+
+LLM serving reuses KV cache in two places:
+
+- **Prefix caching.** A system prompt, a multi-turn history or RAG context
+  that an earlier request already prefilled.
+- **Prefill/decode disaggregation.** The decode node needs what the prefill
+  node computed.
+
+In both cases the time to first token (TTFT) is the lookup and load of the
+cached prefix plus the prefill of the rest of the prompt. KV blocks are
+small (64 KiB per layer, or a few MiB for all layers of a block), there are
+many of them, and the transfer is on the critical path. Files would add a
+metadata lookup to every block.
+
+### The GPU calls of the KV API
+
+The KV API (`rocepool_kv.h`, Python `roce/kv.py`) has calls that move values
+between the OSTs' RAM and GPU memory with no host copy and no metadata
+server. A key maps to its OST by hash.
+
+| C | Python | |
+|---|---|---|
+| `rpkv_dev_register(kv, ptr, len)` | `kv.register_device(tensor.data_ptr(), nbytes)` | registers the GPU allocation with the NIC once (dma-buf, or nvidia-peermem) |
+| `rpkv_mcontains` | `kv.contains(keys)` / `kv.cached_prefix(block_keys)` | which blocks exist, in one BATCH round trip per OST; it also caches their leases |
+| `rpkv_mget_dev` / `rpkv_get_dev` | `buf.mget(keys, offsets, caps)` / `buf.get` | each block arrives by a one-sided RDMA READ from this host's NIC into the GPU, many in flight across all OSTs |
+| `rpkv_mput_dev` / `rpkv_put_dev` | `buf.mput(keys, offsets, lengths)` / `buf.put` | each OST RDMA-reads its blocks out of the GPU |
+
+How the cached leases behave:
+
+- A **lease** says where a value sits in an OST's RAM, and a handle keeps
+  the leases it has taken.
+- A **block read again** costs one RDMA READ and no RPC.
+- **Every read checks the value's seqlock**, so an overwritten, deleted or
+  evicted value is never returned stale. In those cases the client takes a
+  new lease, or falls back to an RPC.
+- **When the GPU cannot be reached by the NIC**, the same calls work through
+  host memory, and `buf.direct` is False.
+- **Value size**: one value can be up to one frame, 16 MiB by default
+  (`ROCEPOOL_FRAME_BYTES`). That fits a 16-token block of all layers of a
+  70B model (5.2 MB).
+- **Concurrency**: the number of transfers in flight per call is set by
+  `ROCEPOOL_KV_INFLIGHT` (default 16).
+
+### The TTFT benchmark (`tools/bench_kvcache.py`, on-site step `kvcache`)
+
+For a model's KV geometry (Llama-3 8B/70B, Qwen2.5 7B/72B, Mistral 7B), the
+benchmark runs these steps:
+
+1. Store the KV blocks of a few distinct prefixes from GPU memory.
+2. Run R requests, C at a time. Each one looks up how many leading blocks
+   of its prompt are cached, then loads them into GPU memory.
+3. Check every loaded block against its pattern.
+4. Report:
+   - load p50/p99 and GB/s;
+   - lookup time;
+   - TTFT with the cache, which is load + the prefill of the uncached rest;
+   - TTFT recomputing everything.
+
+The **prefill time is an estimate**: 2 × parameters × tokens / (the GPU's
+dense BF16 peak × MFU 0.5). The peak is taken from the GPU's name. It
+leaves out attention's quadratic part, which understates the benefit for
+long prompts.
+
+Each run covers three cases, each with a key per block of all layers and
+with a key per block per layer:
+
+- **GPU direct**
+- **GPU through host memory** — what storage without GPUDirect gets
+- **host memory only** — on hosts without a GPU
+
+The on-site run uses Llama-3-8B with 3072 of 4096 tokens cached (`--bench
+quick`), or Llama-3-70B with 6144 of 8192 cached (`--bench full`). The
+results are in `onsite_kvcache.json`.
+
+### What has been verified
+
+`tests/test_kv_gpu.py` runs on the emulated device, so a stray CPU access
+crashes the test. It checks:
+
+- round trips from 1 byte to 15 MiB;
+- interoperability with the host-memory API;
+- missing keys, too-small buffers, and ranges outside the buffer;
+- that a cached lease detects another client's overwrite and delete;
+- a prefix lookup of 400 keys in at most one round trip per OST, and the
+  load that follows using no lease RPCs;
+- the fallback without NIC registration;
+- refusal of host memory;
+- the benchmark tool end to end.
+
+The numbers from the emulator are software RDMA on one machine. They show
+that the path works, not what the hardware does: on a real GPU host the
+`kvcache` step measures that.

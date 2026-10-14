@@ -4,6 +4,7 @@
 #define _GNU_SOURCE
 #include "rocepool_kv.h"
 #include "rocepool_client.h"
+#include "rocepool_devmem.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -12,11 +13,17 @@
 #include <string.h>
 
 #define KV_MAX_OSTS 256
+#define LC_SLOTS 16384   /* cached leases per handle (direct-mapped by key hash) */
+
+typedef struct { uint64_t h; char *key; rp_lease_t l; } lc_slot_t;
 
 struct rpkv {
     rp_peer_t ost[KV_MAX_OSTS];
     int n;
     char ns[128];
+    lc_slot_t *lc;
+    pthread_mutex_t lc_lk;
+    atomic_ullong dev_direct, dev_bounced, leases, lease_hits;
 };
 
 void rpkv_free(void *p) { free(p); }
@@ -30,12 +37,18 @@ rpkv_t *rpkv_open(const char *osts, const char *ns) {
     free(list);
     snprintf(kv->ns, sizeof(kv->ns), "%s", ns ? ns : "kv/");
     if (!kv->n) { free(kv); return NULL; }
+    kv->lc = calloc(LC_SLOTS, sizeof(lc_slot_t));
+    pthread_mutex_init(&kv->lc_lk, NULL);
     return kv;
 }
 
 void rpkv_close(rpkv_t *kv) {
     if (!kv) return;
     for (int i = 0; i < kv->n; i++) rp_peer_close_idle(&kv->ost[i]);
+    if (kv->lc)
+        for (size_t i = 0; i < LC_SLOTS; i++) free(kv->lc[i].key);
+    free(kv->lc);
+    pthread_mutex_destroy(&kv->lc_lk);
     free(kv);
 }
 
@@ -284,6 +297,345 @@ int rpkv_mget(rpkv_t *kv, size_t n, const char *const *keys, void **vals, size_t
 
 int rpkv_mdelete(rpkv_t *kv, size_t n, const char *const *keys, int *status) {
     return run_grouped(kv, RP_DELETE, n, keys, NULL, NULL, NULL, NULL, status);
+}
+
+/* ---------------------------------------------------------------- GPU memory */
+struct rpkv_dev {
+    rpkv_t *kv;
+    uint8_t *base;          /* as given to rpkv_dev_register: offsets count from here */
+    size_t len;
+    roce_mem_t *mem;        /* the allocation's NIC registration; NULL: bounce */
+    int fd;                 /* its dma-buf (ours to close), or -1 / -2 */
+    const rp_devrt_t *rt;
+    atomic_int broken;      /* a direct transfer failed where a bounced one worked: stop trying */
+};
+
+/* lease cache: a hit costs no RPC; every read re-checks it (seqlock) */
+static int lc_get(rpkv_t *kv, const char *fk, rp_lease_t *l) {
+    uint64_t h = rp_sha256_u64(fk);
+    lc_slot_t *e = &kv->lc[h % LC_SLOTS];
+    int hit = 0;
+    pthread_mutex_lock(&kv->lc_lk);
+    if (e->key && e->h == h && !strcmp(e->key, fk)) { *l = e->l; hit = 1; }
+    pthread_mutex_unlock(&kv->lc_lk);
+    return hit;
+}
+static void lc_put(rpkv_t *kv, const char *fk, const rp_lease_t *l) {
+    uint64_t h = rp_sha256_u64(fk);
+    lc_slot_t *e = &kv->lc[h % LC_SLOTS];
+    char *k = strdup(fk);
+    pthread_mutex_lock(&kv->lc_lk);
+    free(e->key);
+    *e = (lc_slot_t){h, k, *l};
+    pthread_mutex_unlock(&kv->lc_lk);
+}
+static void lc_drop(rpkv_t *kv, const char *fk) {
+    uint64_t h = rp_sha256_u64(fk);
+    lc_slot_t *e = &kv->lc[h % LC_SLOTS];
+    pthread_mutex_lock(&kv->lc_lk);
+    if (e->key && e->h == h && !strcmp(e->key, fk)) { free(e->key); e->key = NULL; }
+    pthread_mutex_unlock(&kv->lc_lk);
+}
+
+rpkv_dev_t *rpkv_dev_register(rpkv_t *kv, void *base, size_t len) {
+    const rp_devrt_t *rt = rp_devrt_get();
+    void *abase;
+    size_t asize;
+    int dev, fd;
+    uint64_t foff;
+    if (!kv || !base || !len || !rt || rt->info(base, &abase, &asize, &dev, &fd, &foff)) return NULL;
+    if ((uint8_t *)base + len > (uint8_t *)abase + asize) { rp_devrt_close_fd(fd); return NULL; }
+    rpkv_dev_t *d = calloc(1, sizeof(*d));
+    d->kv = kv;
+    d->base = base;
+    d->len = len;
+    d->fd = fd;
+    d->rt = rt;
+    const char *bounce = getenv("ROCEPOOL_GDS_BOUNCE");
+    if (fd != -2 && !(bounce && !strcmp(bounce, "1")))
+        d->mem = roce_mem_register_device(abase, asize, fd, foff, dev);
+    return d;
+}
+
+void rpkv_dev_deregister(rpkv_dev_t *d) {
+    if (!d) return;
+    roce_mem_release(d->mem);
+    rp_devrt_close_fd(d->fd);
+    free(d);
+}
+
+int rpkv_dev_direct(const rpkv_dev_t *d) { return d && d->mem && !atomic_load(&d->broken); }
+
+void rpkv_dev_stats(rpkv_t *kv, uint64_t *direct, uint64_t *bounced, uint64_t *leases, uint64_t *lease_hits) {
+    if (direct) *direct = atomic_load(&kv->dev_direct);
+    if (bounced) *bounced = atomic_load(&kv->dev_bounced);
+    if (leases) *leases = atomic_load(&kv->leases);
+    if (lease_hits) *lease_hits = atomic_load(&kv->lease_hits);
+}
+
+static uint64_t be64(const uint8_t *p) {
+    uint64_t v = 0;
+    for (int i = 0; i < 8; i++) v = (v << 8) | p[i];
+    return v;
+}
+
+static int get_dev_one(rpkv_t *kv, const char *fk, rpkv_dev_t *d, size_t off, size_t cap, size_t *len, int count_hit) {
+    if (off > d->len || cap > d->len - off) return -EINVAL;
+    rp_peer_t *p = owner(kv, fk);
+    uint8_t *dst = d->base + off;
+    int tried_direct = 0;
+    if (rpkv_dev_direct(d) && !atomic_load(&p->no_lease)) {
+        rp_lease_t l;
+        int have = lc_get(kv, fk, &l);
+        if (have && count_hit) atomic_fetch_add(&kv->lease_hits, 1);
+        for (int attempt = 0; attempt < 2; attempt++) {
+            if (!have) {
+                int rc = rp_ost_lease(p, fk, &l);
+                if (rc == -ENOENT) return -ENOENT;
+                if (rc == -ENOTSUP) break;  /* this object / server: by RPC */
+                if (rc) return rc;
+                atomic_fetch_add(&kv->leases, 1);
+                lc_put(kv, fk, &l);
+                have = 1;
+            }
+            if (len) *len = (size_t)l.size;
+            if (l.size > cap) return -EFBIG;
+            int rc = rp_ost_read_direct_mem(p, &l, 0, (size_t)l.size, dst, d->mem);
+            if (rc == 0) { atomic_fetch_add(&kv->dev_direct, l.size); return 0; }
+            lc_drop(kv, fk);
+            have = 0;
+            if (rc != -EAGAIN) { tried_direct = 1; break; }  /* not changed meanwhile: the transfer itself failed */
+        }
+    }
+    /* through host memory: GET_V + a copy into the device */
+    rp_resp_t r;
+    uint64_t ver;
+    int rc = rp_ost_read_at(p, fk, 0, 0, 1, &ver, &r);
+    if (rc) return rc;
+    size_t n = r.vlen - 8;
+    if (len) *len = n;
+    if (n > cap) { rp_resp_free(&r); return -EFBIG; }
+    rc = n ? d->rt->ops.to_dev(dst, r.val + 8, n, d->rt->ops.ctx) : 0;
+    rp_resp_free(&r);
+    if (rc) return rc;
+    atomic_fetch_add(&kv->dev_bounced, n);
+    if (tried_direct) atomic_store(&d->broken, 1);
+    return 0;
+}
+
+static int put_dev_one(rpkv_t *kv, const char *fk, rpkv_dev_t *d, size_t off, size_t len, uint64_t *version) {
+    if (off > d->len || len > d->len - off) return -EINVAL;
+    rp_peer_t *p = owner(kv, fk);
+    const uint8_t *src = d->base + off;
+    lc_drop(kv, fk);
+    int tried_direct = 0;
+    if (rpkv_dev_direct(d)) {
+        /* the OST RDMA-reads the value out of the device */
+        rp_seg_t seg = {src, len, d->mem};
+        int rc = rp_ost_put_v(p, fk, &seg, 1, -1, version);
+        if (rc == 0) { atomic_fetch_add(&kv->dev_direct, len); return 0; }
+        if (rc != -EIO) return rc;
+        tried_direct = 1;
+    }
+    uint8_t *tmp = rp_bulk_alloc(len ? len : 1);
+    if (!tmp) return -ENOMEM;
+    int rc = len ? d->rt->ops.from_dev(tmp, src, len, d->rt->ops.ctx) : 0;
+    if (!rc) rc = rp_ost_put(p, fk, tmp, len, -1, version);
+    rp_bulk_free(tmp);
+    if (rc) return rc;
+    atomic_fetch_add(&kv->dev_bounced, len);
+    if (tried_direct) atomic_store(&d->broken, 1);
+    return 0;
+}
+
+int rpkv_put_dev(rpkv_t *kv, const char *key, rpkv_dev_t *d, size_t off, size_t len, uint64_t *version) {
+    char fk[4096];
+    int rc = full_key(kv, key, fk, sizeof(fk));
+    return rc ? rc : !d ? -EINVAL : put_dev_one(kv, fk, d, off, len, version);
+}
+
+int rpkv_get_dev(rpkv_t *kv, const char *key, rpkv_dev_t *d, size_t off, size_t cap, size_t *len) {
+    char fk[4096];
+    int rc = full_key(kv, key, fk, sizeof(fk));
+    return rc ? rc : !d ? -EINVAL : get_dev_one(kv, fk, d, off, cap, len, 1);
+}
+
+/* leases for many keys: one BATCH of LEASE per OST (all OSTs in parallel),
+ * cached; present[k] = 1 found, 0 not found, -1 unknown (error) */
+typedef struct {
+    rpkv_t *kv;
+    size_t *idx, cnt;
+    char **fks;
+    int *present;
+    int rc;
+} lease_job_t;
+
+static void *lease_group(void *arg) {
+    lease_job_t *j = arg;
+    const size_t per = 1024;
+    for (size_t first = 0; first < j->cnt && !j->rc; first += per) {
+        size_t last = first + per < j->cnt ? first + per : j->cnt;
+        rp_batch_t b;
+        rp_batch_init(&b);
+        for (size_t q = first; q < last; q++) rp_batch_add(&b, RP_LEASE, j->fks[j->idx[q]], NULL, 0, NULL, 0);
+        rp_resp_t r;
+        int rc = rp_batch_send(owner(j->kv, j->fks[j->idx[first]]), &b, &r);
+        rp_batch_free(&b);
+        if (rc) { j->rc = rc; break; }
+        size_t pos = 0;
+        for (size_t q = first; q < last; q++) {
+            size_t k = j->idx[q];
+            uint8_t op;
+            const uint8_t *v;
+            uint32_t vl;
+            if (rp_batch_next(&r, &pos, &op, &v, &vl, NULL, 0)) { j->present[k] = -1; continue; }
+            if (op == RP_LEASE_OK && vl >= 44) {
+                rp_lease_t l = {be64(v), be64(v + 8), be64(v + 16), be64(v + 24), be64(v + 32),
+                                ((uint32_t)v[40] << 24) | ((uint32_t)v[41] << 16) | ((uint32_t)v[42] << 8) | v[43]};
+                lc_put(j->kv, j->fks[k], &l);
+                atomic_fetch_add(&j->kv->leases, 1);
+                j->present[k] = 1;
+            } else {
+                int st = status_of(op, v, vl);
+                /* NO_LEASE / UNSUPPORTED_OP: it exists, readable by RPC only */
+                j->present[k] = st == -ENOENT ? 0 : st == -EIO && vl >= 8 && !memcmp(v, "NO_LEASE", 8) ? 1
+                              : st == -EIO && vl >= 14 && !memcmp(v, "UNSUPPORTED_OP", 14) ? 1 : -1;
+            }
+        }
+        rp_resp_free(&r);
+    }
+    return NULL;
+}
+
+static int batch_leases(rpkv_t *kv, size_t n, char **fks, const int *skip, int *present) {
+    size_t *count = calloc((size_t)kv->n, sizeof(size_t));
+    size_t **idx = calloc((size_t)kv->n, sizeof(size_t *));
+    for (size_t k = 0; k < n; k++) {
+        if (skip && skip[k]) continue;
+        int o = (int)(owner(kv, fks[k]) - kv->ost);
+        if (!idx[o]) idx[o] = malloc(n * sizeof(size_t));
+        idx[o][count[o]++] = k;
+    }
+    lease_job_t *jobs = calloc((size_t)kv->n, sizeof(*jobs));
+    pthread_t *th = calloc((size_t)kv->n, sizeof(pthread_t));
+    int *started = calloc((size_t)kv->n, sizeof(int));
+    for (int o = 0; o < kv->n; o++) {
+        if (!count[o]) continue;
+        jobs[o] = (lease_job_t){kv, idx[o], count[o], fks, present, 0};
+        if (pthread_create(&th[o], NULL, lease_group, &jobs[o]) == 0) started[o] = 1;
+        else lease_group(&jobs[o]);
+    }
+    int rc = 0;
+    for (int o = 0; o < kv->n; o++) {
+        if (started[o]) pthread_join(th[o], NULL);
+        if (count[o] && jobs[o].rc && !rc) rc = jobs[o].rc;
+        free(idx[o]);
+    }
+    free(count); free(idx); free(jobs); free(th); free(started);
+    return rc;
+}
+
+static char **full_keys(rpkv_t *kv, size_t n, const char *const *keys, int *status) {
+    char **fks = calloc(n ? n : 1, sizeof(char *));
+    for (size_t k = 0; k < n; k++) {
+        char fk[4096];
+        if (full_key(kv, keys[k], fk, sizeof(fk))) { status[k] = -ENAMETOOLONG; continue; }
+        fks[k] = strdup(fk);
+    }
+    return fks;
+}
+static void free_keys(char **fks, size_t n) {
+    for (size_t k = 0; k < n; k++) free(fks[k]);
+    free(fks);
+}
+
+int rpkv_mcontains(rpkv_t *kv, size_t n, const char *const *keys, int *present) {
+    int *st = calloc(n ? n : 1, sizeof(int));
+    char **fks = full_keys(kv, n, keys, st);
+    int *skip = calloc(n ? n : 1, sizeof(int));
+    for (size_t k = 0; k < n; k++) { present[k] = 0; skip[k] = !fks[k]; }
+    int rc = batch_leases(kv, n, fks, skip, present);
+    for (size_t k = 0; k < n; k++) if (present[k] < 0) present[k] = 0;
+    free_keys(fks, n);
+    free(st);
+    free(skip);
+    return rc;
+}
+
+/* the transfers of a multi-key call, in parallel (ROCEPOOL_KV_INFLIGHT
+ * at a time, default 16): KV blocks are small, the wire is kept busy by
+ * having many in flight across all OSTs */
+typedef struct {
+    rpkv_t *kv;
+    rpkv_dev_t *d;
+    size_t n;
+    char **fks;
+    const size_t *offs, *lens_in;
+    size_t *lens_out;
+    int *status;
+    int put;
+    atomic_size_t next;
+} xfer_t;
+
+static void *xfer_worker(void *arg) {
+    xfer_t *x = arg;
+    for (;;) {
+        size_t k = atomic_fetch_add(&x->next, 1);
+        if (k >= x->n) return NULL;
+        if (!x->fks[k] || x->status[k] != 1) continue;  /* 1 = to do */
+        x->status[k] = x->put ? put_dev_one(x->kv, x->fks[k], x->d, x->offs[k], x->lens_in[k], NULL)
+                              : get_dev_one(x->kv, x->fks[k], x->d, x->offs[k], x->lens_in[k], &x->lens_out[k], 0);
+    }
+}
+
+static void run_xfers(xfer_t *x) {
+    const char *e = getenv("ROCEPOOL_KV_INFLIGHT");
+    size_t t = e && atoi(e) > 0 ? (size_t)atoi(e) : 16;
+    if (t > x->n) t = x->n;
+    pthread_t *th = calloc(t ? t : 1, sizeof(pthread_t));
+    int *ok = calloc(t ? t : 1, sizeof(int));
+    for (size_t i = 1; i < t; i++) ok[i] = pthread_create(&th[i], NULL, xfer_worker, x) == 0;
+    xfer_worker(x);
+    for (size_t i = 1; i < t; i++) if (ok[i]) pthread_join(th[i], NULL);
+    free(th);
+    free(ok);
+}
+
+int rpkv_mput_dev(rpkv_t *kv, size_t n, const char *const *keys, rpkv_dev_t *d, const size_t *offs,
+                  const size_t *lens, int *status) {
+    if (!d) return -EINVAL;
+    for (size_t k = 0; k < n; k++) status[k] = 1;
+    char **fks = full_keys(kv, n, keys, status);
+    xfer_t x = {kv, d, n, fks, offs, lens, NULL, status, 1, 0};
+    run_xfers(&x);
+    free_keys(fks, n);
+    return 0;
+}
+
+int rpkv_mget_dev(rpkv_t *kv, size_t n, const char *const *keys, rpkv_dev_t *d, const size_t *offs,
+                  const size_t *caps, size_t *lens, int *status) {
+    if (!d) return -EINVAL;
+    for (size_t k = 0; k < n; k++) { status[k] = 1; lens[k] = 0; }
+    char **fks = full_keys(kv, n, keys, status);
+    if (rpkv_dev_direct(d)) {
+        /* the leases not cached yet: one round trip per OST for all of them */
+        int *skip = calloc(n ? n : 1, sizeof(int)), *present = calloc(n ? n : 1, sizeof(int));
+        rp_lease_t l;
+        for (size_t k = 0; k < n; k++) {
+            skip[k] = !fks[k] || lc_get(kv, fks[k], &l);
+            if (fks[k] && skip[k]) atomic_fetch_add(&kv->lease_hits, 1);
+            present[k] = -1;
+        }
+        if (batch_leases(kv, n, fks, skip, present) == 0)
+            for (size_t k = 0; k < n; k++)
+                if (!skip[k] && present[k] == 0) status[k] = -ENOENT;
+        free(skip);
+        free(present);
+    }
+    xfer_t x = {kv, d, n, fks, offs, caps, lens, status, 0, 0};
+    run_xfers(&x);
+    free_keys(fks, n);
+    return 0;
 }
 
 #ifdef RPKV_BENCH
