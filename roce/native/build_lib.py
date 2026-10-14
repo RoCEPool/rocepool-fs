@@ -102,6 +102,7 @@ def _transport() -> tuple[list[str], list[str], list[str]]:
 HEADERS = [os.path.join(NATIVE, "roce_transport.h"), os.path.join(NATIVE, "rocepool_servers.h"),
            os.path.join(NATIVE, "ost_tier.h"),
            os.path.join(NATIVE, "rocepool_client.h"), os.path.join(NATIVE, "rocepool_fs.h"),
+           os.path.join(NATIVE, "rocepool_devmem.h"), os.path.join(NATIVE, "rocepool_kv.h"),
            os.path.join(NATIVE, "test_stubs", "rdma", "rdma_cma.h"),
            os.path.join(NATIVE, "test_stubs", "infiniband", "verbs.h")]
 ALL_TRANSPORTS = [os.path.join(NATIVE, "roce_transport.c"), os.path.join(NATIVE, "ofi_transport.c"),
@@ -194,18 +195,33 @@ def ensure_fuse_client() -> str:
 
 # ---- the native KV client library + its benchmark ----------------------------
 KV_MAIN = os.path.join(NATIVE, "rocepool_kv.c")
+DEVMEM = os.path.join(NATIVE, "rocepool_devmem.c")
 
 
 def ensure_kv_lib() -> tuple[str, str]:
     lib, bench = os.path.join(_outdir(), "librocepool_kv.so"), os.path.join(_outdir(), "rocepool-kv-bench")
     srcs, cflags, ldflags = _transport()
-    all_src = [KV_MAIN, os.path.join(NATIVE, "rocepool_client.c")] + ALL_TRANSPORTS + [os.path.join(NATIVE, "rocepool_kv.h")]
+    core = [KV_MAIN, os.path.join(NATIVE, "rocepool_client.c"), DEVMEM]
+    all_src = core + ALL_TRANSPORTS + [os.path.join(NATIVE, "rocepool_kv.h")]
     for out, extra in ((lib, ["-fPIC", "-shared"]), (bench, ["-DRPKV_BENCH"])):
         if _stale(out, all_src):
-            subprocess.run([*CC, *extra, *cflags, KV_MAIN, os.path.join(NATIVE, "rocepool_client.c"), *srcs,
-                            "-o", out, *ldflags], check=True)
+            subprocess.run([*CC, *extra, *cflags, *core, *srcs, "-o", out, *ldflags, "-ldl"], check=True)
             _mark(out)
     return lib, bench
+
+
+KVCACHE_BENCH_MAIN = os.path.join(NATIVE, "rocepool_kvcache_bench.c")
+
+
+def ensure_kvcache_bench() -> str:
+    """rocepool-kvcache-bench: KV-cache reuse (TTFT) over the KV API's GPU calls"""
+    out = os.path.join(_outdir(), "rocepool-kvcache-bench")
+    srcs, cflags, ldflags = _transport()
+    core = [KVCACHE_BENCH_MAIN, KV_MAIN, os.path.join(NATIVE, "rocepool_client.c"), DEVMEM]
+    if _stale(out, core + ALL_TRANSPORTS):
+        subprocess.run([*CC, *cflags, "-I", NATIVE, *core, *srcs, "-o", out, *ldflags, "-ldl"], check=True)
+        _mark(out)
+    return out
 
 
 KV_LIB = os.path.join(NATIVE, "softverbs", "librocepool_kv.so")
@@ -260,7 +276,7 @@ def build_cufile_lib(out: str, cc: str = "gcc") -> str:
     base = [cc, "-O2", "-g", "-Wall", "-Wextra", "-Werror", "-pthread", "-fPIC", "-std=gnu11", *cflags, "-I", NATIVE]
     objs = []
     with tempfile.TemporaryDirectory() as td:
-        for src in CLIENT_SOURCES + srcs + [CUFILE_MAIN]:
+        for src in CLIENT_SOURCES + srcs + [DEVMEM, CUFILE_MAIN]:
             o = os.path.join(td, os.path.basename(src) + ".o")
             subprocess.run([*base, "-fvisibility=hidden", "-c", src, "-o", o], check=True)
             objs.append(o)
@@ -278,7 +294,7 @@ def build_cufile_lib(out: str, cc: str = "gcc") -> str:
 
 def ensure_cufile_lib() -> str:
     out = os.path.join(_outdir(), "librocepool_cufile.so")
-    if _stale(out, [CUFILE_MAIN] + CLIENT_SOURCES + ALL_TRANSPORTS) or \
+    if _stale(out, [CUFILE_MAIN, DEVMEM] + CLIENT_SOURCES + ALL_TRANSPORTS) or \
             not os.path.exists(os.path.join(_outdir(), "cufile", "libcufile.so.0")):
         build_cufile_lib(out)
         _mark(out)
@@ -286,6 +302,6 @@ def ensure_cufile_lib() -> str:
 
 
 if __name__ == "__main__":  # python3 roce/native/build_lib.py: build everything of the current backend
-    for f in (ensure_softverbs_lib, ensure_fuse_client, ensure_intercept_lib, ensure_kv_lib, ensure_cufile_lib):
+    for f in (ensure_softverbs_lib, ensure_fuse_client, ensure_intercept_lib, ensure_kv_lib, ensure_cufile_lib, ensure_kvcache_bench):
         print(f.__name__, f())
 

@@ -507,6 +507,26 @@ def gds_step(args, env: dict, topo_file: str, step) -> None:
     step("gds", rep["status"], detail, report_file="onsite_gds.json", peers=peers_gpus)
 
 
+def kvcache_step(args, env: dict, topo_file: str, step) -> None:
+    """KV-cache reuse (prefix caching, prefill/decode disaggregation): store a
+    model's KV blocks, look up a prompt's cached prefix, load it -- straight
+    into GPU memory on a GPU host, into host memory otherwise -- and the TTFT
+    it gives against recomputing the prefix (tools/bench_kvcache.py)."""
+    begin("kvcache", "KV-cache reuse: prefix lookup + load into GPU memory, TTFT")
+    out = os.path.join(ROOT, "onsite_kvcache.json")
+    cmd = [sys.executable, os.path.join(ROOT, "tools", "bench_kvcache.py"), "--report", out]
+    if args.bench != "quick":
+        cmd += ["--model", "llama3-70b", "--prompt", "8192", "--prefix", "6144", "--requests", "64", "--prefixes", "2"]
+    r = subprocess.run(cmd, capture_output=True, text=True, env=dict(env, ROCEPOOL_TOPOLOGY=topo_file), timeout=7200)
+    try:
+        with open(out) as f:
+            rep = json.load(f)
+    except (OSError, ValueError):
+        step("kvcache", WARN, f"KV-cache benchmark produced no report: {(r.stdout + r.stderr)[-1200:]}")
+        return
+    step("kvcache", rep["status"], rep["summary"], report_file="onsite_kvcache.json")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--ip", help="this host's RoCE IP (default: auto-detected RoCE v2 GID)")
@@ -721,6 +741,7 @@ def main() -> int:
         step("kv", FAIL if r.returncode or bad or not rows else PASS,
              "\n".join(rows) if rows else (r.stdout + r.stderr)[-1500:], report_file="onsite_kv.json")
         gds_step(args, env, topo_file, step)
+        kvcache_step(args, env, topo_file, step)
     # 7. N-host IO500 ---------------------------------------------------------
     # IO500 on every host given -- this one alone when there are no --peers
     # (a one-node score; it still shows the per-phase limits)

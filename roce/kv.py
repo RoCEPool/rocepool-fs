@@ -10,6 +10,14 @@
     kv.mput({"a": b"1", "b": b"2"})
     kv.write_at / read_at / delete / mdelete
 
+GPU memory (KV-cache blocks straight between the OSTs and the GPU, no host copy):
+
+    buf = kv.register_device(tensor.data_ptr(), tensor.numel() * tensor.element_size())
+    buf.mput(["p7/b0", "p7/b1"], offsets=[0, blk], lengths=[blk, blk])   # prefill: store
+    n = kv.cached_prefix(["p7/b0", "p7/b1", "p7/b2"])  -> 2                # how many leading blocks exist
+    buf.mget(["p7/b0", "p7/b1"], offsets=[0, blk], caps=[blk, blk])      # decode / reuse: load
+    buf.direct                           -> True when the NIC writes into the GPU itself
+
 Every call goes straight from C to the owning OST (one round trip; the
 batched calls one frame per OST, all OSTs in parallel) -- no FUSE, no
 kernel crossing, no Python in the data path beyond the call itself.
@@ -55,8 +63,23 @@ def _load():
     lib.rpkv_mput.argtypes = [P, S, ctypes.POINTER(C), ctypes.POINTER(C), PS, ctypes.POINTER(ctypes.c_int)]
     lib.rpkv_mget.argtypes = [P, S, ctypes.POINTER(C), PP, PS, ctypes.POINTER(ctypes.c_int)]
     lib.rpkv_mdelete.argtypes = [P, S, ctypes.POINTER(C), ctypes.POINTER(ctypes.c_int)]
+    PI = ctypes.POINTER(ctypes.c_int)
+    lib.rpkv_dev_register.restype, lib.rpkv_dev_register.argtypes = P, [P, P, S]
+    lib.rpkv_dev_deregister.restype, lib.rpkv_dev_deregister.argtypes = None, [P]
+    lib.rpkv_dev_direct.restype, lib.rpkv_dev_direct.argtypes = ctypes.c_int, [P]
+    lib.rpkv_put_dev.argtypes = [P, C, P, S, S, PU64]
+    lib.rpkv_get_dev.argtypes = [P, C, P, S, S, PS]
+    lib.rpkv_mput_dev.argtypes = [P, S, ctypes.POINTER(C), P, PS, PS, PI]
+    lib.rpkv_mget_dev.argtypes = [P, S, ctypes.POINTER(C), P, PS, PS, PS, PI]
+    lib.rpkv_mcontains.argtypes = [P, S, ctypes.POINTER(C), PI]
+    lib.rpkv_dev_stats.restype, lib.rpkv_dev_stats.argtypes = None, [P, PU64, PU64, PU64, PU64]
+    lib.rp_devemu_alloc.restype, lib.rp_devemu_alloc.argtypes = P, [S]
+    lib.rp_devemu_free.restype, lib.rp_devemu_free.argtypes = None, [P]
+    lib.rp_devemu_copy_to.restype, lib.rp_devemu_copy_to.argtypes = ctypes.c_int, [P, C, S]
+    lib.rp_devemu_copy_from.restype, lib.rp_devemu_copy_from.argtypes = ctypes.c_int, [P, P, S]
     for f in ("rpkv_put", "rpkv_put_if", "rpkv_get", "rpkv_delete", "rpkv_write_at", "rpkv_read_at",
-              "rpkv_mput", "rpkv_mget", "rpkv_mdelete"):
+              "rpkv_mput", "rpkv_mget", "rpkv_mdelete", "rpkv_put_dev", "rpkv_get_dev", "rpkv_mput_dev",
+              "rpkv_mget_dev", "rpkv_mcontains"):
         getattr(lib, f).restype = ctypes.c_int
     _lib = lib
     return lib
@@ -163,3 +186,120 @@ class KVClient:
         karr, st = self._keys(keys)
         _check(self._lib.rpkv_mdelete(self._h, len(keys), karr, st), "mdelete")
         return [s == 0 for s in st]
+
+    # ---- GPU memory -------------------------------------------------------
+    def register_device(self, ptr: int, nbytes: int) -> "DeviceBuffer":
+        """GPU memory at device pointer `ptr` (e.g. tensor.data_ptr()) for the
+        *_dev transfers; the whole allocation is registered with the NIC once."""
+        return DeviceBuffer(self, ptr, nbytes)
+
+    def contains(self, keys: list[str]) -> list[bool]:
+        """one BATCH round trip per OST; also caches the keys' leases, so a
+        DeviceBuffer.mget right after moves data only"""
+        karr, st = self._keys(keys)
+        _check(self._lib.rpkv_mcontains(self._h, len(keys), karr, st), "contains")
+        return [bool(x) for x in st]
+
+    def cached_prefix(self, block_keys: list[str]) -> int:
+        """how many leading blocks of a prompt are stored"""
+        n = 0
+        for present in self.contains(block_keys):
+            if not present:
+                break
+            n += 1
+        return n
+
+    def dev_stats(self) -> dict:
+        v = [ctypes.c_uint64() for _ in range(4)]
+        self._lib.rpkv_dev_stats(self._h, *[ctypes.byref(x) for x in v])
+        return dict(zip(("direct_bytes", "bounced_bytes", "leases", "lease_hits"), (x.value for x in v)))
+
+
+class DeviceBuffer:
+    """A registered GPU allocation (KVClient.register_device). Offsets are
+    bytes from the pointer it was registered with."""
+
+    def __init__(self, client: KVClient, ptr: int, nbytes: int):
+        self._c, self._lib = client, client._lib
+        self.ptr, self.nbytes = ptr, nbytes
+        self._h = self._lib.rpkv_dev_register(client._h, ptr, nbytes)
+        if not self._h:
+            raise ValueError(f"0x{ptr:x}: not device memory of the CUDA runtime (or ROCEPOOL_DEV_EMU=1 emulator)")
+
+    @property
+    def direct(self) -> bool:
+        return bool(self._lib.rpkv_dev_direct(self._h))
+
+    def close(self) -> None:
+        if self._h:
+            self._lib.rpkv_dev_deregister(self._h)
+            self._h = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+    def put(self, key: str, offset: int, length: int) -> int:
+        v = ctypes.c_uint64()
+        _check(self._lib.rpkv_put_dev(self._c._h, key.encode(), self._h, offset, length, ctypes.byref(v)), key)
+        return v.value
+
+    def get(self, key: str, offset: int, cap: int) -> int:
+        """the value into the buffer at offset; its length (KeyError if absent)"""
+        n = ctypes.c_size_t()
+        _check(self._lib.rpkv_get_dev(self._c._h, key.encode(), self._h, offset, cap, ctypes.byref(n)), key)
+        return n.value
+
+    def mput(self, keys: list[str], offsets: list[int], lengths: list[int]) -> None:
+        karr, st = KVClient._keys(keys)
+        n = len(keys)
+        offs, lens = (ctypes.c_size_t * n)(*offsets), (ctypes.c_size_t * n)(*lengths)
+        _check(self._lib.rpkv_mput_dev(self._c._h, n, karr, self._h, offs, lens, st), "mput")
+        for k, s in zip(keys, st):
+            _check(s, k)
+
+    def mget(self, keys: list[str], offsets: list[int], caps: list[int]) -> list[int | None]:
+        """each value into the buffer at its offset; lengths (None: absent)"""
+        karr, st = KVClient._keys(keys)
+        n = len(keys)
+        offs, caps_ = (ctypes.c_size_t * n)(*offsets), (ctypes.c_size_t * n)(*caps)
+        lens = (ctypes.c_size_t * n)()
+        _check(self._lib.rpkv_mget_dev(self._c._h, n, karr, self._h, offs, caps_, lens, st), "mget")
+        out = []
+        for i, k in enumerate(keys):
+            if st[i] == -errno.ENOENT:
+                out.append(None)
+                continue
+            _check(st[i], k)
+            out.append(lens[i])
+        return out
+
+
+class EmulatedDevice:
+    """The emulated GPU of the library (ROCEPOOL_DEV_EMU=1; tests and
+    benchmarks without a GPU): memory the CPU cannot touch -- a stray CPU
+    access faults -- that the RDMA emulator reaches as a NIC reaches a GPU."""
+
+    def __init__(self):
+        self._lib = _load()
+
+    def alloc(self, nbytes: int) -> int:
+        p = self._lib.rp_devemu_alloc(nbytes)
+        if not p:
+            raise MemoryError(nbytes)
+        return p
+
+    def free(self, ptr: int) -> None:
+        self._lib.rp_devemu_free(ptr)
+
+    def write(self, ptr: int, data: bytes) -> None:
+        if self._lib.rp_devemu_copy_to(ptr, data, len(data)):
+            raise ValueError("outside an emulated allocation")
+
+    def read(self, ptr: int, n: int) -> bytes:
+        buf = ctypes.create_string_buffer(n)
+        if self._lib.rp_devemu_copy_from(buf, ptr, n):
+            raise ValueError("outside an emulated allocation")
+        return buf.raw

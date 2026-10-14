@@ -10,6 +10,8 @@ roce/native/rocepool-fuse
 roce/native/rocepool-kv-bench
 roce/native/softverbs/rocepool-fuse
 roce/native/softverbs/rocepool-kv-bench
+roce/native/rocepool-kvcache-bench
+roce/native/softverbs/rocepool-kvcache-bench
 roce/native/ofi/
 roce/native/.backend
 roce/native/cufile/
@@ -21,6 +23,7 @@ aws_runs/
 onsite_*.json
 io500_report.json
 gds_report.json
+kvcache_report.json
 roce_env.sh
 run.log
 selftest.log

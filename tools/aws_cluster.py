@@ -383,7 +383,7 @@ class Run:
         head = self.state["hosts"][0]["public"]
         files = ["onsite_report.json", "onsite_io500.json", "onsite_io500_valid.json", "run.log", "aws_run.out",
                  "onsite_crossover.json", "onsite_stress.json", "onsite_ior.json", "onsite_ior_hard.json",
-                 "onsite_kv.json", "onsite_gds.json", "selftest.log"]
+                 "onsite_kv.json", "onsite_gds.json", "onsite_kvcache.json", "selftest.log"]
         got = []
         for f in files:
             try:

@@ -4,6 +4,7 @@
 #define ROCEPOOL_FS_H
 
 #include "rocepool_client.h"
+#include "rocepool_devmem.h"
 
 #include <pthread.h>
 #include <stdatomic.h>
@@ -155,14 +156,8 @@ void sc_clear(scache_t *c);
 int sc_read(scache_t *c, const attr_t *a, uint64_t off, size_t len, uint8_t *out);
 
 /* ---- device (GPU) memory: GPUDirect-Storage-style I/O ----
- * The runtime's copies (CUDA: rocepool_cuda.c; tests: an emulator), used
- * only where a transfer cannot go NIC <-> device directly. 0 or -errno. */
-typedef struct {
-    int (*to_dev)(void *dev, const void *host, size_t n, void *ctx);
-    int (*from_dev)(void *host, const void *dev, size_t n, void *ctx);
-    int (*zero)(void *dev, size_t n, void *ctx);
-    void *ctx;
-} rp_devops_t;
+ * rp_devops_t (rocepool_devmem.h): the runtime's copies, used only where a
+ * transfer cannot go NIC <-> device directly. */
 /* a device buffer: dev is the device pointer; mem its NIC registration
  * (roce_mem_register_device), or NULL when the NIC refused it: then every
  * transfer bounces through host memory */

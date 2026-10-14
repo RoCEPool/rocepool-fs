@@ -204,9 +204,12 @@ FUSE_OUT="${FUSE_OUT:-$SCRIPT_DIR/rocepool-fuse}"
 echo "[build] built $FUSE_OUT (native FUSE client)"
 KV_OUT="${KV_OUT:-$SCRIPT_DIR/librocepool_kv.so}"
 "$CC" -O2 -g -Wall -Wextra -pthread -fPIC -shared "${CFLAGS_EXTRA[@]}" \
-  rocepool_kv.c rocepool_client.c "$TSRC" -o "$KV_OUT" "${LDFLAGS_EXTRA[@]}" "${TLIBS[@]}" -lpthread
+  rocepool_kv.c rocepool_client.c rocepool_devmem.c "$TSRC" -o "$KV_OUT" "${LDFLAGS_EXTRA[@]}" "${TLIBS[@]}" -ldl -lpthread
 "$CC" -O2 -g -Wall -Wextra -pthread -DRPKV_BENCH "${CFLAGS_EXTRA[@]}" \
-  rocepool_kv.c rocepool_client.c "$TSRC" -o "$SCRIPT_DIR/rocepool-kv-bench" "${LDFLAGS_EXTRA[@]}" "${TLIBS[@]}" -lpthread
+  rocepool_kv.c rocepool_client.c rocepool_devmem.c "$TSRC" -o "$SCRIPT_DIR/rocepool-kv-bench" "${LDFLAGS_EXTRA[@]}" "${TLIBS[@]}" -ldl -lpthread
+# KV-cache reuse (TTFT) benchmark over the KV API's GPU calls (tools/bench_kvcache.py)
+"$CC" -O2 -g -Wall -Wextra -pthread "${CFLAGS_EXTRA[@]}" rocepool_kvcache_bench.c \
+  rocepool_kv.c rocepool_client.c rocepool_devmem.c "$TSRC" -o "$SCRIPT_DIR/rocepool-kvcache-bench" "${LDFLAGS_EXTRA[@]}" "${TLIBS[@]}" -ldl -lpthread
 echo "[build] built $KV_OUT (native KV client API) and rocepool-kv-bench"
 # The LD_PRELOAD interception client: the client core with hidden visibility
 # (only the libc entry points leave the .so), linked against rdma-core.
@@ -224,7 +227,7 @@ echo "[build] built $ICP_OUT (LD_PRELOAD interception client)"
 # copy GDS programs pick up through LD_LIBRARY_PATH. No CUDA needed to build.
 CUF_OUT="${CUF_OUT:-$SCRIPT_DIR/librocepool_cufile.so}"
 CUF_TMP="$(mktemp -d)"
-for src in rocepool_fs.c rocepool_client.c "$TSRC" rocepool_cufile.c; do
+for src in rocepool_fs.c rocepool_client.c "$TSRC" rocepool_devmem.c rocepool_cufile.c; do
   "$CC" -O2 -g -Wall -Wextra -pthread -fPIC -fvisibility=hidden "${CFLAGS_EXTRA[@]}" -c "$src" -o "$CUF_TMP/$(basename "$src").o"
 done
 "$CC" -shared -pthread -Wl,-soname,libcufile.so.0 "$CUF_TMP"/*.o -o "$CUF_OUT" "${LDFLAGS_EXTRA[@]}" "${TLIBS[@]}" -ldl -lpthread
