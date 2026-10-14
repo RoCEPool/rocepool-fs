@@ -583,6 +583,23 @@ off64_t lseek64(int fd, off64_t off, int whence) {
     return f ? do_lseek(f, off, whence) : real_lseek64(fd, off, whence);
 }
 
+/* For the GPU-direct library (rocepool_cufile.c) in the same process: the
+ * file a descriptor of ours names (its path relative to the prefix), and
+ * its buffered writes pushed out before device I/O reads the file. 0, or
+ * -1 when fd is not ours. */
+int rp_intercept_fd_path(int fd, char *out, size_t n) {
+    if (!ready()) return -1;
+    ofile_t *f = fd_get(fd);
+    if (!f || f->is_dir || !f->h) return -1;
+    snprintf(out, n, "%s", f->h->path);
+    return 0;
+}
+int rp_intercept_fd_flush(int fd) {
+    if (!ready()) return -1;
+    ofile_t *f = fd_get(fd);
+    return f ? flush_file(f) : -1;
+}
+
 int fsync(int fd) {
     ENSURE();
     ofile_t *f = fd_get(fd);

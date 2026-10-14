@@ -475,6 +475,38 @@ def cluster_step(args, ip: str, lib: str, fuse_client: str, intercept_lib: str, 
             pass
 
 
+def gds_step(args, env: dict, topo_file: str, step) -> None:
+    """GPUDirect Storage: the GPUs of every host (driver, dma-buf / peermem,
+    PCIe path to the NIC), and on a host with GPUs the streaming benchmark
+    into GPU memory (tools/bench_gds.py, rocepool's libcufile.so.0)."""
+    begin("gds", "GPUs and GPUDirect Storage streaming into GPU memory")
+    out = os.path.join(ROOT, "onsite_gds.json")
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "bench_gds.py"), "--report", out,
+                        "--size-mib", "1024" if args.bench == "quick" else "4096"],
+                       capture_output=True, text=True, env=dict(env, ROCEPOOL_TOPOLOGY=topo_file), timeout=7200)
+    try:
+        with open(out) as f:
+            rep = json.load(f)
+    except (OSError, ValueError):
+        step("gds", WARN, f"GPU check produced no report: {(r.stdout + r.stderr)[-1200:]}")
+        return
+    peers_gpus = {}
+    for peer, _ in (parse_peers(args.peers) if args.peers else ([(args.peer, "")] if args.peer else [])):
+        try:  # the tree is at this path on cluster hosts, at --remote-dir on a two-host peer
+            p = ssh(peer, f"cd {shlex.quote(ROOT)} 2>/dev/null || cd {shlex.quote(args.remote_dir)}; "
+                          "python3 tools/bench_gds.py --inventory", timeout=300)
+            inv = json.loads(p.stdout)
+            peers_gpus[peer] = {"gpus": len(inv["gpus"]), "dmabuf": inv["dmabuf"], "peermem": inv["peermem"],
+                                "notes": inv["notes"]}
+        except (ValueError, KeyError, OSError, subprocess.TimeoutExpired) as exc:
+            peers_gpus[peer] = {"error": str(exc)[-300:]}
+    detail = rep["summary"]
+    with_gpus = [f"{h}: {v['gpus']} GPU(s)" for h, v in peers_gpus.items() if v.get("gpus")]
+    if with_gpus:
+        detail += "; peers with GPUs: " + ", ".join(with_gpus)
+    step("gds", rep["status"], detail, report_file="onsite_gds.json", peers=peers_gpus)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--ip", help="this host's RoCE IP (default: auto-detected RoCE v2 GID)")
@@ -688,6 +720,7 @@ def main() -> int:
         bad = [l for l in rows if '"error"' in l]
         step("kv", FAIL if r.returncode or bad or not rows else PASS,
              "\n".join(rows) if rows else (r.stdout + r.stderr)[-1500:], report_file="onsite_kv.json")
+        gds_step(args, env, topo_file, step)
     # 7. N-host IO500 ---------------------------------------------------------
     # IO500 on every host given -- this one alone when there are no --peers
     # (a one-node score; it still shows the per-phase limits)

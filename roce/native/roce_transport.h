@@ -125,6 +125,20 @@ typedef struct roce_mem roce_mem_t;
 roce_mem_t *roce_mem_register(void *addr, size_t len);
 void roce_mem_release(roce_mem_t *mem);
 
+/* Device (GPU) memory: `addr` is the device virtual address the
+ * application uses (a CUDA device pointer), `len` bytes of it. With
+ * dmabuf_fd >= 0 the range is the dma-buf `dmabuf_fd` from `dmabuf_offset`
+ * (cuMemGetHandleForAddressRange(CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD)) and
+ * is registered with ibv_reg_dmabuf_mr (verbs) / FI_MR_DMABUF (libfabric);
+ * with -1 the device pointer itself is registered (verbs with the
+ * nvidia-peermem module; libfabric FI_HMEM_CUDA). The NIC moves the bytes;
+ * the CPU never touches the range: a request whose segment is device
+ * memory always goes as a registered segment the server RDMA READs, never
+ * copied inline, and an RDMA READ into it lands directly in the GPU.
+ * cuda_device: the CUDA ordinal (libfabric needs it; verbs ignores it). */
+roce_mem_t *roce_mem_register_device(void *addr, size_t len, int dmabuf_fd, uint64_t dmabuf_offset, int cuda_device);
+int roce_mem_is_device(const roce_mem_t *mem);
+
 typedef struct { const void *addr; size_t len; roce_mem_t *mem; } roce_seg_t;
 typedef struct { uint8_t *data; size_t len; void *pool; void *buf; } roce_reply_t;
 

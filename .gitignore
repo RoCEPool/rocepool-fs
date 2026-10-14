@@ -12,12 +12,15 @@ roce/native/softverbs/rocepool-fuse
 roce/native/softverbs/rocepool-kv-bench
 roce/native/ofi/
 roce/native/.backend
+roce/native/cufile/
+roce/native/softverbs/cufile/
 # run outputs
 .bench_cache/
 mnt/
 aws_runs/
 onsite_*.json
 io500_report.json
+gds_report.json
 roce_env.sh
 run.log
 selftest.log

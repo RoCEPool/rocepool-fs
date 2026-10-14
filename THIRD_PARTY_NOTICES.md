@@ -38,6 +38,8 @@ version and which rocepool file uses which upstream file, and
 | libibverbs / librdmacm API (rdma-core; source in `deps/`) | `roce/native/roce_transport.c`; `softverbs/` and `test_stubs/` re-declare the subset used, written against the public API | GPL-2.0 or BSD |
 | libfabric API (source in `deps/`) | `roce/native/ofi_transport.c` | BSD-2-Clause or GPL-2.0 |
 | Linux UAPI `<linux/fuse.h>`, `<linux/io_uring.h>` (from the system's kernel headers at build time) | `roce/native/rocepool_fuse.c`; a few constants of newer kernels are spelled out there | (GPL-2.0 WITH Linux-syscall-note) OR BSD-2-Clause / OR MIT |
+| NVIDIA cuFile API (GPUDirect Storage API reference) | `roce/native/rocepool_cufile.c` implements the API: the types, constants and function signatures are re-declared from the public documentation; no NVIDIA header or code is included | the API documentation's terms |
+| CUDA driver API (`libcuda.so.1`, opened at run time, not linked or shipped) | `roce/native/rocepool_cufile.c`, `tests/fakes/gds_probe.c` | NVIDIA driver license (the user's installed driver) |
 | Apache Thrift Compact Protocol (specification) | `wlp/compact_protocol.py`, a re-implementation | Apache-2.0 |
 
 ## rocepool

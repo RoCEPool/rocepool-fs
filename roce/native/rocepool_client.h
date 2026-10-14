@@ -102,6 +102,7 @@ typedef struct { uint64_t version, size, addr, seq, keyhash; uint32_t rkey; } rp
 void rp_lookup_stats(uint64_t *direct, uint64_t *misses);   /* (rocepool_fs.c) one-sided MDT lookups / misses */
 int rp_ost_lease(rp_peer_t *p, const char *key, rp_lease_t *out);
 int rp_ost_read_direct(rp_peer_t *p, const rp_lease_t *l, uint64_t off, size_t len, void *dst);
+int rp_ost_read_direct_mem(rp_peer_t *p, const rp_lease_t *l, uint64_t off, size_t len, void *dst, roce_mem_t *dmem);
 /* raw one-sided reads over a peer's pooled connection (roce_read_t) */
 typedef roce_read_t rp_read_t;
 int rp_rdma_read(rp_peer_t *p, const rp_read_t *reads, int n);

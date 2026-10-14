@@ -167,7 +167,7 @@ echo "[build] using $source_used"
 # dependencies (libibverbs, libefa) are not on the default path
 [ -n "${ROCE_LDFLAGS:-}" ] && LDFLAGS_EXTRA+=(${ROCE_LDFLAGS})
 if [ "$BACKEND" = verbs ]; then
-  TSRC=roce_transport.c; TLIBS=(-lrdmacm -libverbs)
+  TSRC=roce_transport.c; TLIBS=(-lrdmacm -libverbs -ldl)
 else
   TSRC=ofi_transport.c; TLIBS=(-lfabric)
 fi
@@ -219,4 +219,18 @@ done
 "$CC" -shared -pthread "$ICP_TMP"/*.o -o "$ICP_OUT" "${LDFLAGS_EXTRA[@]}" "${TLIBS[@]}" -ldl -lpthread
 rm -rf "$ICP_TMP"
 echo "[build] built $ICP_OUT (LD_PRELOAD interception client)"
+# GPUDirect Storage: the cuFile API (libcufile.so.0) served by the client
+# core, hidden like the interception library's; cufile/libcufile.so.0 is the
+# copy GDS programs pick up through LD_LIBRARY_PATH. No CUDA needed to build.
+CUF_OUT="${CUF_OUT:-$SCRIPT_DIR/librocepool_cufile.so}"
+CUF_TMP="$(mktemp -d)"
+for src in rocepool_fs.c rocepool_client.c "$TSRC" rocepool_cufile.c; do
+  "$CC" -O2 -g -Wall -Wextra -pthread -fPIC -fvisibility=hidden "${CFLAGS_EXTRA[@]}" -c "$src" -o "$CUF_TMP/$(basename "$src").o"
+done
+"$CC" -shared -pthread -Wl,-soname,libcufile.so.0 "$CUF_TMP"/*.o -o "$CUF_OUT" "${LDFLAGS_EXTRA[@]}" "${TLIBS[@]}" -ldl -lpthread
+rm -rf "$CUF_TMP"
+mkdir -p "$SCRIPT_DIR/cufile"
+cp -f "$CUF_OUT" "$SCRIPT_DIR/cufile/libcufile.so.0"
+ln -sf libcufile.so.0 "$SCRIPT_DIR/cufile/libcufile.so"   # for -lcufile at link time
+echo "[build] built $CUF_OUT and cufile/libcufile.so.0 (GPUDirect Storage, cuFile API)"
 echo "$BACKEND" > "$SCRIPT_DIR/.backend"   # which transport the built artifacts use

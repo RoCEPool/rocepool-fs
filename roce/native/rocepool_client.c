@@ -509,9 +509,17 @@ int rp_rdma_read(rp_peer_t *p, const rp_read_t *reads, int n) {
 static __thread uint8_t *tl_scratch;
 
 int rp_ost_read_direct(rp_peer_t *p, const rp_lease_t *l, uint64_t off, size_t len, void *dst) {
+    return rp_ost_read_direct_mem(p, l, off, len, dst, NULL);
+}
+
+/* dmem: the registered region dst lies in -- device (GPU) memory included:
+ * the data lands there straight from the OST's RAM, only the 40 bytes of
+ * seqlock header and trailer come into host scratch. NULL: arena memory. */
+int rp_ost_read_direct_mem(rp_peer_t *p, const rp_lease_t *l, uint64_t off, size_t len, void *dst, roce_mem_t *dmem) {
     if (off + len > l->size) return -EAGAIN;
     if (!tl_scratch) { tl_scratch = rp_bulk_alloc(4096); if (!tl_scratch) return -ENOMEM; }
-    roce_mem_t *smem = rp_bulk_mem(tl_scratch, 4096), *dmem = rp_bulk_mem(dst, len);
+    roce_mem_t *smem = rp_bulk_mem(tl_scratch, 4096);
+    if (!dmem) dmem = rp_bulk_mem(dst, len);
     if (!smem || !dmem) return -EINVAL;  /* dst must be arena memory */
     memset(tl_scratch, 0, 48);
     roce_read_t reads[3] = {

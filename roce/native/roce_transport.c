@@ -59,6 +59,7 @@
 #define ROCE_SERVER_MAX_INFLIGHT_DEFAULT 64
 
 #include <arpa/inet.h>
+#include <dlfcn.h>
 #include <errno.h>
 #include <netdb.h>
 #include <pthread.h>
@@ -514,14 +515,40 @@ struct roce_mem {
     size_t len;
     pthread_mutex_t lock;
     int n;
+    int dev, dmabuf_fd;     /* device memory (roce_mem_register_device) */
+    uint64_t dmabuf_off;
     struct { struct ibv_pd *pd; struct ibv_mr *mr; } e[ROCE_MEM_PDS];
 };
+
+/* ibv_reg_dmabuf_mr is rdma-core v34+ (2021): a weak reference, so this
+ * library still loads on an older one (NULL there: device memory then
+ * needs nvidia-peermem) */
+struct ibv_mr *ibv_reg_dmabuf_mr(struct ibv_pd *pd, uint64_t offset, size_t length, uint64_t iova, int fd, int access);
+#pragma weak ibv_reg_dmabuf_mr
+typedef struct ibv_mr *(*reg_dmabuf_fn)(struct ibv_pd *, uint64_t, size_t, uint64_t, int, int);
+static reg_dmabuf_fn reg_dmabuf(void) { return ibv_reg_dmabuf_mr; }
+
+roce_mem_t *roce_mem_register_device(void *addr, size_t len, int dmabuf_fd, uint64_t dmabuf_offset, int cuda_device) {
+    (void)cuda_device;
+    if (dmabuf_fd >= 0 && !reg_dmabuf()) {
+        set_error("this rdma-core has no ibv_reg_dmabuf_mr (v34+ needed for dma-buf device memory)");
+        return NULL;
+    }
+    struct roce_mem *m = roce_mem_register(addr, len);
+    if (!m) return NULL;
+    m->dev = 1;
+    m->dmabuf_fd = dmabuf_fd;
+    m->dmabuf_off = dmabuf_offset;
+    return m;
+}
+int roce_mem_is_device(const roce_mem_t *m) { return m && m->dev; }
 
 roce_mem_t *roce_mem_register(void *addr, size_t len) {
     struct roce_mem *m = calloc(1, sizeof(*m));
     if (!m) { set_error("out of memory"); return NULL; }
     m->addr = addr;
     m->len = len;
+    m->dmabuf_fd = -1;
     pthread_mutex_init(&m->lock, NULL);
     return m;
 }
@@ -540,8 +567,10 @@ static int mem_keys(struct roce_mem *m, struct ibv_pd *pd, uint32_t *lkey, uint3
     for (int i = 0; i < m->n; i++)
         if (m->e[i].pd == pd) { *lkey = m->e[i].mr->lkey; *rkey = m->e[i].mr->rkey; rc = 0; break; }
     if (rc && m->n < ROCE_MEM_PDS) {
-        struct ibv_mr *mr = ibv_reg_mr(pd, m->addr, m->len,
-                                       IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE);
+        int access = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE;
+        struct ibv_mr *mr = m->dev && m->dmabuf_fd >= 0
+            ? reg_dmabuf()(pd, m->dmabuf_off, m->len, (uint64_t)(uintptr_t)m->addr, m->dmabuf_fd, access)
+            : ibv_reg_mr(pd, m->addr, m->len, access);
         if (mr) {
             m->e[m->n].pd = pd;
             m->e[m->n].mr = mr;
@@ -1059,12 +1088,22 @@ static int client_request(struct roce_conn *conn, const void *head, size_t head_
                           int nsegs, roce_reply_t *reply, int timeout_ms) {
     struct roce_qp_resources *r = &conn->qp;
     size_t body = 0;
-    int registered = nsegs > 0 && nsegs <= RT_MAX_SRC;
-    for (int i = 0; i < nsegs; i++) { body += segs[i].len; if (!segs[i].mem) registered = 0; }
+    int registered = nsegs > 0 && nsegs <= RT_MAX_SRC, device = 0;
+    for (int i = 0; i < nsegs; i++) {
+        body += segs[i].len;
+        if (!segs[i].mem) registered = 0;
+        else if (segs[i].mem->dev) device = 1;
+    }
     size_t total = head_len + body;
     if (total > r->max_frame_bytes) {
         set_error("request_len %zu exceeds max_frame_bytes %zu", total, r->max_frame_bytes);
         return -1;
+    }
+    /* device memory is never copied by the CPU: only the registered-segment
+     * shape (the server RDMA READs it) can carry it */
+    if (device && (!registered || head_len > ROCE_SMALL_FRAME - RT_ENV_SIZE)) {
+        set_error("device memory segments must all be registered, with a head that fits inline");
+        return ROCE_ERR_NOT_DELIVERED;
     }
     int shared = r->pool != NULL;
     struct rbuf *bufs[2] = { NULL, NULL };
@@ -1072,7 +1111,7 @@ static int client_request(struct roce_conn *conn, const void *head, size_t head_
     uint8_t *inl = r->small_buf + RT_ENV_SIZE;  /* inline bytes go after the envelope */
     size_t inline_cap = ROCE_SMALL_FRAME - RT_ENV_SIZE;
     /* decide the shape: all inline / head inline + registered segments / head inline + one copied bulk */
-    int all_inline = total <= inline_cap;
+    int all_inline = total <= inline_cap && !device;
     int need_bulk = !all_inline && !registered;   /* the bulk goes through a pool / frame buffer */
     if (!all_inline && head_len > inline_cap) need_bulk = 1;  /* head too big: everything through the bulk buffer */
     if (shared) {
