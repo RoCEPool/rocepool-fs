@@ -1,5 +1,9 @@
 # rocepool
 
+[![ci](https://github.com/RoCEPool/rocepool-fs/actions/workflows/ci.yml/badge.svg)](https://github.com/RoCEPool/rocepool-fs/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/RoCEPool/rocepool-fs)](https://github.com/RoCEPool/rocepool-fs/releases/latest)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 A distributed file system whose data lives in a memory pool spread over many
 hosts and is moved with RDMA (RoCE v2, or AWS EFA through libfabric).
 
@@ -25,6 +29,15 @@ hosts and is moved with RDMA (RoCE v2, or AWS EFA through libfabric).
   command checks the hosts, builds everything (offline: all third-party
   sources are in `deps/`), starts the servers, picks the fastest client mode,
   runs IO500 and writes a report with a bottleneck analysis.
+
+## Download
+
+- **Offline package** (whole tree, every third-party source included):
+  [Releases](https://github.com/RoCEPool/rocepool-fs/releases/latest) ->
+  `rocepool-full-<version>.tar.gz`
+- **Container image**: `docker pull ghcr.io/rocepool/rocepool-fs:latest`
+  ([docs/CONTAINER.md](docs/CONTAINER.md))
+- What changed in each version: [CHANGELOG.md](CHANGELOG.md)
 
 ## Quick start
 
