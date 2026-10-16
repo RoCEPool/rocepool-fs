@@ -97,6 +97,16 @@ jobs:
           docker build -t "$img:$v" -t "$img:latest" .
           docker push "$img:$v"
           docker push "$img:latest"
+      - name: is the image public?
+        run: |
+          v=$(tr -d ' \n' < VERSION)
+          img="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          docker logout ghcr.io >/dev/null 2>&1 || true
+          if docker manifest inspect "$img:$v" >/dev/null 2>&1; then
+            echo "::notice title=container image::$img:$v can be pulled anonymously"
+          else
+            echo "::warning title=container image::$img is not public: the owner sets it once in the package's settings (Danger Zone > Change visibility > Public)"
+          fi
       - name: earlier versions without a release
         env:
           GH_TOKEN: ${{ github.token }}
