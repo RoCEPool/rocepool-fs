@@ -45,27 +45,85 @@ jobs:
           echo "$r -- $v" >> "$GITHUB_STEP_SUMMARY"
           grep -E '^(FAIL|ERROR):' unittest.log | head -20 | sed 's/^/::error title=test::/' || true
 
+  image:
+    # the container image builds, and its emulator self-test passes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - name: build
+        run: docker build -t rocepool:ci .
+      - name: self-test inside the image (RDMA emulator)
+        run: docker run --rm rocepool:ci python3 -m unittest tests.test_kv_api tests.test_kv_gpu.KVGpuTests
+
   release:
-    # every version that reaches main and passes build + test becomes a
-    # GitHub Release (tag v<VERSION>), with the offline package attached
-    needs: [build, test]
+    # every version that reaches main and passes build + test + image becomes
+    # a GitHub Release (tag v<VERSION>) with the offline package attached --
+    # notes from CHANGELOG.md -- and a container image
+    # ghcr.io/<owner>/<repo>:<VERSION> (+ :latest). Versions in the history
+    # without a release (e.g. from before the repository moved) are released
+    # too, each packaged from the commit that introduced it.
+    needs: [build, test, image]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      packages: write
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - name: release v<VERSION> if new
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           v=$(tr -d ' \n' < VERSION)
-          if gh release view "v$v" >/dev/null 2>&1; then echo "v$v already released"; exit 0; fi
-          bash tools/package.sh "$RUNNER_TEMP/rocepool-full-$v.tar.gz"
-          {
-            echo "rocepool $v -- built from $GITHUB_SHA after build and test passed."
-            echo
-            echo 'Offline package: `rocepool-full-'"$v"'.tar.gz` (all third-party sources in `deps/`).'
-            echo 'On a node: `tar xzf rocepool-full-'"$v"'.tar.gz && cd rocepool && cp cluster.conf.example cluster.conf && sudo ./run.sh`'
-          } > notes.md
-          gh release create "v$v" "$RUNNER_TEMP/rocepool-full-$v.tar.gz" --target "$GITHUB_SHA" --title "rocepool $v" --notes-file notes.md
+          if gh release view "v$v" >/dev/null 2>&1; then
+            echo "v$v already released"
+          else
+            bash tools/package.sh "$RUNNER_TEMP/rocepool-full-$v.tar.gz"
+            python3 tools/release_notes.py "$v" --sha "$GITHUB_SHA" > notes.md
+            gh release create "v$v" "$RUNNER_TEMP/rocepool-full-$v.tar.gz" --target "$GITHUB_SHA" \
+              --title "rocepool $v" --notes-file notes.md --latest
+          fi
+      - name: container image ghcr.io/<owner>/<repo>:<VERSION>
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=$(tr -d ' \n' < VERSION)
+          img="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          if docker manifest inspect "$img:$v" >/dev/null 2>&1; then echo "$img:$v already published"; exit 0; fi
+          docker build -t "$img:$v" -t "$img:latest" .
+          docker push "$img:$v"
+          docker push "$img:latest"
+      - name: earlier versions without a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cur=$(tr -d ' \n' < VERSION)
+          git log --reverse --format=%H -- VERSION | while read -r c; do
+            v=$(git show "$c:VERSION" | tr -d ' \n')
+            [ "$v" = "$cur" ] && continue
+            if gh release view "v$v" >/dev/null 2>&1; then
+              # a release from before the notes came from CHANGELOG.md: refresh them
+              if ! gh release view "v$v" --json body -q .body | grep -q 'Offline package'; then
+                python3 tools/release_notes.py "$v" --sha "$c" --no-image > "notes-$v.md"
+                gh release edit "v$v" --notes-file "notes-$v.md"
+              fi
+              continue
+            fi
+            wt="$RUNNER_TEMP/backfill-$v/rocepool"
+            mkdir -p "$(dirname "$wt")"
+            git worktree add -q "$wt" "$c"
+            bash "$wt/tools/package.sh" "$RUNNER_TEMP/rocepool-full-$v.tar.gz"
+            python3 tools/release_notes.py "$v" --sha "$c" --no-image > "notes-$v.md"
+            gh release create "v$v" "$RUNNER_TEMP/rocepool-full-$v.tar.gz" --target "$c" \
+              --title "rocepool $v" --notes-file "notes-$v.md" --latest=false
+            git worktree remove --force "$wt"
+          done
+          # the current version's notes too, if its release predates them
+          if ! gh release view "v$cur" --json body -q .body | grep -q 'Offline package'; then
+            python3 tools/release_notes.py "$cur" --sha "$GITHUB_SHA" > notes.md
+            gh release edit "v$cur" --notes-file notes.md
+          fi
