@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
-  workflow_dispatch:
+  workflow_dispatch:   # on main: also (re)runs the release job, e.g. to finish a backfill
 
 jobs:
   build:
@@ -64,7 +64,7 @@ jobs:
     # without a release (e.g. from before the repository moved) are released
     # too, each packaged from the commit that introduced it.
     needs: [build, test, image]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -115,11 +115,18 @@ jobs:
             fi
             wt="$RUNNER_TEMP/backfill-$v/rocepool"
             mkdir -p "$(dirname "$wt")"
-            git worktree add -q "$wt" "$c"
-            bash "$wt/tools/package.sh" "$RUNNER_TEMP/rocepool-full-$v.tar.gz"
+            git worktree add -q "$wt" "$c" || { echo "::error title=worktree v$v::git worktree add $c failed"; exit 1; }
+            if ! out=$(bash "$wt/tools/package.sh" "$RUNNER_TEMP/rocepool-full-$v.tar.gz" 2>&1); then
+              echo "::error title=package v$v::$(echo "$out" | tail -5 | tr '\n' ' ')"
+              exit 1
+            fi
             python3 tools/release_notes.py "$v" --sha "$c" --no-image > "notes-$v.md"
-            gh release create "v$v" "$RUNNER_TEMP/rocepool-full-$v.tar.gz" --target "$c" \
-              --title "rocepool $v" --notes-file "notes-$v.md" --latest=false
+            # any failure says why, as an annotation (readable without the raw log)
+            if ! out=$(gh release create "v$v" "$RUNNER_TEMP/rocepool-full-$v.tar.gz" --target "$c" \
+                         --title "rocepool $v" --notes-file "notes-$v.md" --latest=false 2>&1); then
+              echo "::error title=backfill v$v::$(echo "$out" | tr '\n' ' ')"
+              exit 1
+            fi
             git worktree remove --force "$wt"
           done
           # the current version's notes too, if its release predates them
