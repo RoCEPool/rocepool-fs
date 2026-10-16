@@ -7,7 +7,10 @@ suite is published automatically:
   `rocepool-full-<version>.tar.gz` (every third-party source included);
 - a container image `ghcr.io/rocepool/rocepool-fs:<version>` (and `:latest`).
 
-Each section below becomes that release's notes.
+Each section below becomes that release's notes. Versions from before this
+repository (20261014a and older) have no release page; each one's
+commit and full source archive (`deps/` included, so it builds offline) are
+linked under its heading.
 
 ## 20261016a
 
@@ -17,8 +20,7 @@ Each section below becomes that release's notes.
   with the RDMA emulator ready, for clients and servers in containers and
   for trying rocepool without RDMA hardware. See
   [docs/CONTAINER.md](docs/CONTAINER.md).
-- **Release notes come from this changelog.** Earlier versions are released
-  too, each built from the commit that introduced it.
+- **Release notes come from this changelog.**
 
 ## 20261014b
 
@@ -42,6 +44,8 @@ Each section below becomes that release's notes.
 
 ## 20261014a
 
+Source: [commit 9c35e33](https://github.com/RoCEPool/rocepool-fs/commit/9c35e33fef66381b002201b714ac001d9263d527), [tar.gz](https://github.com/RoCEPool/rocepool-fs/archive/9c35e33fef66381b002201b714ac001d9263d527.tar.gz)
+
 - **GPUDirect Storage**: a cuFile-compatible `libcufile.so.0`.
   - Reads go from the storage servers' memory straight into GPU memory by
     RDMA, through a dma-buf or nvidia-peermem registration. Writes are
@@ -55,6 +59,8 @@ Each section below becomes that release's notes.
 
 ## 20261012b
 
+Source: [commit baed826](https://github.com/RoCEPool/rocepool-fs/commit/baed8264e90f78d6003c8ece52e8e45fa8bee6eb), [tar.gz](https://github.com/RoCEPool/rocepool-fs/archive/baed8264e90f78d6003c8ece52e8e45fa8bee6eb.tar.gz)
+
 - **The storage server's RAM cache is bounded on one-sided reads.** A lease
   now evicts like a write does. Before this fix, the site run's server was
   OOM-killed with 117 GiB resident against a 29 GiB budget.
@@ -64,6 +70,8 @@ Each section below becomes that release's notes.
   reports its first error lines.
 
 ## 20261012a
+
+Source: [commit 4e71958](https://github.com/RoCEPool/rocepool-fs/commit/4e71958aa597c06c77c822b9caca39b7a715dc5c), [tar.gz](https://github.com/RoCEPool/rocepool-fs/archive/4e71958aa597c06c77c822b9caca39b7a715dc5c.tar.gz)
 
 - **Initial import:**
   - native C metadata (MDT) and object (OST) servers;
