@@ -437,6 +437,9 @@ def cluster_step(args, ip: str, lib: str, fuse_client: str, intercept_lib: str, 
         out = os.path.join(ROOT, fname)
         cmd = [sys.executable, os.path.join(ROOT, "tools", "io500_run.py"), "--report", out, "--project", "auto",
                "--fuse-uring", channel, "--client", client, "--direct-read", direct, *extra]
+        if name == "io500-valid" and os.path.exists(os.path.join(ROOT, "onsite_io500.json")):
+            # the quick run's write speeds size the data: each write phase lasts 300 s
+            cmd += ["--rates-from", os.path.join(ROOT, "onsite_io500.json")]
         begin(name, "official IO500 on " + ", ".join(n["ip"] for n in cluster["nodes"])
               + (" (300 s per phase: about an hour)" if "--valid" in extra else " (about 15-30 min)"))
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
@@ -459,7 +462,23 @@ def cluster_step(args, ip: str, lib: str, fuse_client: str, intercept_lib: str, 
             err = [l for l in text.splitlines() if re.match(r"^[A-Za-z_.]*(Error|Exception)\b", l)]
             if err:
                 detail += "\n" + err[-1][:2000]
-        step(name, FAIL if timed_out or p.returncode else PASS,
+        # the run worked, but is the result usable? IO500's own INVALID
+        # reasons beyond those a short run has by design, and client probes
+        # that all failed (the faster client then goes unmeasured), are WARN
+        problems = []
+        try:
+            with open(out) as f:
+                rep = json.load(f)
+            v = rep.get("validity") or {}
+            problems += [f"IO500 invalid: {r}" for r in v.get("unexpected", [])]
+            problems += [f"why: {d}" for d in v.get("diagnosis", [])]
+            if (rep.get("client_probe") or {}).get("all_failed"):
+                problems.append("every client probe failed: the client was not chosen by measurement")
+        except (OSError, ValueError):
+            pass
+        if problems:
+            detail = "\n".join(problems) + "\n" + detail
+        step(name, FAIL if timed_out or p.returncode else (WARN if problems else PASS),
              ("timed out after 6 h; stopped and cleaned up\n" if timed_out else "") + detail, report_file=fname)
         try:  # the client (and FUSE channel) the probe chose, for the runs that follow
             with open(out) as f:

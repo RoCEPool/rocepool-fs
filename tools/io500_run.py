@@ -92,6 +92,9 @@ def _mem_total_gib() -> float:
     return 4.0
 
 
+EASY_TRANSFER_MIB = 2  # ior-easy's transferSize
+
+
 def write_ini(path: str, *, datadir: str, resdir: str, pause_dir: str | None, stonewall: int, ior_easy_block_mib: int,
               ior_hard_segments: int, md_easy_n: int, md_hard_n: int) -> None:
     lines = ["[global]", f"datadir = {datadir}", "timestamp-datadir = FALSE", f"resultdir = {resdir}",
@@ -99,7 +102,11 @@ def write_ini(path: str, *, datadir: str, resdir: str, pause_dir: str | None, st
              "[debug]", f"stonewall-time = {stonewall}"]
     if pause_dir:
         lines.append(f"pause-dir = {pause_dir}")
-    lines += ["", "[ior-easy]", "transferSize = 2m", f"blockSize = {ior_easy_block_mib}m", "filePerProc = TRUE", "",
+    # IOR aborts at once unless blockSize is a multiple of transferSize: a
+    # probe's block (the run's / 8) of 1545 MiB made every client-mode probe
+    # on site exit 255 -- the faster interception client was never measured
+    easy_block = max(EASY_TRANSFER_MIB, ior_easy_block_mib // EASY_TRANSFER_MIB * EASY_TRANSFER_MIB)
+    lines += ["", "[ior-easy]", f"transferSize = {EASY_TRANSFER_MIB}m", f"blockSize = {easy_block}m", "filePerProc = TRUE", "",
               "[mdtest-easy]", f"n = {md_easy_n}", "", "[ior-hard]", f"segmentCount = {ior_hard_segments}", "",
               "[mdtest-hard]", f"n = {md_hard_n}", ""]
     with open(path, "w") as f:
@@ -237,6 +244,70 @@ def phase_ops(resdir: str, phase: str) -> float | None:
     return float(m.group(1)) * 2**20 * float(m.group(3)) if m else None  # bw(MiB/s) x total(s)
 
 
+def io500_validity(text: str, resdir: str, stonewall: int, capacity: dict | None) -> dict:
+    """Whether IO500 called its result valid, why not, and what that means
+    here. A short (quick) run is invalid by design -- stonewall under 300 s,
+    phases shorter than the minimum: those reasons are 'expected'; anything
+    else is 'unexpected' and explained where the cause is known."""
+    reasons = [m.group(2).strip() for m in re.finditer(r"ERROR INVALID \(([^)]*)\) (.*)", text)]
+    short = stonewall < 300
+    expected_pat = r"stonewall-time|PAUSING BETWEEN RUNS|Runtime is smaller than expected minimum runtime"
+    unexpected = [r for r in reasons if not (short and re.search(expected_pat, r))]
+    found = None
+    try:
+        with open(os.path.join(resdir, "find.csv")) as f:
+            rows = [l.split(",") for l in f.read().splitlines()[2:] if l.strip()]
+        found = sum(int(r[3]) for r in rows if len(r) > 3)
+    except (OSError, ValueError):
+        pass
+    diagnosis = []
+    if any("Write phase needed" in r or "below stonewall" in r for r in unexpected):
+        b = (capacity or {}).get("bounded_by") or {}
+        diagnosis.append("ior-easy-write ran out of data before the stonewall: the IOR data budget "
+                         f"({(capacity or {}).get('budget_gib', '?')} GiB) holds less than {stonewall} s at this "
+                         "write speed" + (f"; it is bounded by OST {b.get('ost')} ({b.get('kind')}) -- more or "
+                                          "faster storage on that host lifts it" if b else ""))
+    if found == 0 or any("Find didn't find anything" in r for r in unexpected):
+        diagnosis.append("find matched no file: it did not see mdtest-hard's files (a directory listing "
+                         "that failed?) or their size/ctime did not match")
+    score_line = next((l for l in text.splitlines() if l.startswith("[SCORE ]")), "")
+    return {"valid": bool(score_line) and "INVALID" not in score_line, "reasons": reasons,
+            "unexpected": unexpected, "find_found": found, "diagnosis": diagnosis}
+
+
+def load_rates(path: str | None) -> dict:
+    """ior-easy-write / ior-hard-write GiB/s from an earlier run's report"""
+    if not path:
+        return {}
+    try:
+        with open(path) as f:
+            ph = json.load(f).get("phases", {})
+        return {k: ph[k]["value"] for k in ("ior-easy-write", "ior-hard-write") if ph.get(k, {}).get("value")}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
+
+
+def split_budget(budget: float, stonewall: int, rates: dict, margin: float = 1.15) -> tuple[float, float, str]:
+    """(GiB for ior-easy, GiB for ior-hard, why). Each write phase must still
+    be writing when the stonewall hits, or IO500 calls the run INVALID (on
+    site: ior-easy-write had 772 GiB, wrote 2.66 GiB/s, ran out at 290 s,
+    while ior-hard kept 206 GiB it could never fill). With measured speeds:
+    ior-hard gets what it writes in the stonewall (+15%), ior-easy the rest;
+    without: 75% / 20%."""
+    e, h = rates.get("ior-easy-write"), rates.get("ior-hard-write")
+    if not e or not h:
+        return 0.75 * budget, 0.2 * budget, "no measured speeds: 75% ior-easy, 20% ior-hard"
+    need_e, need_h = e * stonewall * margin, h * stonewall * margin
+    hard = min(need_h, 0.5 * budget)
+    easy = 0.95 * budget - hard
+    why = (f"measured ior-easy-write {e:.2f} GiB/s, ior-hard-write {h:.3f} GiB/s: ior-hard {hard:.0f} GiB, "
+           f"ior-easy {easy:.0f} GiB (needs {need_e:.0f} GiB for {stonewall} s)")
+    if easy < e * stonewall * 1.02:  # the margin is a wish; this is the limit
+        why += (f" -- NOT enough: ior-easy-write will run out after about {easy / e:.0f} s and IO500 will call "
+                f"the run INVALID; the OSTs' capacity ({budget:.0f} GiB) is the limit")
+    return easy, hard, why
+
+
 def capacity_budget(servers: list[dict], facts: list[dict], ram_mib: float, osts_per_node: int):
     """(GiB IOR may write in total, the OST that bounds it as (GiB, addr,
     kind)): striping spreads data evenly, so the smallest OST times their
@@ -328,6 +399,9 @@ def main() -> int:
                     help="interception client: I/O threads per rank (stripe fan-out)")
     ap.add_argument("--attr-ttl", type=float, default=3.0)
     ap.add_argument("--stonewall", type=int, default=None, help="seconds per write phase (IO500 official: 300)")
+    ap.add_argument("--rates-from", default=None,
+                    help="a previous run's report (the on-site quick run): its ior-easy / ior-hard write speeds "
+                         "size this run's data so each write phase lasts the stonewall")
     ap.add_argument("--mem-budget-gib", type=float, default=None,
                     help="bytes IOR may write in total (the store is in memory); default: 40%% of the "
                          "cluster's RAM")
@@ -438,6 +512,25 @@ def main() -> int:
             fixed = {i: r["fixed"] for i, r in report["name_resolution"].items() if r.get("fixed")}
             if fixed:
                 print(f"== fixed hostname resolution for MPI (/etc/hosts block) on nodes {fixed}", flush=True)
+        # IO500's find compares file ctimes -- set by each MDT's host clock --
+        # with a timestamp file on node 0: hosts whose clocks disagree by
+        # more than a phase's length make it miss files. Measured, reported.
+        if cluster.real and n > 1:
+            offsets = {}
+            for i in range(1, n):
+                try:
+                    t0 = time.time()
+                    r = cluster.run(i, ["date", "+%s.%N"], env, capture_output=True, text=True, timeout=30)
+                    t1 = time.time()
+                    offsets[i] = round(float(r.stdout.strip().splitlines()[-1]) - (t0 + t1) / 2, 3)
+                except (ValueError, IndexError, subprocess.SubprocessError, OSError):
+                    pass
+            report["clock_offsets_s"] = offsets
+            off = {i: o for i, o in offsets.items() if abs(o) > 2}
+            if off:
+                print("== WARNING: host clocks differ from node 0's by " +
+                      ", ".join(f"node {i}: {o:+.1f} s" for i, o in off.items()) +
+                      " -- IO500's find compares times set on different hosts; enable NTP/chrony", flush=True)
         os.environ.update(ROCE_TRANSPORT_LIB=cluster.lib)
         py = sys.executable if not cluster.real else "python3"
         helper = os.path.join(ROOT, "tools", "crossover_node.py")
@@ -519,11 +612,14 @@ def main() -> int:
         # with the OST that bounds it, rather than discovered at the end.
         if cluster.real and facts and args.mem_budget_gib is None:
             budget, low = capacity_budget(servers, facts, ram_mib, args.osts_per_node)
-            easy_block = max(16, int(budget * 0.75 * 1024 / ranks) // 2 * 2)
-            hard_segs = max(100, int(budget * 0.2 * 2**30 / (ranks * 47008)))
+            easy_gib, hard_gib, why = split_budget(budget, stonewall, load_rates(args.rates_from))
+            easy_block = max(16, int(easy_gib * 1024 / ranks) // 2 * 2)
+            hard_segs = max(100, int(hard_gib * 2**30 / (ranks * 47008)))
             report["capacity"] = {"budget_gib": round(budget, 1), "bounded_by": {"ost": low[1], "kind": low[2],
                                                                                    "gib": round(low[0], 1)},
-                                  "ior_easy_gib": round(easy_block * ranks / 1024, 1)}
+                                  "ior_easy_gib": round(easy_block * ranks / 1024, 1),
+                                  "ior_hard_gib": round(hard_gib, 1), "split": why}
+            print(f"== IOR data split: {why}", flush=True)
             print(f"== IOR data budget {budget:.1f} GiB from the OSTs' capacity (smallest: {low[1]}, {low[2]}, "
                   f"{low[0]:.0f} GiB): ior-easy {easy_block} MiB/rank, ior-hard {hard_segs} segments/rank; a "
                   f"{stonewall} s ior-easy-write stays valid below {easy_block * ranks / 1024 / stonewall:.2f} GiB/s",
@@ -726,7 +822,7 @@ def main() -> int:
                                             "chosen": "io_uring" if (fuse_best and fuse_best["uring"]) else "classic"}
             if not kernel_offers and args.fuse_uring == "auto" and args.client != "intercept":
                 report["fuse_channel_probe"]["reason"] = "kernel does not offer FUSE over io_uring"
-            report["client_probe"] = {"results": results, "chosen": mode}
+            report["client_probe"] = {"results": results, "chosen": mode, "all_failed": not ok}
             print(f"== chosen: {names[best]}", flush=True)
         elif args.client != "intercept" and args.fuse_uring == "auto":
             report["fuse_channel_probe"] = {"results": [], "chosen": "classic",
@@ -871,6 +967,14 @@ def main() -> int:
             if slow:
                 print("== slow OST(s): " + ", ".join(f"{a} {v:.1f} ms/request" for a, v in slow.items())
                       + f" (median {med:.1f} ms): their storage bounds the run", flush=True)
+        report["validity"] = io500_validity(text, os.path.join(work, "results"), stonewall, report.get("capacity"))
+        v = report["validity"]
+        print(f"== IO500 says the result is {'VALID' if v['valid'] else 'INVALID'}"
+              + (f"; find matched {v['find_found']} files" if v["find_found"] is not None else ""), flush=True)
+        for r in v["unexpected"]:
+            print(f"   invalid: {r}", flush=True)
+        for d in v["diagnosis"]:
+            print(f"   why: {d}", flush=True)
         report.update(returncode=mpi.returncode, phases=phases, score=score, wall_s=round(time.monotonic() - t0, 1),
                       io500_output_tail=text.splitlines()[-60:],
                       config={"paused_between_phases": pause is not None,

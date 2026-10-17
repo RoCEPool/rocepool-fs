@@ -63,7 +63,7 @@ uint64_t rpkv_rpcs(rpkv_t *kv);
  * memory (no dma-buf export, no nvidia-peermem), the calls still work,
  * through host memory, and rpkv_dev_direct() says 0.
  *
- * Values must fit one frame (16 MiB by default, ROCEPOOL_FRAME_BYTES):
+ * Values must fit one frame (16 MiB by default, ROCE_MAX_FRAME_BYTES):
  * store a KV block per layer, or per block of all layers. */
 typedef struct rpkv_dev rpkv_dev_t;
 

@@ -16,7 +16,7 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from tools import io500_model  # noqa: E402
-from tools.io500_run import phase_ops  # noqa: E402
+from tools.io500_run import io500_validity, phase_ops, split_budget, write_ini  # noqa: E402
 
 SMALL = ["--stonewall", "3", "--md-easy-n", "300", "--md-hard-n", "300", "--mem-budget-gib", "0.4"]
 SCORED = io500_model.BW_PHASES + io500_model.MD_PHASES
@@ -55,6 +55,75 @@ class PhaseOpsTests(unittest.TestCase):
             self.assertIsNone(phase_ops(d, "mdtest-hard-write"))
         finally:
             shutil.rmtree(d)
+
+
+# the site's official run, 2026-10-16 (2 hosts, 64 ranks)
+SITE_VALID_OUT = """IO500 version io500-sc26_v1 (standard)
+ERROR INVALID (src/phase_ior.c:24) Write phase needed 290.505858s instead of stonewall 300s. Stonewall was hit at 290.2s
+ERROR INVALID (src/main.c:484) Runtime of phase (290.545656) is below stonewall time. This shouldn't happen!
+ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime
+[RESULT]       ior-easy-write        2.659155 GiB/s : time 290.546 seconds [INVALID]
+ERROR INVALID (src/phase_find.c:80) Find didn't find anything, this is likely invalid.
+[RESULT]                 find      126.687602 kIOPS : time 236.825 seconds [INVALID]
+[SCORE ] Bandwidth 0.697562 GiB/s : IOPS 60.847758 kiops : TOTAL 6.514989 [INVALID]
+"""
+FIND_CSV = """runtime: 236.779737 rate: 126687.601502
+rank, errors, unknown, found, total, checked, job steal msgs received, work items send, job steal msgs send, work items stolen, time spend in job stealing in s, number of completion tokens send
+0, 0, 0, {f0}, 27250, 6, 11601, 13144, 11356, 40391, 62.760s, 6
+1, 0, 0, {f1}, 25024, 0, 10749, 13082, 11124, 38106, 71.291s, 6
+"""
+
+
+class ValidityTests(unittest.TestCase):
+    """io500_run's verdict on IO500's own INVALID lines (the site's run)"""
+
+    def res(self, f0, f1):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        with open(os.path.join(d, "find.csv"), "w") as f:
+            f.write(FIND_CSV.format(f0=f0, f1=f1))
+        return d
+
+    def test_site_valid_run(self):
+        cap = {"budget_gib": 1030.0, "bounded_by": {"ost": "192.168.10.150:19951", "kind": "tier"}}
+        v = io500_validity(SITE_VALID_OUT, self.res(0, 0), 300, cap)
+        self.assertFalse(v["valid"])
+        self.assertEqual(v["find_found"], 0)
+        self.assertEqual(len(v["unexpected"]), 4)  # a 300 s run: every reason counts
+        self.assertTrue(any("ran out of data" in d and "192.168.10.150:19951" in d for d in v["diagnosis"]), v)
+        self.assertTrue(any("find matched no file" in d for d in v["diagnosis"]), v)
+
+    def test_quick_run_reasons_are_expected(self):
+        out = ("ERROR INVALID (src/main.c:394) PAUSING BETWEEN RUNS ACTIVATED\n"
+               "ERROR INVALID (src/phase_dbg.c:15) stonewall-time 60s != 300s\n"
+               "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime\n"
+               "[SCORE ] Bandwidth 0.9 GiB/s : IOPS 107 kiops : TOTAL 9.9 [INVALID]\n")
+        v = io500_validity(out, self.res(7, 5), 60, None)
+        self.assertEqual((v["unexpected"], v["diagnosis"], v["find_found"]), ([], [], 12))
+
+    def test_data_split_by_measured_speeds(self):
+        """the site: 1030 GiB budget; 75/20 gave ior-easy 772 GiB, which a
+        2.66 GiB/s write exhausts at 290 s. Sized by the quick run's speeds,
+        ior-easy gets 906 GiB (344 s) and ior-hard what it can write."""
+        easy, hard, why = split_budget(1030.2, 300, {"ior-easy-write": 2.632, "ior-hard-write": 0.2109})
+        self.assertGreater(easy / 2.659, 300)       # the valid run's speed: lasts past the stonewall
+        self.assertGreater(hard / 0.2109, 300)
+        self.assertNotIn("NOT enough", why)
+        easy, hard, why = split_budget(500, 300, {"ior-easy-write": 2.632, "ior-hard-write": 0.2109})
+        self.assertIn("NOT enough", why)
+        self.assertEqual(split_budget(1000, 300, {})[:2], (750, 200))
+
+    def test_probe_block_is_a_multiple_of_the_transfer(self):
+        """the site's probes: the run's 12360 MiB / 8 = 1545 MiB, not a
+        multiple of the 2 MiB transfer -- IOR exited at once, every probe"""
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        ini = os.path.join(d, "c.ini")
+        write_ini(ini, datadir="/x", resdir="/y", pause_dir=None, stonewall=10, ior_easy_block_mib=12360 // 8,
+                  ior_hard_segments=50, md_easy_n=200, md_hard_n=200)
+        text = open(ini).read()
+        self.assertIn("blockSize = 1544m", text)
+        self.assertIn("transferSize = 2m", text)
 
 
 class CapacityBudgetTests(unittest.TestCase):
@@ -156,6 +225,9 @@ class IO500ClusterTests(unittest.TestCase):
         for ph, p in a["projection"]["phases"].items():
             self.assertIn(p["bottleneck"], io500_model.LIMIT_TEXT, ph)
         self.assertGreater(a["projection"]["score"], 0)
+        # find saw mdtest-hard's files (on site it saw none: their directory's
+        # listing did not fit one reply)
+        self.assertGreater(report["validity"]["find_found"], 0, report["validity"])
         # counters cover every server and every node's processes
         s = report["snapshots"][-1]
         self.assertEqual(len(s["servers"]), report["mdts"] + report["osts"])
