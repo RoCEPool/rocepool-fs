@@ -64,6 +64,31 @@ class _Cluster(unittest.TestCase):
 
 
 @unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class BigDirectoryTests(_Cluster):
+    port = 23390
+    server_env = {"ROCE_MAX_FRAME_BYTES": str(256 << 10)}
+
+    def test_directory_larger_than_one_reply_is_listed_whole(self):
+        """A directory whose listing exceeds a frame is read page by page.
+        The site's IO500 find saw none of mdtest-hard's 5.4 M files (one
+        directory, ~75 MB of entries per listing against a 16 MiB frame):
+        here 256 KiB frames and 9000 entries do the same in miniature."""
+        code = f"""
+import os
+P = {self.prefix!r}
+os.mkdir(P + "/huge")
+for i in range(9000):
+    os.close(os.open(P + "/huge/file.mdtest.%d.%d" % (i % 7, i), os.O_CREAT | os.O_WRONLY, 0o644))
+names = os.listdir(P + "/huge")
+print(len(names), len(set(names)))
+"""
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, cwd=self.tmp,
+                             env=dict(self.penv, ROCE_MAX_FRAME_BYTES=str(256 << 10)))
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertEqual(out.stdout.split(), ["9000", "9000"])
+
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
 class SlowOSTTests(_Cluster):
     """An OST that takes 6.5 s per write (a slow drive with a queue in front
     of it, as on site) is slow, not dead: the writes must succeed. With the

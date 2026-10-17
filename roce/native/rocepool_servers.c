@@ -1392,7 +1392,23 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
                 * consistent snapshot per name, not of the whole directory
                 * (same as the OST's LIST_PREFIX and POSIX readdir). Entries
                 * are copied out (name + wire form) so no lock is held while
-                * the reply is assembled. */
+                * the reply is assembled.
+                * Paged (request: u8 5, u32 LE max reply bytes, u16 LE cursor
+                * length, cursor): only names after the cursor, at most the
+                * reply budget of them; the count's top bit says more follow.
+                * A one-byte request gets the whole directory in one reply
+                * (older clients): a directory of millions of entries does
+                * not fit one frame -- the site's IO500 find saw none of
+                * mdtest-hard's 5.4 M files that way. */
+        size_t budget = SIZE_MAX, clen = 0;
+        const uint8_t *cursor = NULL;
+        if (f->val_len >= 7) {
+            budget = rd_u32le(f->val + 1);
+            clen = (size_t)f->val[5] | (size_t)f->val[6] << 8;
+            if (f->val_len < 7 + clen) { out = frame_error(f, "MDT_INTERNAL", "short readdir cursor", out_len); break; }
+            cursor = f->val + 7;
+            if (budget < 4096) budget = 4096;
+        }
         md_dir *d = md_get_dir(m, path, pl, 0);
         size_t n = 0, cap = 64, total = 4;
         md_entry *list = malloc(cap * sizeof(*list));
@@ -1404,13 +1420,17 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
             uint64_t t1 = mono_ns();
             for (size_t i = 0; i < b->nslots; i++)
                 for (md_entry *e = b->slots[i]; e; e = e->next) {
+                    if (cursor) {  /* only names after the cursor (the cmp_md_name order) */
+                        size_t k = e->name_len < clen ? e->name_len : clen;
+                        int c = memcmp(e->name, cursor, k);
+                        if (c < 0 || (c == 0 && e->name_len <= clen)) continue;
+                    }
                     if (n == cap) { cap *= 2; md_entry *nl = realloc(list, cap * sizeof(*list)); if (!nl) continue; list = nl; }
                     list[n] = *e;
                     list[n].idata = NULL;
                     list[n].name = malloc(e->name_len ? e->name_len : 1);
                     if (!list[n].name) continue;
                     memcpy(list[n].name, e->name, e->name_len);
-                    total += 2 + e->name_len + entry_len(e);
                     n++;
                 }
             pthread_mutex_unlock(&b->lock);
@@ -1421,11 +1441,17 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         if (!ptrs) { for (size_t i = 0; i < n; i++) free(list[i].name); free(list); out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
         for (size_t i = 0; i < n; i++) ptrs[i] = &list[i];
         qsort(ptrs, n, sizeof(*ptrs), cmp_md_name);
+        size_t emit = 0;  /* the first entries that fit the budget (at least one) */
+        for (; emit < n; emit++) {
+            size_t add = 2 + ptrs[emit]->name_len + entry_len(ptrs[emit]);
+            if (emit && total + add > budget) break;
+            total += add;
+        }
         uint8_t *v = frame_alloc(OP_MDT_OK, f, total, &out, out_len);
         if (v) {
-            wr_u32le(v, (uint32_t)n);
+            wr_u32le(v, (uint32_t)emit | (emit < n ? 0x80000000u : 0));
             v += 4;
-            for (size_t i = 0; i < n; i++) {
+            for (size_t i = 0; i < emit; i++) {
                 v[0] = (uint8_t)(ptrs[i]->name_len & 0xff);
                 v[1] = (uint8_t)(ptrs[i]->name_len >> 8);
                 memcpy(v + 2, ptrs[i]->name, ptrs[i]->name_len);

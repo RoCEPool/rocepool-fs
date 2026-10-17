@@ -189,7 +189,7 @@ How the cached leases behave:
 - **When the GPU cannot be reached by the NIC**, the same calls work through
   host memory, and `buf.direct` is False.
 - **Value size**: one value can be up to one frame, 16 MiB by default
-  (`ROCEPOOL_FRAME_BYTES`). That fits a 16-token block of all layers of a
+  (`ROCE_MAX_FRAME_BYTES`). That fits a 16-token block of all layers of a
   70B model (5.2 MB).
 - **Concurrency**: the number of transfers in flight per call is set by
   `ROCEPOOL_KV_INFLIGHT` (default 16).

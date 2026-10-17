@@ -12,6 +12,37 @@ repository (20261014a and older) have no release page; each one's
 commit and full source archive (`deps/` included, so it builds offline) are
 linked under its heading.
 
+## 20261017a
+
+From the site run of 2026-10-16 (2 hosts, 20261012b). Everything passed apart
+from Boray02's slow disk, but the official IO500 result was INVALID for two
+software reasons, and the faster client was never measured:
+
+- **IO500 find saw none of mdtest-hard's files.** That phase writes 5.4 M
+  files into one directory, and listing one MDT's share of it needed about
+  75 MB in a single reply, more than a 16 MiB frame. The listing failed and
+  `find` silently skipped the directory. **Fixed:** directory listings are
+  now paged (half a frame per page, resumed after the last name), and older
+  servers and clients still work together.
+- **Every client-mode probe exited at once** with "block size must be a
+  multiple of transfer size": the probe used the run's ior-easy block / 8
+  (1545 MiB). The run therefore fell back to FUSE without measuring the
+  interception library. **Fixed:** blockSize is always a multiple of the
+  2 MiB transfer.
+- **ior-easy-write ran out of data at 290 s** of the 300 s stonewall: 75% of
+  the capacity budget went to ior-easy and 20% to ior-hard, which only used
+  a third of its share. **Fixed:** the official run now sizes both from the
+  quick run's measured write speeds. ior-hard gets what it writes in 300 s
+  (+15%) and ior-easy the rest. If even that is too little, the run says so
+  before it starts.
+- **The run explains its own validity.** IO500's INVALID reasons (beyond those
+  a short run has by design), what `find` matched, and the cause when it is
+  known now go into the report. The on-site step shows WARN instead of PASS
+  when the result is invalid or every client probe failed.
+- **Host clock offsets are measured.** IO500's find compares times set on
+  different hosts, so the offsets are recorded and a warning is printed above
+  2 s.
+
 ## 20261016a
 
 - **Public repository** `RoCEPool/rocepool-fs`.

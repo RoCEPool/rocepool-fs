@@ -355,36 +355,65 @@ static int mdt_child_count_one(peer_t *p, const char *dir, uint64_t *n) {
 }
 
 
+/* One MDT's entries of dir, page by page (a page at most half a frame):
+ * a directory of millions of entries does not fit one reply. Each page
+ * asks for the names after the last one received. */
 static int mdt_readdir_one(peer_t *p, const char *dir, dirent_t **out, size_t *count) {
-    uint8_t req[1] = {5};
-    resp_t r;
-    int rc = rpc(p, OP_MDT, dir, req, 1, NULL, 0, &r);
-    if (rc) return rc;
-    if (r.op != OP_MDT_OK || r.vlen < 4) {
-        rc = r.op == OP_ERROR ? mdt_errno(r.code) : -EIO;
+    size_t cap = 0, i = 0;
+    dirent_t *v = NULL;
+    char last[4096];
+    size_t last_len = 0;
+    uint32_t budget = (uint32_t)(rp_frame_bytes / 2 > 0xffffffffu ? 0xffffffffu : rp_frame_bytes / 2);
+    for (;;) {
+        uint8_t req[7 + sizeof(last)];
+        req[0] = 5;
+        memcpy(req + 1, &budget, 4);
+        req[5] = (uint8_t)(last_len & 0xff);
+        req[6] = (uint8_t)(last_len >> 8);
+        memcpy(req + 7, last, last_len);
+        resp_t r;
+        int rc = rpc(p, OP_MDT, dir, req, 7 + last_len, NULL, 0, &r);
+        if (rc == 0 && (r.op != OP_MDT_OK || r.vlen < 4)) {
+            rc = r.op == OP_ERROR ? mdt_errno(r.code) : -EIO;
+            resp_free(&r);
+        }
+        if (rc) {
+            for (size_t k = 0; k < i; k++) free(v[k].name);
+            free(v);
+            return rc;
+        }
+        uint32_t n;
+        memcpy(&n, r.val, 4);
+        int more = (n & 0x80000000u) != 0;
+        n &= 0x7fffffffu;
+        if (i + n > cap) {
+            cap = (i + n) * 2 + 16;
+            v = xrealloc(v, cap * sizeof(*v));
+        }
+        size_t off = 4, got = 0;
+        for (; got < n; got++) {
+            dirent_t *d = &v[i + got];
+            if (off + 2 > r.vlen) break;
+            uint16_t ln;
+            memcpy(&ln, r.val + off, 2);
+            off += 2;
+            if (off + ln > r.vlen) break;
+            d->name = xmalloc(ln + 1u);
+            memcpy(d->name, r.val + off, ln);
+            d->name[ln] = 0;
+            off += ln;
+            size_t used = decode_entry(r.val + off, r.vlen - off, &d->a);
+            if (!used) { free(d->name); break; }
+            off += used;
+        }
         resp_free(&r);
-        return rc;
+        i += got;
+        if (!more || !got) break;  /* (a server without paging sends everything, top bit clear) */
+        last_len = strlen(v[i - 1].name);
+        if (last_len > sizeof(last)) last_len = sizeof(last);
+        memcpy(last, v[i - 1].name, last_len);
     }
-    uint32_t n;
-    memcpy(&n, r.val, 4);
-    dirent_t *v = calloc(n ? n : 1, sizeof(*v));
-    size_t off = 4, i = 0;
-    for (; i < n; i++) {
-        if (off + 2 > r.vlen) break;
-        uint16_t ln;
-        memcpy(&ln, r.val + off, 2);
-        off += 2;
-        if (off + ln > r.vlen) break;
-        v[i].name = xmalloc(ln + 1u);
-        memcpy(v[i].name, r.val + off, ln);
-        v[i].name[ln] = 0;
-        off += ln;
-        size_t used = decode_entry(r.val + off, r.vlen - off, &v[i].a);
-        if (!used) { free(v[i].name); break; }
-        off += used;
-    }
-    resp_free(&r);
-    *out = v;
+    *out = v ? v : calloc(1, sizeof(*v));
     *count = i;
     return 0;
 }
