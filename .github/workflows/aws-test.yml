@@ -1,0 +1,100 @@
+name: aws-test
+# rocepool on rented AWS machines (tools/aws_cluster.py): create, run.sh on all
+# of them, bring the reports back as this run's artifact, delete everything.
+# Manual only (Actions > aws-test > Run workflow). Credentials: repository
+# secrets AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (an IAM user with EC2
+# access, read access to SSM parameters and service quotas).
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "efa = AWS's RDMA NIC (libfabric backend); rxe = Soft-RoCE (software RDMA, any type)"
+        default: efa
+        type: choice
+        options: [efa, rxe]
+      type:
+        description: instance type
+        default: c5n.9xlarge
+      nodes:
+        description: number of instances
+        default: "2"
+      region:
+        default: us-east-1
+      quick:
+        description: 30 s IO500 only (skip the 300 s official run)
+        default: false
+        type: boolean
+      max_hours:
+        description: the instances delete themselves after this, whatever happens
+        default: "5"
+      budget_usd:
+        description: refuse to start if nodes x price x max_hours exceeds this
+        default: "30"
+permissions:
+  contents: read
+concurrency: aws-test
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 340
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ inputs.region }}
+      RUN_ID: gh-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: credentials and the cost ceiling
+        run: |
+          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "::error title=no AWS credentials::add repository secrets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"; exit 1
+          fi
+          aws sts get-caller-identity --query Arn --output text
+          # on-demand USD/hour in us-east-1 (approximate); unknown types: ask AWS's price list
+          python3 - "${{ inputs.type }}" "${{ inputs.nodes }}" "${{ inputs.max_hours }}" "${{ inputs.budget_usd }}" <<'PY'
+          import json, subprocess, sys
+          t, n, h, budget = sys.argv[1], int(sys.argv[2]), float(sys.argv[3]), float(sys.argv[4])
+          table = {"c5n.9xlarge": 1.944, "c5n.18xlarge": 3.888, "c6in.16xlarge": 3.629, "c6in.32xlarge": 7.258,
+                   "c6in.4xlarge": 0.907, "c6in.8xlarge": 1.814, "c7gn.16xlarge": 3.994, "c6gn.16xlarge": 2.765,
+                   "m5dn.24xlarge": 6.528}
+          price = table.get(t)
+          if price is None:
+              try:
+                  out = subprocess.run(["aws", "pricing", "get-products", "--region", "us-east-1", "--service-code", "AmazonEC2",
+                                        "--filters", f"Type=TERM_MATCH,Field=instanceType,Value={t}",
+                                        "Type=TERM_MATCH,Field=location,Value=US East (N. Virginia)",
+                                        "Type=TERM_MATCH,Field=operatingSystem,Value=Linux",
+                                        "Type=TERM_MATCH,Field=tenancy,Value=Shared",
+                                        "Type=TERM_MATCH,Field=preInstalledSw,Value=NA",
+                                        "Type=TERM_MATCH,Field=capacitystatus,Value=Used"],
+                                       capture_output=True, text=True, timeout=60).stdout
+                  p = json.loads(json.loads(out)["PriceList"][0])
+                  price = float(next(iter(next(iter(p["terms"]["OnDemand"].values()))["priceDimensions"].values()))["pricePerUnit"]["USD"])
+              except Exception:
+                  print(f"::error title=unknown price::no price for {t}: add it to the table in aws-test.yml"); sys.exit(1)
+          worst = n * price * h + n * 200 * 0.08 / 730 * h
+          print(f"{n} x {t} at ${price}/h: ceiling ${worst:.2f} for {h} h (budget ${budget})")
+          if worst > budget:
+              print(f"::error title=over budget::{n} x {t} for {h} h may cost ${worst:.2f} > ${budget}"); sys.exit(1)
+          print(f"::notice title=cost ceiling::{n} x {t}, at most ${worst:.2f} ({h} h self-delete)")
+          PY
+      - name: run on AWS
+        run: |
+          python3 tools/aws_cluster.py run --run-id "$RUN_ID" --region "${{ inputs.region }}" \
+            --mode "${{ inputs.mode }}" --type "${{ inputs.type }}" --nodes "${{ inputs.nodes }}" \
+            --max-hours "${{ inputs.max_hours }}" ${{ inputs.quick && '--quick' || '' }}
+      - name: delete everything this run created
+        if: always()
+        run: |
+          if [ -f "aws_runs/$RUN_ID/state.json" ]; then python3 tools/aws_cluster.py down --run-id "$RUN_ID" --region "${{ inputs.region }}"; fi
+      - name: "reports (without the run SSH key: artifacts of a public repository are readable)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rocepool-aws-${{ github.run_id }}
+          path: |
+            aws_runs/${{ env.RUN_ID }}/
+            !aws_runs/${{ env.RUN_ID }}/ssh_key
+            !aws_runs/${{ env.RUN_ID }}/**/*.pem
+            !aws_runs/${{ env.RUN_ID }}/**/id_*
+          if-no-files-found: warn
