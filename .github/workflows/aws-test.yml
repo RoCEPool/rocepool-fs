@@ -27,6 +27,10 @@ on:
       max_hours:
         description: the instances delete themselves after this, whatever happens
         default: "5"
+      probe_only:
+        description: only find out what this account may do (no cost; nothing is created)
+        default: false
+        type: boolean
       budget_usd:
         description: refuse to start if nodes x price x max_hours exceeds this
         default: "30"
@@ -78,11 +82,47 @@ jobs:
               print(f"::error title=over budget::{n} x {t} for {h} h may cost ${worst:.2f} > ${budget}"); sys.exit(1)
           print(f"::notice title=cost ceiling::{n} x {t}, at most ${worst:.2f} ({h} h self-delete)")
           PY
-      - name: run on AWS
+      - name: what this account may do (dry runs, nothing is created)
         run: |
-          python3 tools/aws_cluster.py run --run-id "$RUN_ID" --region "${{ inputs.region }}" \
+          set +e +o pipefail   # every check runs and reports, denied or not
+          t="${{ inputs.type }}"
+          sg=$(aws ec2 describe-security-groups --filters Name=group-name,Values=default --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo none)
+          ami=$(aws ssm get-parameter --name /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id --query Parameter.Value --output text 2>&1 | tail -1)
+          check() {  # name, command...: allowed / denied (why) -- a DryRun success is "Request would have succeeded"
+            local name="$1"; shift
+            out=$("$@" 2>&1); rc=$?
+            if [ $rc -eq 0 ] || echo "$out" | grep -q "DryRunOperation"; then echo "::notice title=allowed::$name"
+            else echo "::warning title=denied::$name -- $(echo "$out" | tr '\n' ' ' | sed 's/.*error occurred//' | cut -c1-300)"; fi
+          }
+          check "ssm get-parameter (Ubuntu AMI)" aws ssm get-parameter --name /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+          check "ec2 describe-regions" aws ec2 describe-regions
+          check "ec2 describe-instances" aws ec2 describe-instances
+          check "ec2 describe-instance-types" aws ec2 describe-instance-types --instance-types "$t"
+          check "ec2 describe-instance-type-offerings" aws ec2 describe-instance-type-offerings --filters Name=instance-type,Values="$t"
+          check "ec2 describe-vpcs" aws ec2 describe-vpcs
+          check "ec2 create-key-pair (dry run)" aws ec2 create-key-pair --key-name rp-probe --dry-run
+          check "ec2 create-security-group (dry run)" aws ec2 create-security-group --group-name rp-probe --description probe --dry-run
+          check "ec2 create-placement-group (dry run)" aws ec2 create-placement-group --group-name rp-probe --strategy cluster --dry-run
+          check "service-quotas (vCPU quota)" aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A
+          for it in "$t" c5n.18xlarge c6in.32xlarge c6in.4xlarge c5.4xlarge m5.large t3.micro; do
+            check "ec2 run-instances $it (dry run)" aws ec2 run-instances --dry-run --image-id "$ami" --instance-type "$it" --count 1
+          done
+          q=$(aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --query Quota.Value --output text 2>/dev/null || echo "?")
+          echo "::notice title=vCPU quota (on-demand standard)::$q"
+      - name: run on AWS
+        if: ${{ !inputs.probe_only }}
+        run: |
+          set -o pipefail
+          rc=0
+          python3 -u tools/aws_cluster.py run --run-id "$RUN_ID" --region "${{ inputs.region }}" \
             --mode "${{ inputs.mode }}" --type "${{ inputs.type }}" --nodes "${{ inputs.nodes }}" \
-            --max-hours "${{ inputs.max_hours }}" ${{ inputs.quick && '--quick' || '' }}
+            --max-hours "${{ inputs.max_hours }}" ${{ inputs.quick && '--quick' || '' }} 2>&1 | tee aws_run.log || rc=$?
+          # the progress lines and the outcome, as annotations (readable without the raw log)
+          grep -E "^\[aws " aws_run.log | tail -12 | while IFS= read -r l; do echo "::notice title=aws::${l}"; done
+          if [ $rc -ne 0 ]; then
+            echo "::error title=aws_cluster failed::$(grep -vE '^\s*$' aws_run.log | tail -6 | tr '\n' ' ' | cut -c1-1500)"
+          fi
+          exit $rc
       - name: delete everything this run created
         if: always()
         run: |
