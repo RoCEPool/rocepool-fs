@@ -6,6 +6,11 @@ upstream files, unmodified).
 
 **Upstream**: https://bitbucket.org/rapidsdataproject/rapidsse/
 
+**Full copy**: https://github.com/RoCEPool/RapidsSE -- every branch and tag of
+the upstream repository with its whole history, unmodified, kept up to date
+add-only (nothing deleted or overwritten when upstream changes or goes away),
+plus the whole repository as one git bundle on its release `backup`.
+
 **Version**: commit `90012081f5a9` (source archive
 `rapidsdataproject-rapidsse-90012081f5a9`).
 
