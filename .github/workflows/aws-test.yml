@@ -81,10 +81,10 @@ jobs:
       - name: run on AWS
         run: |
           set -o pipefail
+          rc=0
           python3 -u tools/aws_cluster.py run --run-id "$RUN_ID" --region "${{ inputs.region }}" \
             --mode "${{ inputs.mode }}" --type "${{ inputs.type }}" --nodes "${{ inputs.nodes }}" \
-            --max-hours "${{ inputs.max_hours }}" ${{ inputs.quick && '--quick' || '' }} 2>&1 | tee aws_run.log
-          rc=$?
+            --max-hours "${{ inputs.max_hours }}" ${{ inputs.quick && '--quick' || '' }} 2>&1 | tee aws_run.log || rc=$?
           # the progress lines and the outcome, as annotations (readable without the raw log)
           grep -E "^\[aws " aws_run.log | tail -12 | while IFS= read -r l; do echo "::notice title=aws::${l}"; done
           if [ $rc -ne 0 ]; then
