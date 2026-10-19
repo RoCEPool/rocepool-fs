@@ -84,6 +84,7 @@ jobs:
           PY
       - name: what this account may do (dry runs, nothing is created)
         run: |
+          set +e +o pipefail   # every check runs and reports, denied or not
           t="${{ inputs.type }}"
           sg=$(aws ec2 describe-security-groups --filters Name=group-name,Values=default --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo none)
           ami=$(aws ssm get-parameter --name /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id --query Parameter.Value --output text 2>&1 | tail -1)
