@@ -61,7 +61,7 @@ RDMA NIC, a 10-node simulation in network namespaces). On AWS:
 `python3 tools/aws_cluster.py run --mode efa --nodes 10` creates the cluster,
 runs, fetches the reports and releases everything.
 
-Full guide (Chinese): [docs/运行说明书.md](docs/运行说明书.md).
+Full guide: [Chinese](docs/运行说明书.md), [Japanese](docs/実行マニュアル.md).
 
 ## Layout
 
