@@ -416,6 +416,16 @@ class Run:
                 got.append(f)
             except RuntimeError:
                 pass
+        # the servers' and clients' logs of the last IO500 (the head's, and the
+        # peers' copied there), for diagnosis: the reports name them
+        try:
+            self.ssh(head, "cd /root/rocepool/.bench_cache/io500_run 2>/dev/null && "
+                           "find . -maxdepth 1 -name '*.log' -size -50M -print0 | "
+                           "tar czf /root/rocepool/io500_logs.tar.gz --null -T - 2>/dev/null; true", check=False)
+            self.scp(f"root@{head}:/root/rocepool/io500_logs.tar.gz", os.path.join(self.dir, "io500_logs.tar.gz"))
+            got.append("io500_logs.tar.gz")
+        except RuntimeError:
+            pass
         log(f"reports in {os.path.relpath(self.dir, ROOT)}/: {', '.join(got) or 'none'}")
         valid = os.path.join(self.dir, "onsite_io500_valid.json")
         if os.path.exists(valid):

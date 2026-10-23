@@ -62,6 +62,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
@@ -1719,12 +1720,29 @@ static void drop_conn(struct roce_server *s, int i) {
 static void *boot_main(void *arg) {
     struct roce_server *s = arg;
     pthread_setname_np(pthread_self(), "rt-ofi-boot");
-    uint32_t max_conns = env_u32("ROCE_SERVER_MAX_CONNS", 4096);
+    /* every bootstrap connection is a descriptor: as many as the process
+     * may open (raised to its hard limit), less a margin for the rest */
+    struct rlimit rl;
+    uint32_t fds = 4096;
+    if (getrlimit(RLIMIT_NOFILE, &rl) == 0 && rl.rlim_cur != RLIM_INFINITY)
+        fds = rl.rlim_cur > 1024 + 256 ? (uint32_t)(rl.rlim_cur - 256) : 768;
+    uint32_t max_conns = env_u32("ROCE_SERVER_MAX_CONNS", fds > 65536 ? 65536 : fds);
+    int full_said = 0;
     while (!atomic_load(&s->stopping)) {
         int n = s->nconns;
         struct pollfd *pf = calloc((size_t)n + 1, sizeof(*pf));
         if (!pf) break;
-        pf[0].fd = s->lsock;
+        /* at the limit, stop accepting: new clients wait in the listen
+         * backlog (as with the RC transport's gate) instead of being closed
+         * -- closing them failed IO500's mdtest-hard with "peer closed the
+         * connection" on EFA, 2026-10-23 */
+        int full = (uint32_t)n >= max_conns;
+        if (full && !full_said) {
+            fprintf(stderr, "ofi_transport: %s: %u bootstrap connections (ROCE_SERVER_MAX_CONNS): new clients wait\n",
+                    s->bound, max_conns);
+            full_said = 1;
+        }
+        pf[0].fd = full ? -1 : s->lsock;
         pf[0].events = POLLIN;
         for (int i = 0; i < n; i++) { pf[i + 1].fd = s->conns[i].sock; pf[i + 1].events = POLLIN; }
         int pr = poll(pf, (nfds_t)n + 1, 100);
@@ -1737,11 +1755,16 @@ static void *boot_main(void *arg) {
             }
             if (pf[0].revents & POLLIN) {
                 int cs = accept4(s->lsock, NULL, NULL, SOCK_CLOEXEC);
+                if (cs < 0 && (errno == EMFILE || errno == ENFILE)) {
+                    static int said;
+                    if (!said++) fprintf(stderr, "ofi_transport: %s: accept: %s (open-file limit): clients wait\n",
+                                         s->bound, strerror(errno));
+                    usleep(10000);
+                }
                 if (cs >= 0) {
                     int one = 1;
                     setsockopt(cs, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
-                    if ((uint32_t)s->nconns >= max_conns) { close(cs); }
-                    else {
+                    {
                         if (s->nconns == s->cconns) {
                             int nc = s->cconns ? s->cconns * 2 : 64;
                             struct sconn *ncs = realloc(s->conns, (size_t)nc * sizeof(*ncs));
@@ -1758,8 +1781,19 @@ static void *boot_main(void *arg) {
     return NULL;
 }
 
+/* a server holds a descriptor per client connection: the soft open-file
+ * limit (1024 under ssh) is raised to the hard one */
+static void raise_nofile(void) {
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_NOFILE, &rl) == 0 && rl.rlim_cur < rl.rlim_max) {
+        rl.rlim_cur = rl.rlim_max == RLIM_INFINITY ? 1048576 : rl.rlim_max;
+        setrlimit(RLIMIT_NOFILE, &rl);
+    }
+}
+
 roce_server_t *roce_server_start(const char *bind_address, roce_request_handler handler, void *user_data,
                                  size_t max_frame_bytes) {
+    raise_nofile();
     struct roce_server *s = calloc(1, sizeof(*s));
     if (!s) { set_error("out of memory"); return NULL; }
     s->handler = handler;
