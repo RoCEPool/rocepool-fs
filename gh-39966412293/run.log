@@ -1,0 +1,29 @@
+== rocepool 20261017a run Fri Oct 23 14:07:35 UTC 2026 ==
+== 1/4 依赖
+== 2/4 编译 + 自检
+   模拟器版库、FUSE 客户端、拦截库、KV 库：已编译
+== 集群节点：root 免密登录、主机名
+   本机：<this host>；其余 1 台
+   节点就绪：root@172.31.9.145=172.31.9.145
+== 3/4 运行
+   节点：本机 + root@172.31.9.145=172.31.9.145
+   网卡：RoCE -> verbs 传输后端
+[PASS]   kernel   7.0.0-1014-aws: fork() is safe with registered memory
+[PASS]   memlock  locked-memory limit 11811 MiB >= 2560 MiB needed
+[PASS]   power    governor n/a, no deep idle states enabled
+[PASS]   device   1 AWS EFA device(s): rdmap0s31 -- the ofi (libfabric) transport backend
+[PASS]   ip       172.31.15.46: the bootstrap/control address (data goes over rdmap0s31)
+[PASS]   libfabric libfabric's efa provider is up (fi_info -p efa -t FI_EP_RDM)
+[WARN]   rdma_read c5n.9xlarge: not known to do EFA RDMA read in hardware (Nitro v4+ does); libfabric emulates reads with the target's CPU -- correct, slower one-sided reads; the client probe in tools/io500_run.py decides between one-sided and RPC reads
+[PASS]   lossless EFA's SRD transport is reliable over AWS's lossy fabric: no PFC/DSCP to configure
+[PASS]   tuning   36 CPUs: completion busy-poll 20 us before sleeping (ROCE_POLL_SPIN_US=20; tools/roce_onsite.py then measures the best value on this NIC)
+[WARN] preflight  rdmap0s31 port None (None) ip 172.31.15.46; env: {'ROCE_BACKEND': 'ofi', 'ROCE_OFI_PROVIDER': 'efa', 'ROCE_POLL_SPIN_US': '20'}; fixes: ['disabled 36 deep idle states (exit latency > 20 us) (until reboot)']
+[ ... ] peers      checking root@172.31.9.145 (SSH, root, RoCE IP, hostname)
+[PASS] peers      local: ip-172-31-15-46 172.31.15.46; root@172.31.9.145: ip-172-31-9-145 172.31.9.145
+[PASS] build      [build] transport backend: ofi / [build] using libfabric at /opt/amazon/efa / [build] OST tier: kernel backend only (set SPDK_DIR=<built spdk tree> for the SPDK backend) / [build] built /root/rocepool/roce/native/libroce_transport.so / [build] built /root/rocepool/roce/native/rocepool-fuse (native FUSE client) / [build] built /root/rocepool/roce/native/librocepool_kv.so (native KV client API) and rocepool-kv-bench / [build] built /root/rocepool/roce/native/librocepool_intercept.so (LD_PRELOAD interception client) / [build] built /root/rocepool/roce/native/librocepool_cufile.so and cufile/libcufile.so.0 (GPUDirect Storage, cuFile API)
+[FAIL] transport  roce.transport_base.PeerUnreachable: peer unreachable: 172.31.15.46:21005 (completion error: Operation canceled (prov -125)); roce.transport_base.PeerUnreachable: peer unreachable: 172.31.15.46:21102 (completion error: Operation canceled (prov -125))
+
+verdict: FAIL   report: onsite_report.json
+== 4/4 完成（rc=1）：onsite_report.json 
+   注意：没有 IO500 结果（看 onsite_report.json 里 io500 / cluster 步骤的原因）
+== 结果包：/root/rocepool/rocepool-results-ip-172-31-15-46-20261023-140908.tar.gz（把这个文件发回来即可）
