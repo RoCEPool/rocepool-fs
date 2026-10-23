@@ -36,7 +36,7 @@ on:
         description: refuse to start if nodes x price x max_hours exceeds this
         default: "30"
       terminate_ids:
-        description: "instance IDs to terminate in the region (space separated), e.g. ones started by hand; empty = none"
+        description: "instances to terminate in the region, e.g. ones started by hand: IDs or name:<Name tag>, space separated; empty = none"
         default: ""
       request_vcpus:
         description: "ask AWS to raise the on-demand standard vCPU quota (L-1216C47A) in the region to this; empty = don't"
@@ -124,8 +124,18 @@ jobs:
       - name: terminate the given instances
         if: ${{ inputs.terminate_ids != '' }}
         run: |
+          ids=""
+          for x in ${{ inputs.terminate_ids }}; do
+            case "$x" in   # name:<Name tag> = the running/stopped instances with that name
+              name:*) ids="$ids $(aws ec2 describe-instances --filters "Name=tag:Name,Values=${x#name:}" \
+                         "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+                         --query 'Reservations[].Instances[].InstanceId' --output text)";;
+              *) ids="$ids $x";;
+            esac
+          done
+          if [ -z "${ids// /}" ]; then echo "::notice title=terminated::nothing matched ${{ inputs.terminate_ids }}"; exit 0; fi
           rc=0
-          out=$(aws ec2 terminate-instances --instance-ids ${{ inputs.terminate_ids }} \
+          out=$(aws ec2 terminate-instances --instance-ids $ids \
                 --query 'TerminatingInstances[].[InstanceId,PreviousState.Name,CurrentState.Name]' --output text 2>&1) || rc=$?
           if [ $rc -eq 0 ]; then echo "::notice title=terminated::$(echo "$out" | tr '\n' ';')"
           else echo "::error title=terminate failed::$(echo "$out" | tr '\n' ' ' | cut -c1-500)"; exit 1; fi
