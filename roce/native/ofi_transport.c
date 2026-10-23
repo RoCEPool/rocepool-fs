@@ -733,14 +733,29 @@ static int ep_drain(struct ofi_ep *e) {
 /* Wait up to ms for completions on e (progressing it), watching `sock`
  * for EOF (the peer gone). 1 = something completed, 0 = timeout, -1 =
  * failure, -2 = the peer's socket closed. */
+/* why sock_dead() said so, for the error message */
+static __thread char tl_dead_why[96];
 static int sock_dead(int sock) {
     if (sock < 0) return 0;
     struct pollfd p = {.fd = sock, .events = POLLIN};
     if (poll(&p, 1, 0) <= 0) return 0;
-    if (p.revents & (POLLHUP | POLLERR | POLLNVAL)) return 1;
+    int soerr = 0;
+    socklen_t sl = sizeof(soerr);
+    if (p.revents & (POLLHUP | POLLERR | POLLNVAL)) {
+        getsockopt(sock, SOL_SOCKET, SO_ERROR, &soerr, &sl);
+        snprintf(tl_dead_why, sizeof(tl_dead_why), "socket %s%s%s%s%s", p.revents & POLLHUP ? "hangup" : "",
+                 p.revents & POLLERR ? " error" : "", p.revents & POLLNVAL ? " invalid" : "",
+                 soerr ? ": " : "", soerr ? strerror(soerr) : "");
+        return 1;
+    }
     char c;
     ssize_t r = recv(sock, &c, 1, MSG_PEEK | MSG_DONTWAIT);
-    return r == 0 || (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK);
+    if (r == 0) { snprintf(tl_dead_why, sizeof(tl_dead_why), "EOF from the server"); return 1; }
+    if (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+        snprintf(tl_dead_why, sizeof(tl_dead_why), "recv: %s", strerror(errno));
+        return 1;
+    }
+    return 0;
 }
 static int ep_wait(struct ofi_ep *e, int ms, int sock) {
     int h = ep_drain(e);
@@ -786,7 +801,7 @@ static int ep_wait_ops(struct ofi_ep *e, struct op **ops, int n, int timeout_ms,
         if (end >= 0 && left <= 0) { set_error("timed out waiting for completion"); return -3; }
         int w = ep_wait(e, (int)(left > 1000 ? 1000 : left), sock);
         if (w == -1) return -1;
-        if (w == -2) { set_error("peer closed the connection"); return -2; }
+        if (w == -2) { set_error("peer closed the connection (%s)", tl_dead_why); return -2; }
     }
 }
 
@@ -1171,7 +1186,7 @@ static void release_bulk(struct roce_conn *c, struct rbuf *b) {
 /* shared-pool request */
 static int shared_request(struct roce_conn *c, const void *head, size_t head_len, const roce_seg_t *segs, int nsegs,
                           roce_reply_t *reply, int timeout_ms) {
-    if (sock_dead(c->sock)) { set_error("peer closed the connection"); return ROCE_ERR_NOT_DELIVERED; }
+    if (sock_dead(c->sock)) { set_error("peer closed the connection (%s)", tl_dead_why); return ROCE_ERR_NOT_DELIVERED; }
     struct ofi_ep *e = ep_checkout(c->d);
     if (!e) return ROCE_ERR_NOT_DELIVERED;
     uint64_t rt;
@@ -1337,7 +1352,7 @@ int roce_client_stream_recv(roce_conn_t *c, uint8_t **data_out, size_t *len_out,
 /* one-sided reads: issued concurrently (RDM does not order them) */
 int roce_client_rdma_read(roce_conn_t *c, const roce_read_t *reads, int n, int timeout_ms) {
     if (n < 1 || n > 3) { set_error("roce_client_rdma_read: 1..3 ranges"); return -1; }
-    if (sock_dead(c->sock)) { set_error("peer closed the connection"); return ROCE_ERR_NOT_DELIVERED; }
+    if (sock_dead(c->sock)) { set_error("peer closed the connection (%s)", tl_dead_why); return ROCE_ERR_NOT_DELIVERED; }
     struct ofi_ep *e = c->dedicated ? c->own : ep_checkout(c->d);
     if (!e) return ROCE_ERR_NOT_DELIVERED;
     struct op ops[3];
@@ -1789,6 +1804,15 @@ static void *boot_main(void *arg) {
                 if (!pf[i + 1].revents) continue;
                 char c;
                 ssize_t r = recv(s->conns[i].sock, &c, 1, MSG_PEEK | MSG_DONTWAIT);
+                /* EOF or a real error: the client is gone; a spurious wake-up
+                 * (EAGAIN) is not a reason to drop a live client */
+                if (r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) continue;
+                if (r < 0 || (pf[i + 1].revents & (POLLERR | POLLNVAL))) {
+                    static atomic_int said_err;
+                    if (atomic_fetch_add(&said_err, 1) < 20)
+                        fprintf(stderr, "ofi_transport: %s: client connection dropped: %s (revents 0x%x)\n", s->bound,
+                                r < 0 ? strerror(errno) : "socket error", pf[i + 1].revents);
+                }
                 if (r <= 0) { drop_conn(s, i); continue; }
                 if (boot_message(s, &s->conns[i])) {
                     static atomic_int said;
