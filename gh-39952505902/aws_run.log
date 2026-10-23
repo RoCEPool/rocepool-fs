@@ -1,0 +1,5 @@
+[aws 12:20:26] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 12:20:27] 2 x c6in.4xlarge: 16 vCPU, 32 GiB, Up to 50 Gigabit, NVMe 0 GB, EFA no
+[aws 12:20:28] vCPU quota 32 >= 32 needed (instances already running count against it too)
+[aws 12:20:42] FAILED: aws ec2 run-instances: aws: [ERROR]: An error occurred (InsufficientInstanceCapacity) when calling the RunInstances operation (reached max retries: 2): We currently do not have sufficient c6in.4xlarge capacity in the Availability Zone you requested (us-east-2a). Our system will be working on provisioning additional capacity. You can currently get c6in.4xlarge capacity by not specifying an Availability Zone in your request or choosing us-east-2b, us-east-2c.
+[aws 12:20:45] all resources released
