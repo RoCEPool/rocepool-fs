@@ -14,9 +14,9 @@
  * Shape (why it differs from the RC transport):
  *  - RDM endpoints are connectionless and EFA has few queue pairs per
  *    device, so endpoints are pooled, not per connection: a server owns K
- *    endpoints (ROCE_OFI_SERVER_EPS, default one per core up to 32), each
+ *    endpoints (ROCE_OFI_SERVER_EPS, default one per 4 cores, 2..16), each
  *    served by one pinned worker thread -- thread-per-core; a client
- *    process owns E endpoints per domain (ROCE_OFI_CLIENT_EPS, default 4)
+ *    process owns E endpoints per domain (ROCE_OFI_CLIENT_EPS, default 2)
  *    that its threads check out per request. A "connection" is a TCP
  *    socket to the server's port (the bootstrap: endpoint names are
  *    exchanged on it, and its EOF is the liveness signal rdma_cm events
@@ -142,6 +142,7 @@ struct ofi_dom {
     int virt;                     /* FI_MR_VIRT_ADDR: remote addresses are virtual, else offsets */
     struct ofi_ep *ceps[MAX_CEPS];
     int nceps;
+    int ceps_cap;                 /* endpoint creation failed at this count (device out of QPs); 0 = none yet */
     struct ofi_ep *cfree;
     atomic_ullong gen;
 };
@@ -195,6 +196,12 @@ static int local_ip_for(const char *host, char *out, size_t n) {
 /* the domain for local address `src_ip` (NULL: the provider's first) */
 static struct ofi_dom *dom_get(const char *src_ip) {
     const char *prov = ofi_provider();
+    /* EFA hands same-host peers to libfabric's shm provider, whose large
+     * messages and RMA reads stalled with our MR mode on c5n (2026-10-23:
+     * "unidentified operation type", requests timing out at 1 MiB). The
+     * EFA device serves same-host peers itself: use it unless asked not to.
+     * Read by libfabric when it first initialises the providers. */
+    if (!strcmp(prov, "efa")) setenv("FI_EFA_ENABLE_SHM_TRANSFER", "0", 0);
     struct fi_info *hints = fi_allocinfo();
     if (!hints) { set_error("fi_allocinfo failed"); return NULL; }
     hints->ep_attr->type = FI_EP_RDM;
@@ -898,7 +905,7 @@ struct roce_conn {
 };
 
 static uint32_t client_eps(void) {
-    uint32_t n = env_u32("ROCE_OFI_CLIENT_EPS", 4);
+    uint32_t n = env_u32("ROCE_OFI_CLIENT_EPS", 2);
     return n > MAX_CEPS ? MAX_CEPS : n;
 }
 
@@ -912,12 +919,20 @@ static struct ofi_ep *ep_checkout(struct ofi_dom *d) {
             pthread_mutex_unlock(&d->lk);
             return e;
         }
-        if (d->nceps < (int)client_eps()) {
+        if (d->nceps < (int)client_eps() && (!d->ceps_cap || d->nceps < d->ceps_cap)) {
             int idx = d->nceps++;
             pthread_mutex_unlock(&d->lk);
             struct ofi_ep *e = ep_create(d, d->av);
             pthread_mutex_lock(&d->lk);
-            if (!e) { d->nceps--; pthread_mutex_unlock(&d->lk); return NULL; }
+            if (!e) {
+                d->nceps--;
+                /* the device has no queue pair left (EFA: a few hundred per
+                 * device, shared by every process on the host): wait for one
+                 * of the endpoints this process already has */
+                if (d->nceps > 0) { d->ceps_cap = d->nceps; pthread_cond_wait(&d->cv, &d->lk); continue; }
+                pthread_mutex_unlock(&d->lk);
+                return NULL;
+            }
             e->index = idx;
             e->gen = atomic_fetch_add(&d->gen, 1) + 1;
             d->ceps[idx] = e;
@@ -1754,7 +1769,10 @@ roce_server_t *roce_server_start(const char *bind_address, roce_request_handler 
     long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
     cpu_set_t allowed;
     if (sched_getaffinity(0, sizeof(allowed), &allowed) == 0) ncpu = CPU_COUNT(&allowed);
-    uint32_t k = env_u32("ROCE_OFI_SERVER_EPS", ncpu < 2 ? 2 : (ncpu > 32 ? 32 : (uint32_t)ncpu));
+    /* one endpoint (= one queue pair, one worker thread) per 4 cores, 2..16:
+     * EFA has a few hundred QPs per device for ALL processes on the host
+     * (several servers + every client rank), so one per core ran out */
+    uint32_t k = env_u32("ROCE_OFI_SERVER_EPS", ncpu < 8 ? 2 : (ncpu > 64 ? 16 : (uint32_t)(ncpu / 4)));
     uint32_t depth = env_u32("ROCE_OFI_RX_DEPTH", RX_DEPTH_DEFAULT);
     s->w = calloc(k, sizeof(*s->w));
     if (!s->w) goto fail;
@@ -1765,7 +1783,16 @@ roce_server_t *roce_server_start(const char *bind_address, roce_request_handler 
         w->s = s;
         w->pool = pool;
         w->e = ep_create(s->d, s->av);
-        if (!w->e) goto fail;
+        if (!w->e) {
+            /* out of queue pairs (EFA: shared by every process on the host):
+             * serve with the endpoints we have rather than not at all */
+            if (s->nw > 0) {
+                fprintf(stderr, "ofi_transport: %s: %u of %u endpoints (%s): serving with those\n", bind_address,
+                        s->nw, k, roce_last_error());
+                break;
+            }
+            goto fail;
+        }
         s->nw++;
         struct ofi_ep *e = w->e;
         e->nslots = (int)depth;

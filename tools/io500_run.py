@@ -435,6 +435,17 @@ def main() -> int:
                          "simulated 64 MiB)")
     ap.add_argument("--report", default=os.path.join(ROOT, "io500_report.json"))
     args = ap.parse_args()
+    # the servers, clients and test scenarios hold a socket per connection
+    # and libfabric/verbs descriptors: a 1024-file soft limit (ssh's
+    # default) ran out on site; raise it to the hard limit for us and our
+    # children
+    try:
+        import resource
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if soft != resource.RLIM_INFINITY and (hard == resource.RLIM_INFINITY or soft < hard):
+            resource.setrlimit(resource.RLIMIT_NOFILE, (min(hard, 1 << 20) if hard != resource.RLIM_INFINITY else 1 << 20, hard))
+    except (ValueError, OSError):
+        pass
     if os.geteuid() != 0:
         print("needs root (FUSE mounts, namespaces)", file=sys.stderr)
         return 2
