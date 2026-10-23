@@ -1366,7 +1366,14 @@ int roce_client_rdma_read(roce_conn_t *c, const roce_read_t *reads, int n, int t
 }
 
 /* ------------------------------------------------------- server side */
-struct name_ent { uint8_t name[256]; size_t len; fi_addr_t addr; int refs; };
+/* A client endpoint's AV entry is kept after its last connection closes
+ * (refs 0, dormant) and revived when the same endpoint connects again:
+ * EFA keeps per-peer message ordering state, and removing a live client
+ * endpoint and re-inserting it reset the server's side only -- the next
+ * packet aborted the process ("EFA internal error: Packet already
+ * processed", 2026-10-23, both OSTs in the first IO500 on EFA). A new
+ * client endpoint has a new name (EFA names carry a per-QP qkey). */
+struct name_ent { uint8_t name[256]; size_t len; fi_addr_t addr; int refs; int valid; };
 /* Per server-AV index: a client endpoint that went away must not be
  * replied to or read from by a worker still holding one of its requests,
  * and its index, once removed, may be handed to a new client. So: the
@@ -1607,8 +1614,13 @@ static int bind_listen(const char *bind_address, char *bound, size_t bn) {
 /* insert (or reference) a client endpoint name in the server AV */
 static int name_ref(struct roce_server *s, const uint8_t *name, size_t len, fi_addr_t *out) {
     for (int i = 0; i < s->nnames; i++)
-        if (s->names[i].refs > 0 && s->names[i].len == len && !memcmp(s->names[i].name, name, len)) {
-            s->names[i].refs++;
+        if (s->names[i].valid && s->names[i].len == len && !memcmp(s->names[i].name, name, len)) {
+            if (s->names[i].refs++ == 0) {  /* dormant: live again, in a new epoch */
+                pthread_mutex_lock(&s->av_lk);
+                s->ae[s->names[i].addr].epoch++;
+                s->ae[s->names[i].addr].live = 1;
+                pthread_mutex_unlock(&s->av_lk);
+            }
             *out = s->names[i].addr;
             return 0;
         }
@@ -1628,7 +1640,7 @@ static int name_ref(struct roce_server *s, const uint8_t *name, size_t len, fi_a
     pthread_mutex_unlock(&s->av_lk);
     if (rc != 1) { set_error("fi_av_insert(client): %d", rc); return -1; }
     int slot = -1;
-    for (int i = 0; i < s->nnames; i++) if (s->names[i].refs == 0) { slot = i; break; }
+    for (int i = 0; i < s->nnames; i++) if (!s->names[i].valid) { slot = i; break; }
     if (slot < 0) {
         if (s->nnames == s->cnames) {
             int nc = s->cnames ? s->cnames * 2 : 64;
@@ -1643,18 +1655,18 @@ static int name_ref(struct roce_server *s, const uint8_t *name, size_t len, fi_a
     s->names[slot].len = len;
     s->names[slot].addr = a;
     s->names[slot].refs = 1;
+    s->names[slot].valid = 1;
     *out = a;
     return 0;
 }
 static void name_unref(struct roce_server *s, fi_addr_t a) {
     for (int i = 0; i < s->nnames; i++)
-        if (s->names[i].refs > 0 && s->names[i].addr == a) {
+        if (s->names[i].valid && s->names[i].refs > 0 && s->names[i].addr == a) {
             if (--s->names[i].refs == 0) {
+                /* dormant: no more requests admitted, the AV entry (and EFA's
+                 * per-peer state) kept for the endpoint's next connection */
                 pthread_mutex_lock(&s->av_lk);
-                struct aent *x = &s->ae[a];
-                x->live = 0;
-                x->owed++;
-                if (!x->busy) for (; x->owed; x->owed--) fi_av_remove(s->av, &a, 1, 0);
+                s->ae[a].live = 0;
                 pthread_mutex_unlock(&s->av_lk);
             }
             return;
