@@ -156,7 +156,20 @@ static const char *ofi_provider(void) {
     int efa = 0;
     if (d) {
         struct dirent *e;
-        while ((e = readdir(d))) if (!strncmp(e->d_name, "efa", 3)) efa = 1;
+        /* named efa* on older kernels, rdmap<bus>s<slot> on newer ones: the
+         * PCI driver tells */
+        while ((e = readdir(d))) {
+            if (!strncmp(e->d_name, "efa", 3)) efa = 1;
+            if (e->d_name[0] == '.') continue;
+            char path[512], tgt[512];
+            snprintf(path, sizeof(path), "/sys/class/infiniband/%s/device/driver", e->d_name);
+            ssize_t n = readlink(path, tgt, sizeof(tgt) - 1);
+            if (n > 0) {
+                tgt[n] = 0;
+                const char *b = strrchr(tgt, '/');
+                if (!strcmp(b ? b + 1 : tgt, "efa")) efa = 1;
+            }
+        }
         closedir(d);
     }
     return efa ? "efa" : "tcp";
