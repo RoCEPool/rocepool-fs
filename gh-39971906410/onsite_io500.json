@@ -1,0 +1,1288 @@
+{
+ "benchmark": "IO500 (official app, github.com/IO500/io500)",
+ "cluster": "real RoCE: 2 hosts 172.31.7.255, 172.31.12.43",
+ "nodes": 2,
+ "ranks": 64,
+ "ranks_per_node": 32,
+ "mdts": 2,
+ "osts": 2,
+ "stonewall_s": 60,
+ "valid_procedure": false,
+ "cpu_cores_here": 36,
+ "reference": {
+  "WEKA_Afton_10node": {
+   "score": 105.94,
+   "bw_gib_s": 33.28,
+   "md_kiops": 337.29
+  }
+ },
+ "name_resolution": {
+  "before": {
+   "0": {
+    "ip-172-31-7-255": "172.31.7.255",
+    "ip-172-31-12-43": "172.31.12.43"
+   },
+   "1": {
+    "ip-172-31-7-255": "172.31.7.255",
+    "ip-172-31-12-43": "172.31.12.43"
+   }
+  },
+  "broken": {}
+ },
+ "clock_offsets_s": {
+  "1": 0.139
+ },
+ "ost_tier": {
+  "mode": "auto",
+  "nodes": {
+   "0": {
+    "recommendation": {
+     "tier": "file:/rocepool_tier/rocepool_ost_{n}.tier:94",
+     "p2pmem": null,
+     "notes": [
+      "no NVMe-backed file system with room: the tier goes on / (/dev/root, 188 GiB free; not NVMe -- slower)"
+     ],
+     "tier_dir": "/rocepool_tier",
+     "tier_mount": {
+      "device": "/dev/root",
+      "namespace": "",
+      "mountpoint": "/",
+      "fstype": "ext4",
+      "free_bytes": 202393763840,
+      "via": null
+     },
+     "tier_write": {
+      "mib_s": 141.6,
+      "seconds": 7.23
+     }
+    },
+    "kernel": "7.0.0-1014-aws",
+    "nvme": [
+     "nvme0"
+    ],
+    "error": null
+   },
+   "1": {
+    "recommendation": {
+     "tier": "file:/rocepool_tier/rocepool_ost_{n}.tier:94",
+     "p2pmem": null,
+     "notes": [
+      "no NVMe-backed file system with room: the tier goes on / (/dev/root, 188 GiB free; not NVMe -- slower)"
+     ],
+     "tier_dir": "/rocepool_tier",
+     "tier_mount": {
+      "device": "/dev/root",
+      "namespace": "",
+      "mountpoint": "/",
+      "fstype": "ext4",
+      "free_bytes": 202652254208,
+      "via": null
+     },
+     "tier_write": {
+      "mib_s": 133.9,
+      "seconds": 7.65
+     }
+    },
+    "kernel": "7.0.0-1014-aws",
+    "nvme": [
+     "nvme0"
+    ],
+    "error": null
+   }
+  }
+ },
+ "capacity": {
+  "budget_gib": 202.4,
+  "bounded_by": {
+   "ost": "172.31.12.43:19951",
+   "kind": "tier",
+   "gib": 112.5
+  },
+  "ior_easy_gib": 151.8,
+  "ior_hard_gib": 40.5,
+  "split": "no measured speeds: 75% ior-easy, 20% ior-hard"
+ },
+ "mdt_slots": 67108864,
+ "numa_nodes_per_host": 1,
+ "rank_binding": "numa",
+ "fuse_channel_probe": {
+  "results": [
+   {
+    "client": "fuse",
+    "uring": false,
+    "direct_read": true,
+    "returncode": 255,
+    "score": {},
+    "phases": {
+     "ior-easy-write": {
+      "value": 0.255736,
+      "unit": "GiB/s",
+      "time_s": 19.2,
+      "invalid": true
+     },
+     "mdtest-easy-write": {
+      "value": 12.942179,
+      "unit": "kIOPS",
+      "time_s": 13.477,
+      "invalid": true
+     },
+     "ior-hard-write": {
+      "value": 0.151697,
+      "unit": "GiB/s",
+      "time_s": 18.288,
+      "invalid": true
+     },
+     "mdtest-hard-write": {
+      "value": 4.01491,
+      "unit": "kIOPS",
+      "time_s": 22.909,
+      "invalid": true
+     },
+     "find": {
+      "value": 492.850088,
+      "unit": "kIOPS",
+      "time_s": 0.537,
+      "invalid": false
+     },
+     "ior-easy-read": {
+      "value": 0.25142,
+      "unit": "GiB/s",
+      "time_s": 19.401,
+      "invalid": false
+     },
+     "mdtest-easy-stat": {
+      "value": 25.849837,
+      "unit": "kIOPS",
+      "time_s": 7.245,
+      "invalid": false
+     },
+     "ior-hard-read": {
+      "value": 0.312867,
+      "unit": "GiB/s",
+      "time_s": 8.813,
+      "invalid": false
+     },
+     "mdtest-hard-stat": {
+      "value": 25.94459,
+      "unit": "kIOPS",
+      "time_s": 4.396,
+      "invalid": false
+     },
+     "mdtest-easy-delete": {
+      "value": 13.018524,
+      "unit": "kIOPS",
+      "time_s": 13.458,
+      "invalid": false
+     },
+     "mdtest-hard-read": {
+      "value": 12.772484,
+      "unit": "kIOPS",
+      "time_s": 7.895,
+      "invalid": false
+     },
+     "mdtest-hard-delete": {
+      "value": 5.993059,
+      "unit": "kIOPS",
+      "time_s": 15.717,
+      "invalid": false
+     }
+    },
+    "errors": [
+     "ERROR INVALID (src/phase_dbg.c:15) stonewall-time 10s != 300s",
+     "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime",
+     "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime",
+     "ERROR: cannot read from file, (ior.c:1724)",
+     "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 34",
+     "node 0: rocepool: 172.31.12.43:19901 op 30 key io500probe: timed out waiting for completion",
+     "node 0: rocepool: 172.31.12.43:19901 op 30 key io500probe: timed out waiting for completion",
+     "node 1: rocepool: 172.31.7.255:19901 op 30 key io500probe/ior-easy/ior_file_easy.00000061: timed out waiting for completion",
+     "node 1: rocepool: 172.31.7.255:19901 op 30 key io500probe/ior-easy/ior_file_easy.00000062: timed out waiting for completion"
+    ]
+   },
+   {
+    "client": "fuse",
+    "uring": true,
+    "direct_read": true,
+    "returncode": 255,
+    "score": {},
+    "phases": {
+     "ior-easy-write": {
+      "value": 0.251448,
+      "unit": "GiB/s",
+      "time_s": 31.992,
+      "invalid": true
+     },
+     "mdtest-easy-write": {
+      "value": 12.969791,
+      "unit": "kIOPS",
+      "time_s": 13.755,
+      "invalid": true
+     },
+     "ior-hard-write": {
+      "value": 0.163315,
+      "unit": "GiB/s",
+      "time_s": 21.7,
+      "invalid": true
+     },
+     "mdtest-hard-write": {
+      "value": 4.045581,
+      "unit": "kIOPS",
+      "time_s": 23.328,
+      "invalid": true
+     },
+     "find": {
+      "value": 564.579881,
+      "unit": "kIOPS",
+      "time_s": 0.484,
+      "invalid": false
+     },
+     "ior-easy-read": {
+      "value": 0.248275,
+      "unit": "GiB/s",
+      "time_s": 32.238,
+      "invalid": false
+     },
+     "mdtest-easy-stat": {
+      "value": 25.786703,
+      "unit": "kIOPS",
+      "time_s": 7.413,
+      "invalid": false
+     },
+     "ior-hard-read": {
+      "value": 0.416459,
+      "unit": "GiB/s",
+      "time_s": 8.456,
+      "invalid": false
+     },
+     "mdtest-hard-stat": {
+      "value": 25.694497,
+      "unit": "kIOPS",
+      "time_s": 4.522,
+      "invalid": false
+     },
+     "mdtest-easy-delete": {
+      "value": 13.118071,
+      "unit": "kIOPS",
+      "time_s": 13.669,
+      "invalid": false
+     },
+     "mdtest-hard-read": {
+      "value": 12.786604,
+      "unit": "kIOPS",
+      "time_s": 8.071,
+      "invalid": false
+     },
+     "mdtest-hard-delete": {
+      "value": 6.005282,
+      "unit": "kIOPS",
+      "time_s": 16.088,
+      "invalid": false
+     }
+    },
+    "errors": [
+     "ERROR INVALID (src/phase_dbg.c:15) stonewall-time 10s != 300s",
+     "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime",
+     "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime",
+     "ERROR: cannot read from file, (ior.c:1724)",
+     "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 33",
+     "node 0: rocepool: 172.31.12.43:19901 op 30 key io500probe: timed out waiting for completion",
+     "node 0: rocepool: 172.31.12.43:19901 op 30 key io500probe: timed out waiting for completion",
+     "node 1: rocepool: 172.31.7.255:19901 op 30 key io500probe/ior-easy/ior_file_easy.00000055: timed out waiting for completion",
+     "node 1: rocepool: 172.31.7.255:19901 op 30 key io500probe/ior-easy/ior_file_easy.00000053: timed out waiting for completion"
+    ]
+   }
+  ],
+  "chosen": "classic"
+ },
+ "client_probe": {
+  "results": [
+   {
+    "client": "fuse",
+    "uring": false,
+    "direct_read": true,
+    "returncode": 255,
+    "score": {},
+    "phases": {
+     "ior-easy-write": {
+      "value": 0.255736,
+      "unit": "GiB/s",
+      "time_s": 19.2,
+      "invalid": true
+     },
+     "mdtest-easy-write": {
+      "value": 12.942179,
+      "unit": "kIOPS",
+      "time_s": 13.477,
+      "invalid": true
+     },
+     "ior-hard-write": {
+      "value": 0.151697,
+      "unit": "GiB/s",
+      "time_s": 18.288,
+      "invalid": true
+     },
+     "mdtest-hard-write": {
+      "value": 4.01491,
+      "unit": "kIOPS",
+      "time_s": 22.909,
+      "invalid": true
+     },
+     "find": {
+      "value": 492.850088,
+      "unit": "kIOPS",
+      "time_s": 0.537,
+      "invalid": false
+     },
+     "ior-easy-read": {
+      "value": 0.25142,
+      "unit": "GiB/s",
+      "time_s": 19.401,
+      "invalid": false
+     },
+     "mdtest-easy-stat": {
+      "value": 25.849837,
+      "unit": "kIOPS",
+      "time_s": 7.245,
+      "invalid": false
+     },
+     "ior-hard-read": {
+      "value": 0.312867,
+      "unit": "GiB/s",
+      "time_s": 8.813,
+      "invalid": false
+     },
+     "mdtest-hard-stat": {
+      "value": 25.94459,
+      "unit": "kIOPS",
+      "time_s": 4.396,
+      "invalid": false
+     },
+     "mdtest-easy-delete": {
+      "value": 13.018524,
+      "unit": "kIOPS",
+      "time_s": 13.458,
+      "invalid": false
+     },
+     "mdtest-hard-read": {
+      "value": 12.772484,
+      "unit": "kIOPS",
+      "time_s": 7.895,
+      "invalid": false
+     },
+     "mdtest-hard-delete": {
+      "value": 5.993059,
+      "unit": "kIOPS",
+      "time_s": 15.717,
+      "invalid": false
+     }
+    },
+    "errors": [
+     "ERROR INVALID (src/phase_dbg.c:15) stonewall-time 10s != 300s",
+     "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime",
+     "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime",
+     "ERROR: cannot read from file, (ior.c:1724)",
+     "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 34",
+     "node 0: rocepool: 172.31.12.43:19901 op 30 key io500probe: timed out waiting for completion",
+     "node 0: rocepool: 172.31.12.43:19901 op 30 key io500probe: timed out waiting for completion",
+     "node 1: rocepool: 172.31.7.255:19901 op 30 key io500probe/ior-easy/ior_file_easy.00000061: timed out waiting for completion",
+     "node 1: rocepool: 172.31.7.255:19901 op 30 key io500probe/ior-easy/ior_file_easy.00000062: timed out waiting for completion"
+    ]
+   },
+   {
+    "client": "fuse",
+    "uring": true,
+    "direct_read": true,
+    "returncode": 255,
+    "score": {},
+    "phases": {
+     "ior-easy-write": {
+      "value": 0.251448,
+      "unit": "GiB/s",
+      "time_s": 31.992,
+      "invalid": true
+     },
+     "mdtest-easy-write": {
+      "value": 12.969791,
+      "unit": "kIOPS",
+      "time_s": 13.755,
+      "invalid": true
+     },
+     "ior-hard-write": {
+      "value": 0.163315,
+      "unit": "GiB/s",
+      "time_s": 21.7,
+      "invalid": true
+     },
+     "mdtest-hard-write": {
+      "value": 4.045581,
+      "unit": "kIOPS",
+      "time_s": 23.328,
+      "invalid": true
+     },
+     "find": {
+      "value": 564.579881,
+      "unit": "kIOPS",
+      "time_s": 0.484,
+      "invalid": false
+     },
+     "ior-easy-read": {
+      "value": 0.248275,
+      "unit": "GiB/s",
+      "time_s": 32.238,
+      "invalid": false
+     },
+     "mdtest-easy-stat": {
+      "value": 25.786703,
+      "unit": "kIOPS",
+      "time_s": 7.413,
+      "invalid": false
+     },
+     "ior-hard-read": {
+      "value": 0.416459,
+      "unit": "GiB/s",
+      "time_s": 8.456,
+      "invalid": false
+     },
+     "mdtest-hard-stat": {
+      "value": 25.694497,
+      "unit": "kIOPS",
+      "time_s": 4.522,
+      "invalid": false
+     },
+     "mdtest-easy-delete": {
+      "value": 13.118071,
+      "unit": "kIOPS",
+      "time_s": 13.669,
+      "invalid": false
+     },
+     "mdtest-hard-read": {
+      "value": 12.786604,
+      "unit": "kIOPS",
+      "time_s": 8.071,
+      "invalid": false
+     },
+     "mdtest-hard-delete": {
+      "value": 6.005282,
+      "unit": "kIOPS",
+      "time_s": 16.088,
+      "invalid": false
+     }
+    },
+    "errors": [
+     "ERROR INVALID (src/phase_dbg.c:15) stonewall-time 10s != 300s",
+     "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime",
+     "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime",
+     "ERROR: cannot read from file, (ior.c:1724)",
+     "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 33",
+     "node 0: rocepool: 172.31.12.43:19901 op 30 key io500probe: timed out waiting for completion",
+     "node 0: rocepool: 172.31.12.43:19901 op 30 key io500probe: timed out waiting for completion",
+     "node 1: rocepool: 172.31.7.255:19901 op 30 key io500probe/ior-easy/ior_file_easy.00000055: timed out waiting for completion",
+     "node 1: rocepool: 172.31.7.255:19901 op 30 key io500probe/ior-easy/ior_file_easy.00000053: timed out waiting for completion"
+    ]
+   },
+   {
+    "client": "intercept",
+    "uring": null,
+    "direct_read": true,
+    "returncode": 255,
+    "score": {},
+    "phases": {
+     "ior-easy-write": {
+      "value": 0.259417,
+      "unit": "GiB/s",
+      "time_s": 15.797,
+      "invalid": true
+     },
+     "mdtest-easy-write": {
+      "value": 84.798882,
+      "unit": "kIOPS",
+      "time_s": 13.501,
+      "invalid": true
+     },
+     "ior-hard-write": {
+      "value": 0.587546,
+      "unit": "GiB/s",
+      "time_s": 8.623,
+      "invalid": true
+     },
+     "mdtest-hard-write": {
+      "value": 22.332258,
+      "unit": "kIOPS",
+      "time_s": 30.76,
+      "invalid": true
+     },
+     "find": {
+      "value": 744.311669,
+      "unit": "kIOPS",
+      "time_s": 2.355,
+      "invalid": false
+     }
+    },
+    "errors": [
+     "ERROR INVALID (src/phase_dbg.c:15) stonewall-time 10s != 300s",
+     "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime",
+     "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime",
+     "ERROR: cannot read from file, (ior.c:1743)",
+     "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 26"
+    ]
+   },
+   {
+    "client": "intercept",
+    "uring": null,
+    "direct_read": false,
+    "returncode": 255,
+    "score": {},
+    "phases": {},
+    "errors": [
+     "ERROR INVALID (src/phase_dbg.c:15) stonewall-time 10s != 300s",
+     "WARNING: [RANK 001]: unlink() of file \"/mnt/rocepool_io500/io500probe/ior-easy/ior_file_easy.00000001\" failed",
+     "WARNING: [RANK 025]: unlink() of file \"/mnt/rocepool_io500/io500probe/ior-easy/ior_file_easy.00000025\" failed",
+     "ERROR: cannot write to file, (ior.c:1712)",
+     "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 45"
+    ]
+   }
+  ],
+  "chosen": "fuse",
+  "all_failed": true
+ },
+ "client": "fuse",
+ "direct_read": true,
+ "fuse_channel": "classic",
+ "dead_servers": [
+  {
+   "kind": "ost",
+   "node": 0,
+   "addr": "172.31.7.255:19951",
+   "env": {
+    "ROCEPOOL_OST_TIER": "file:/rocepool_tier/rocepool_ost_0.tier:94",
+    "ROCEPOOL_OST_RAM_CACHE_MIB": "18903"
+   },
+   "tier": "file:/rocepool_tier/rocepool_ost_0.tier:94",
+   "log": "/root/rocepool/.bench_cache/io500_run/ost0_19951.log",
+   "exit": -6,
+   "log_tail": "rocepool OST: tier file, 94 GiB, direct I/O on, RAM cache 18903 MiB\nREADY 172.31.7.255:19951\nLibfabric EFA provider has encountered an internal error:\n\nLibfabric error: (-114) Operation already in progress\nEFA internal error: (4104) Packet already processed\n\nYour application will now abort().\n",
+   "kernel_log": []
+  },
+  {
+   "kind": "ost",
+   "node": 1,
+   "addr": "172.31.12.43:19951",
+   "env": {
+    "ROCEPOOL_OST_TIER": "file:/rocepool_tier/rocepool_ost_1.tier:94",
+    "ROCEPOOL_OST_RAM_CACHE_MIB": "18903"
+   },
+   "tier": "file:/rocepool_tier/rocepool_ost_1.tier:94",
+   "log": "/root/rocepool/.bench_cache/io500_run/ost1_19951.log",
+   "exit": 255,
+   "log_tail": "rocepool OST: tier file, 94 GiB, direct I/O on, RAM cache 18903 MiB\nREADY 172.31.12.43:19951\nLibfabric EFA provider has encountered an internal error:\n\nLibfabric error: (-114) Operation already in progress\nEFA internal error: (4104) Packet already processed\n\nYour application will now abort().\n",
+   "kernel_log": []
+  }
+ ],
+ "validity": {
+  "valid": false,
+  "reasons": [],
+  "unexpected": [],
+  "find_found": null,
+  "diagnosis": []
+ },
+ "returncode": -15,
+ "phases": {},
+ "score": {},
+ "wall_s": 0.6,
+ "io500_output_tail": [],
+ "config": {
+  "paused_between_phases": true,
+  "ior_easy_block_mib_per_rank": 2428,
+  "ior_hard_segments_per_rank": 14449,
+  "mdtest_easy_n": 1000000,
+  "mdtest_hard_n": 1000000,
+  "client_threads": 16,
+  "attr_ttl_s": 3.0,
+  "client": "fuse",
+  "intercept_io_threads": 4,
+  "ost_tier": "auto",
+  "ost_ram_cache_mib": 18903
+ },
+ "servers": [
+  {
+   "kind": "mdt",
+   "node": 0,
+   "addr": "172.31.7.255:19901",
+   "env": {
+    "ROCEPOOL_MDT_SLOTS": "67108864"
+   },
+   "log": "/root/rocepool/.bench_cache/io500_run/mdt0_19901.log"
+  },
+  {
+   "kind": "mdt",
+   "node": 1,
+   "addr": "172.31.12.43:19901",
+   "env": {
+    "ROCEPOOL_MDT_SLOTS": "67108864"
+   },
+   "log": "/root/rocepool/.bench_cache/io500_run/mdt1_19901.log"
+  },
+  {
+   "kind": "ost",
+   "node": 0,
+   "addr": "172.31.7.255:19951",
+   "env": {
+    "ROCEPOOL_OST_TIER": "file:/rocepool_tier/rocepool_ost_0.tier:94",
+    "ROCEPOOL_OST_RAM_CACHE_MIB": "18903"
+   },
+   "tier": "file:/rocepool_tier/rocepool_ost_0.tier:94",
+   "log": "/root/rocepool/.bench_cache/io500_run/ost0_19951.log"
+  },
+  {
+   "kind": "ost",
+   "node": 1,
+   "addr": "172.31.12.43:19951",
+   "env": {
+    "ROCEPOOL_OST_TIER": "file:/rocepool_tier/rocepool_ost_1.tier:94",
+    "ROCEPOOL_OST_RAM_CACHE_MIB": "18903"
+   },
+   "tier": "file:/rocepool_tier/rocepool_ost_1.tier:94",
+   "log": "/root/rocepool/.bench_cache/io500_run/ost1_19951.log"
+  }
+ ],
+ "snapshots": [
+  {
+   "phase": "start",
+   "t": 5009.511979671,
+   "servers": {
+    "172.31.7.255:19901": {
+     "kind": "mdt",
+     "reqs": 3622685,
+     "handler_cpu_ns": 13350519690,
+     "handler_wall_ns": 13560174917,
+     "bytes_in": 2016711545,
+     "bytes_out": 955149371,
+     "inflight_max": 8,
+     "lock_wait_ns": 1175884882,
+     "lock_hold_ns": 6833850143,
+     "lock_stripes": 64,
+     "table_slots": 67108864,
+     "table_registered": true,
+     "table_used": 863054,
+     "slots_published": 1546984,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 1733122,
+      "2": 1115850,
+      "3": 8532,
+      "4": 252788,
+      "5": 286,
+      "6": 136,
+      "7": 422101,
+      "8": 89369,
+      "9": 314,
+      "10": 187
+     },
+     "rss_bytes": 19117608960,
+     "numa_free_bytes": -1
+    },
+    "172.31.12.43:19901": {
+     "kind": "mdt",
+     "reqs": 3603102,
+     "handler_cpu_ns": 13024894381,
+     "handler_wall_ns": 13135213861,
+     "bytes_in": 2009201337,
+     "bytes_out": 950652306,
+     "inflight_max": 7,
+     "lock_wait_ns": 1224379677,
+     "lock_hold_ns": 6640137319,
+     "lock_stripes": 64,
+     "table_slots": 67108864,
+     "table_registered": true,
+     "table_used": 860859,
+     "slots_published": 1534362,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 1727267,
+      "2": 1113039,
+      "3": 476,
+      "4": 252180,
+      "5": 286,
+      "6": 136,
+      "7": 420587,
+      "8": 88871,
+      "9": 176,
+      "10": 84
+     },
+     "rss_bytes": 19046064128,
+     "numa_free_bytes": -1
+    },
+    "172.31.7.255:19951": {
+     "error": "peer unreachable: 172.31.7.255:19951 (connect 172.31.7.255:19951: Connection refused)"
+    },
+    "172.31.12.43:19951": {
+     "error": "peer unreachable: 172.31.12.43:19951 (connect 172.31.12.43:19951: Connection refused)"
+    }
+   },
+   "procs": [
+    {
+     "pid": 273218,
+     "role": "mdt",
+     "addr": "172.31.7.255:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.09,
+       "sys": 5.81
+      },
+      "server": {
+       "user": 969.2500000000001,
+       "sys": 1117.2699999999998
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 3.090000000000373
+      }
+     },
+     "rss_kb": 18669540,
+     "node": 0
+    },
+    {
+     "pid": 284402,
+     "role": "fuse",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "fuse_worker": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 3800,
+     "fuse_stats": {
+      "seq": 1,
+      "mount": "/mnt/rocepool_io500",
+      "ops": {
+       "3": [
+        1,
+        7625
+       ],
+       "26": [
+        1,
+        5560
+       ]
+      },
+      "mdt_rpcs": 0,
+      "ost_rpcs": 0,
+      "arena_bytes": 67108864,
+      "arena_in_use": 17825792,
+      "body_bytes_zero_copy": 0,
+      "body_bytes_copied": 0,
+      "uring_reqs": 0,
+      "direct_reads": 0,
+      "direct_bytes": 0,
+      "leases": 0,
+      "stale_leases": 0,
+      "direct_lookups": 0,
+      "direct_lookup_misses": 0
+     },
+     "node": 0
+    },
+    {
+     "pid": 43235,
+     "role": "mdt",
+     "addr": "172.31.12.43:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.11,
+       "sys": 6.38
+      },
+      "server": {
+       "user": 922.9099999999999,
+       "sys": 1248.6999999999998
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 4.230000000000018
+      }
+     },
+     "rss_kb": 18599672,
+     "node": 1
+    },
+    {
+     "pid": 45407,
+     "role": "fuse",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "fuse_worker": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 3764,
+     "fuse_stats": {
+      "seq": 1,
+      "mount": "/mnt/rocepool_io500",
+      "ops": {
+       "3": [
+        1,
+        11306
+       ],
+       "26": [
+        1,
+        6670
+       ]
+      },
+      "mdt_rpcs": 0,
+      "ost_rpcs": 0,
+      "arena_bytes": 67108864,
+      "arena_in_use": 17825792,
+      "body_bytes_zero_copy": 0,
+      "body_bytes_copied": 0,
+      "uring_reqs": 0,
+      "direct_reads": 0,
+      "direct_bytes": 0,
+      "leases": 0,
+      "stale_leases": 0,
+      "direct_lookups": 0,
+      "direct_lookup_misses": 0
+     },
+     "node": 1
+    }
+   ],
+   "hosts": {
+    "0": {
+     "user": 8708.72,
+     "nice": 4.23,
+     "system": 4229.61,
+     "idle": 111349.52,
+     "iowait": 49431.39,
+     "irq": 0.0,
+     "softirq": 3.09,
+     "steal": 1.24,
+     "cores": 36
+    },
+    "1": {
+     "user": 2814.36,
+     "nice": 4.22,
+     "system": 2486.02,
+     "idle": 118743.63,
+     "iowait": 49925.26,
+     "irq": 0.0,
+     "softirq": 2.19,
+     "steal": 4.37,
+     "cores": 36
+    }
+   }
+  },
+  {
+   "phase": "end",
+   "t": 5010.06285819,
+   "servers": {
+    "172.31.7.255:19901": {
+     "kind": "mdt",
+     "reqs": 3622685,
+     "handler_cpu_ns": 13350519690,
+     "handler_wall_ns": 13560174917,
+     "bytes_in": 2016711545,
+     "bytes_out": 955149371,
+     "inflight_max": 8,
+     "lock_wait_ns": 1175884882,
+     "lock_hold_ns": 6833850143,
+     "lock_stripes": 64,
+     "table_slots": 67108864,
+     "table_registered": true,
+     "table_used": 863054,
+     "slots_published": 1546984,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 1733122,
+      "2": 1115850,
+      "3": 8532,
+      "4": 252788,
+      "5": 286,
+      "6": 136,
+      "7": 422101,
+      "8": 89369,
+      "9": 314,
+      "10": 187
+     },
+     "rss_bytes": 19117608960,
+     "numa_free_bytes": -1
+    },
+    "172.31.12.43:19901": {
+     "kind": "mdt",
+     "reqs": 3603102,
+     "handler_cpu_ns": 13024894381,
+     "handler_wall_ns": 13135213861,
+     "bytes_in": 2009201337,
+     "bytes_out": 950652306,
+     "inflight_max": 7,
+     "lock_wait_ns": 1224379677,
+     "lock_hold_ns": 6640137319,
+     "lock_stripes": 64,
+     "table_slots": 67108864,
+     "table_registered": true,
+     "table_used": 860859,
+     "slots_published": 1534362,
+     "slots_unpublished": 0,
+     "by_op": {
+      "1": 1727267,
+      "2": 1113039,
+      "3": 476,
+      "4": 252180,
+      "5": 286,
+      "6": 136,
+      "7": 420587,
+      "8": 88871,
+      "9": 176,
+      "10": 84
+     },
+     "rss_bytes": 19046064128,
+     "numa_free_bytes": -1
+    },
+    "172.31.7.255:19951": {
+     "error": "peer unreachable: 172.31.7.255:19951 (connect 172.31.7.255:19951: Connection refused)"
+    },
+    "172.31.12.43:19951": {
+     "error": "peer unreachable: 172.31.12.43:19951 (connect 172.31.12.43:19951: Connection refused)"
+    }
+   },
+   "procs": [
+    {
+     "pid": 273218,
+     "role": "mdt",
+     "addr": "172.31.7.255:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.09,
+       "sys": 5.81
+      },
+      "server": {
+       "user": 969.3600000000001,
+       "sys": 1117.4299999999998
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 3.0800000000001546
+      }
+     },
+     "rss_kb": 18669540,
+     "node": 0
+    },
+    {
+     "pid": 284402,
+     "role": "fuse",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "fuse_worker": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 3808,
+     "fuse_stats": {
+      "seq": 2,
+      "mount": "/mnt/rocepool_io500",
+      "ops": {
+       "3": [
+        1,
+        7625
+       ],
+       "26": [
+        1,
+        5560
+       ]
+      },
+      "mdt_rpcs": 0,
+      "ost_rpcs": 0,
+      "arena_bytes": 67108864,
+      "arena_in_use": 17825792,
+      "body_bytes_zero_copy": 0,
+      "body_bytes_copied": 0,
+      "uring_reqs": 0,
+      "direct_reads": 0,
+      "direct_bytes": 0,
+      "leases": 0,
+      "stale_leases": 0,
+      "direct_lookups": 0,
+      "direct_lookup_misses": 0
+     },
+     "node": 0
+    },
+    {
+     "pid": 43235,
+     "role": "mdt",
+     "addr": "172.31.12.43:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.11,
+       "sys": 6.38
+      },
+      "server": {
+       "user": 922.9899999999999,
+       "sys": 1248.8699999999997
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 4.230000000000246
+      }
+     },
+     "rss_kb": 18599672,
+     "node": 1
+    },
+    {
+     "pid": 45407,
+     "role": "fuse",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "fuse_worker": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 3772,
+     "fuse_stats": {
+      "seq": 2,
+      "mount": "/mnt/rocepool_io500",
+      "ops": {
+       "3": [
+        1,
+        11306
+       ],
+       "26": [
+        1,
+        6670
+       ]
+      },
+      "mdt_rpcs": 0,
+      "ost_rpcs": 0,
+      "arena_bytes": 67108864,
+      "arena_in_use": 17825792,
+      "body_bytes_zero_copy": 0,
+      "body_bytes_copied": 0,
+      "uring_reqs": 0,
+      "direct_reads": 0,
+      "direct_bytes": 0,
+      "leases": 0,
+      "stale_leases": 0,
+      "direct_lookups": 0,
+      "direct_lookup_misses": 0
+     },
+     "node": 1
+    }
+   ],
+   "hosts": {
+    "0": {
+     "user": 8708.85,
+     "nice": 4.23,
+     "system": 4229.66,
+     "idle": 111360.66,
+     "iowait": 49431.39,
+     "irq": 0.0,
+     "softirq": 3.09,
+     "steal": 1.24,
+     "cores": 36
+    },
+    "1": {
+     "user": 2814.44,
+     "nice": 4.22,
+     "system": 2486.08,
+     "idle": 118754.73,
+     "iowait": 49925.26,
+     "irq": 0.0,
+     "softirq": 2.19,
+     "steal": 4.37,
+     "cores": 36
+    }
+   }
+  }
+ ],
+ "node_facts": [
+  {
+   "cores": 36,
+   "mem_gib": 92.3,
+   "mem_avail_gib": 82.6,
+   "nic_gbps": null,
+   "netdev": "ens5",
+   "nvme_count": 1,
+   "nvme_gib": 200.0,
+   "numa_nodes": 1
+  },
+  {
+   "cores": 36,
+   "mem_gib": 92.3,
+   "mem_avail_gib": 83.0,
+   "nic_gbps": null,
+   "netdev": "ens5",
+   "nvme_count": 1,
+   "nvme_gib": 200.0,
+   "numa_nodes": 1
+  }
+ ],
+ "analysis": {
+  "measured_per_op": {},
+  "profile": {
+   "nodes": 2,
+   "cores": 36,
+   "cpu_speed": 1.0,
+   "nic_gbps": 100,
+   "ram_gib": 92.3,
+   "ranks_per_node": 32,
+   "client_threads": 16,
+   "rtt_us": 6.0,
+   "rdma_msg_cpu_us": 2.0,
+   "memcpy_gb_s": 10.0,
+   "cpu_util": 0.85,
+   "nic_eff": 0.85,
+   "mem_usable": 0.6,
+   "fuse_mount_kops": 150.0,
+   "fuse_mount_gib_s": 4.0,
+   "fuse_req_overhead_us": 25.0,
+   "lock_convoy": 1.5,
+   "nvme_gib": 200.0,
+   "nvme_gib_s": 2.5,
+   "name": "these hosts"
+  },
+  "projection": {
+   "phases": {},
+   "bw_gib_s": 0.0,
+   "md_kiops": 0.0,
+   "score": 0.0
+  },
+  "score_band": {
+   "pessimistic": 0.0,
+   "optimistic": 0.0
+  },
+  "sensitivity": {
+   "fuse_mount_kops": [
+    0.0,
+    0.0
+   ],
+   "fuse_mount_gib_s": [
+    0.0,
+    0.0
+   ],
+   "fuse_req_overhead_us": [
+    0.0,
+    0.0
+   ],
+   "nvme_gib_s": [
+    0.0,
+    0.0
+   ],
+   "lock_convoy": [
+    0.0,
+    0.0
+   ],
+   "rdma_msg_cpu_us": [
+    0.0,
+    0.0
+   ],
+   "cpu_speed": [
+    0.0,
+    0.0
+   ],
+   "rtt_us": [
+    0.0,
+    0.0
+   ]
+  },
+  "scenarios": [
+   {
+    "key": "as_is",
+    "text": "as measured, valid 300 s run",
+    "score": 0.0,
+    "bw_gib_s": 0.0,
+    "md_kiops": 0.0,
+    "bottlenecks": {}
+   },
+   {
+    "key": "dir_sharding",
+    "text": "+ one directory's entries spread over all MDTs (name hash), finer MDT locks (done: ROCEPOOL_DIR_STRIPE=1 + MD_BUCKETS; a no-op on a run that already has them)",
+    "score": 0.0,
+    "bw_gib_s": 0.0,
+    "md_kiops": 0.0,
+    "bottlenecks": {}
+   },
+   {
+    "key": "parallel_writes",
+    "text": "+ FOPEN_PARALLEL_DIRECT_WRITES: no per-node inode lock on a shared file",
+    "score": 0.0,
+    "bw_gib_s": 0.0,
+    "md_kiops": 0.0,
+    "bottlenecks": {}
+   },
+   {
+    "key": "fuse_uring",
+    "text": "+ FUSE over io_uring (per-core queues, Linux 6.14+): ~3x per-mount rate, less wake-up cost (implemented: io500_run.py probes it against /dev/fuse on the hosts and uses the faster; a no-op on a run that already used it)",
+    "score": 0.0,
+    "bw_gib_s": 0.0,
+    "md_kiops": 0.0,
+    "bottlenecks": {}
+   },
+   {
+    "key": "intercept",
+    "text": "+ the LD_PRELOAD interception library in every rank (no FUSE channel, no kernel on the I/O path; implemented: io500_run.py --client auto probes it against FUSE and uses the faster; a no-op on a run that already used it)",
+    "score": 0.0,
+    "bw_gib_s": 0.0,
+    "md_kiops": 0.0,
+    "bottlenecks": {}
+   },
+   {
+    "key": "one_sided",
+    "text": "+ one-sided reads and lookups (client RDMA READs stripes and MDT entries; implemented: io500_run.py --direct-read auto probes it; a no-op on a run that already used it -- its effect is in the measured per-op server CPU)",
+    "score": 0.0,
+    "bw_gib_s": 0.0,
+    "md_kiops": 0.0,
+    "bottlenecks": {}
+   },
+   {
+    "key": "nvme_tier",
+    "text": "+ the OST's NVMe tier for the 300 s write phases (implemented: roce/native/ost_tier.c, io500_run.py --ost-tier auto; a no-op on a run that already had it -- its limits are then the drives' capacity and write bandwidth)",
+    "score": 0.0,
+    "bw_gib_s": 0.0,
+    "md_kiops": 0.0,
+    "bottlenecks": {}
+   }
+  ],
+  "vs_weka": {
+   "score_ratio": null,
+   "bw_ratio": null,
+   "md_ratio": null
+  }
+ }
+}

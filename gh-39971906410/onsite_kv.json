@@ -1,0 +1,179 @@
+{
+  "topology": "real RoCE: 172.31.7.255 (this host) <-> 172.31.12.43 (root@172.31.12.43)",
+  "seconds": 10.0,
+  "results": [
+    {
+      "client": "native",
+      "mode": "get",
+      "threads": 1,
+      "value_bytes": 64,
+      "ops_per_s": 8739.3,
+      "p50_us": 95.2,
+      "p99_us": 265.2,
+      "rpcs": 88393
+    },
+    {
+      "client": "python",
+      "mode": "get",
+      "threads": 1,
+      "value_bytes": 64,
+      "ops_per_s": 8806.7,
+      "p50_us": 100.56000007807597,
+      "p99_us": 258.7660000017422
+    },
+    {
+      "client": "native",
+      "mode": "put",
+      "threads": 1,
+      "value_bytes": 64,
+      "ops_per_s": 8951.3,
+      "p50_us": 92.6,
+      "p99_us": 259.3,
+      "rpcs": 90513
+    },
+    {
+      "client": "python",
+      "mode": "put",
+      "threads": 1,
+      "value_bytes": 64,
+      "ops_per_s": 8581.6,
+      "p50_us": 101.8479999856936,
+      "p99_us": 264.1040000526118
+    },
+    {
+      "client": "native",
+      "mode": "get",
+      "threads": 16,
+      "value_bytes": 64,
+      "ops_per_s": 20731.8,
+      "p50_us": 75.0,
+      "p99_us": 24486.6,
+      "rpcs": 223318
+    },
+    {
+      "client": "python",
+      "mode": "get",
+      "threads": 16,
+      "value_bytes": 64,
+      "ops_per_s": 15976.7,
+      "p50_us": 989.3179999380664,
+      "p99_us": 2019.9000000502565
+    },
+    {
+      "client": "native",
+      "mode": "put",
+      "threads": 16,
+      "value_bytes": 64,
+      "ops_per_s": 20642.3,
+      "p50_us": 75.7,
+      "p99_us": 24645.7,
+      "rpcs": 222423
+    },
+    {
+      "client": "python",
+      "mode": "put",
+      "threads": 16,
+      "value_bytes": 64,
+      "ops_per_s": 15920.2,
+      "p50_us": 993.1899999173766,
+      "p99_us": 2016.35600001282
+    },
+    {
+      "client": "native",
+      "mode": "mget64",
+      "threads": 16,
+      "value_bytes": 64,
+      "ops_per_s": 221177.6,
+      "p50_us": 3922.3,
+      "p99_us": 10318.4,
+      "rpcs": 154236
+    },
+    {
+      "client": "native",
+      "mode": "get",
+      "threads": 1,
+      "value_bytes": 4096,
+      "ops_per_s": 10019.0,
+      "p50_us": 80.6,
+      "p99_us": 245.4,
+      "rpcs": 101190
+    },
+    {
+      "client": "python",
+      "mode": "get",
+      "threads": 1,
+      "value_bytes": 4096,
+      "ops_per_s": 8496.7,
+      "p50_us": 99.39700021277531,
+      "p99_us": 260.88000004165224
+    },
+    {
+      "client": "native",
+      "mode": "put",
+      "threads": 1,
+      "value_bytes": 4096,
+      "ops_per_s": 10135.9,
+      "p50_us": 80.8,
+      "p99_us": 244.3,
+      "rpcs": 102359
+    },
+    {
+      "client": "python",
+      "mode": "put",
+      "threads": 1,
+      "value_bytes": 4096,
+      "ops_per_s": 8499.1,
+      "p50_us": 100.59800001727126,
+      "p99_us": 264.9890000157029
+    },
+    {
+      "client": "native",
+      "mode": "get",
+      "threads": 16,
+      "value_bytes": 4096,
+      "ops_per_s": 19744.6,
+      "p50_us": 79.3,
+      "p99_us": 25686.1,
+      "rpcs": 213446
+    },
+    {
+      "client": "python",
+      "mode": "get",
+      "threads": 16,
+      "value_bytes": 4096,
+      "ops_per_s": 15309.4,
+      "p50_us": 1032.3060000700934,
+      "p99_us": 2075.4469999246794
+    },
+    {
+      "client": "native",
+      "mode": "put",
+      "threads": 16,
+      "value_bytes": 4096,
+      "ops_per_s": 19818.6,
+      "p50_us": 80.1,
+      "p99_us": 25683.4,
+      "rpcs": 214186
+    },
+    {
+      "client": "python",
+      "mode": "put",
+      "threads": 16,
+      "value_bytes": 4096,
+      "ops_per_s": 15380.9,
+      "p50_us": 1027.0769998896867,
+      "p99_us": 2071.5989999189333
+    },
+    {
+      "client": "native",
+      "mode": "mget64",
+      "threads": 16,
+      "value_bytes": 4096,
+      "ops_per_s": 117542.4,
+      "p50_us": 7889.8,
+      "p99_us": 16369.4,
+      "rpcs": 89464
+    }
+  ],
+  "when": "2026-10-23 15:03:22"
+}
