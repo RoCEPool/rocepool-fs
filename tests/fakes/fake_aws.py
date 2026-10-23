@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """A fake `aws` CLI for tests/test_aws_cluster.py: canned JSON per call,
 every call appended to $FAKE_AWS_LOG (one JSON argv per line).
-$FAKE_AWS_NO_EFA=1: the instance type has no EFA."""
+$FAKE_AWS_NO_EFA=1: the instance type has no EFA.
+$FAKE_AWS_NO_CAPACITY=az[,az...]: run-instances fails there with InsufficientInstanceCapacity."""
 import json
 import os
 import sys
@@ -38,17 +39,23 @@ elif cmd == ("ec2", "describe-instance-types"):
 elif cmd == ("ssm", "get-parameters"):
     out({"Parameters": [{"Value": "ami-0123456789abcdef0"}]})
 elif cmd == ("ec2", "describe-instance-type-offerings"):
-    out({"InstanceTypeOfferings": [{"Location": "us-east-1b"}, {"Location": "us-east-1a"}]})
+    out({"InstanceTypeOfferings": [{"Location": "us-east-1b"}, {"Location": "us-east-1a"}, {"Location": "us-east-1d"}]})
 elif cmd == ("ec2", "describe-vpcs"):
     out({"Vpcs": [{"VpcId": "vpc-1"}]})
 elif cmd == ("ec2", "describe-subnets"):
     out({"Subnets": [{"AvailabilityZone": "us-east-1a", "SubnetId": "subnet-a"},
-                     {"AvailabilityZone": "us-east-1c", "SubnetId": "subnet-c"}]})
+                     {"AvailabilityZone": "us-east-1c", "SubnetId": "subnet-c"},
+                     {"AvailabilityZone": "us-east-1d", "SubnetId": "subnet-d"}]})
 elif cmd == ("ec2", "create-key-pair"):
     out({"KeyMaterial": "-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----\n"})
 elif cmd == ("ec2", "create-security-group"):
     out({"GroupId": "sg-1"})
 elif cmd == ("ec2", "run-instances"):
+    az = json.loads(argv[argv.index("--placement") + 1])["AvailabilityZone"]
+    if az in os.environ.get("FAKE_AWS_NO_CAPACITY", "").split(","):
+        sys.stderr.write("An error occurred (InsufficientInstanceCapacity) when calling the RunInstances operation: "
+                         f"We currently do not have sufficient capacity in the Availability Zone you requested ({az}).\n")
+        sys.exit(254)
     out({"Instances": [{"InstanceId": i} for i in ids]})
 elif cmd == ("ec2", "describe-instances"):
     req = argv[argv.index("--instance-ids") + 1:]

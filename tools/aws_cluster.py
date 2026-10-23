@@ -200,10 +200,10 @@ class Run:
         subnets = self.aws("ec2", "describe-subnets", "--filters", f"Name=vpc-id,Values={st['vpc']}",
                            "Name=default-for-az,Values=true")["Subnets"]
         by_az = {s["AvailabilityZone"]: s["SubnetId"] for s in subnets}
-        zone = next((z for z in zones if z in by_az), None)
-        if not zone:
+        cand = [z for z in zones if z in by_az]
+        if not cand:
             raise RuntimeError(f"the default VPC has no subnet in {zones}")
-        st.update(az=zone, subnet=by_az[zone])
+        st.update(az=cand[0], subnet=by_az[cand[0]])
         self.save()
         name = self.run_id
         # key pair
@@ -236,20 +236,40 @@ class Run:
             user_data = ("#!/bin/bash\n"
                          f"# rocepool {name}: power off (= terminate) after {a.max_hours} h whatever happens\n"
                          f"shutdown -h +{shutdown_min} 'rocepool safety limit'\n")
-            nic = {"DeviceIndex": 0, "SubnetId": st["subnet"], "Groups": [st["sg"]], "AssociatePublicIpAddress": True,
-                   "DeleteOnTermination": True}
-            if a.mode == "efa":
-                nic["InterfaceType"] = "efa"
-            r = self.aws("ec2", "run-instances", "--image-id", st["ami"], "--instance-type", itype,
-                         "--count", str(a.nodes), "--key-name", st["key"],
-                         "--network-interfaces", json.dumps([nic]),
-                         "--placement", json.dumps({"GroupName": st["pg"], "AvailabilityZone": zone}),
-                         "--instance-initiated-shutdown-behavior", "terminate",
-                         "--block-device-mappings", json.dumps([{"DeviceName": "/dev/sda1", "Ebs": {
-                             "VolumeSize": a.disk_gib, "VolumeType": "gp3", "DeleteOnTermination": True}}]),
-                         "--tag-specifications", json.dumps([{"ResourceType": "instance", "Tags": [
-                             {"Key": "Name", "Value": name}, {"Key": "rocepool-run", "Value": name}]}]),
-                         "--user-data", user_data)
+            # an AZ out of capacity for the type: try the next one that offers it
+            # (all instances in one AZ: the cluster placement group needs that);
+            # rxe needs no placement group, so as a last resort it goes without one
+            tries = [(z, True) for z in cand] + ([(z, False) for z in cand] if a.mode == "rxe" else [])
+            r, why = None, []
+            for zone, pg in tries:
+                nic = {"DeviceIndex": 0, "SubnetId": by_az[zone], "Groups": [st["sg"]], "AssociatePublicIpAddress": True,
+                       "DeleteOnTermination": True}
+                if a.mode == "efa":
+                    nic["InterfaceType"] = "efa"
+                placement = {"AvailabilityZone": zone, **({"GroupName": st["pg"]} if pg else {})}
+                try:
+                    r = self.aws("ec2", "run-instances", "--image-id", st["ami"], "--instance-type", itype,
+                                 "--count", str(a.nodes), "--key-name", st["key"],
+                                 "--network-interfaces", json.dumps([nic]),
+                                 "--placement", json.dumps(placement),
+                                 "--instance-initiated-shutdown-behavior", "terminate",
+                                 "--block-device-mappings", json.dumps([{"DeviceName": "/dev/sda1", "Ebs": {
+                                     "VolumeSize": a.disk_gib, "VolumeType": "gp3", "DeleteOnTermination": True}}]),
+                                 "--tag-specifications", json.dumps([{"ResourceType": "instance", "Tags": [
+                                     {"Key": "Name", "Value": name}, {"Key": "rocepool-run", "Value": name}]}]),
+                                 "--user-data", user_data)
+                except RuntimeError as e:
+                    if not any(k in str(e) for k in ("InsufficientInstanceCapacity", "Unsupported",
+                                                      "InsufficientCapacity")):
+                        raise
+                    why.append(f"{zone}{'' if pg else ' (no placement group)'}")
+                    log(f"no {itype} capacity in {zone}{'' if pg else ' without a placement group'}: trying the next")
+                    continue
+                st.update(az=zone, subnet=by_az[zone], placement_group_used=pg)
+                break
+            if r is None:
+                raise RuntimeError(f"no capacity for {a.nodes} x {itype} in {self.aws.region} (tried {', '.join(why)}): "
+                                   "try later, another --type or --region")
             st["instances"] = [i["InstanceId"] for i in r["Instances"]]
             self.save()
             log(f"launched {', '.join(st['instances'])}")
