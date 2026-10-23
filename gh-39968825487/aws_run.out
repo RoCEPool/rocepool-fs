@@ -1,0 +1,29 @@
+build=0
+[build] transport backend: verbs
+[build] using system rdma-core headers
+/opt/amazon/efa/bin/fi_info: 2.7.0amzn2.0
+libfabric: 2.7.0amzn2.0
+libfabric api: 2.7
+        caps: [ FI_LOCAL_COMM, FI_REMOTE_COMM ]
+        caps: [ FI_MSG, FI_RECV, FI_SOURCE ]
+        caps: [ FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_READ, FI_WRITE, FI_SEND ]
+        caps: [ FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_RECV, FI_REMOTE_READ, FI_REMOTE_WRITE, FI_MULTI_RECV, FI_SOURCE, FI_DIRECTED_RECV ]
+        caps: [ FI_MSG, FI_SEND ]
+        inject_size: 32
+        inject_size: 4096
+        max_msg_size: 18446744073709551615
+        max_msg_size: 8928
+        max_order_raw_size: 0
+        max_order_war_size: 0
+        max_order_waw_size: 0
+=== pool X=1
+RESULT {"error": "Traceback (most recent call last):\n  File \"/root/rocepool/tests/fakes/pool_scenario.py\", line 39, in <module>\n    h = srv_t.serve(a, echo)\n        ^^^^^^^^^^^^^^^^^^^^\n  File \"/root/rocepool/roce/roce_transport.py\", line 462, in serve\n    raise RoCENotAvailable(_last_error(self._lib))\nroce.roce_transport.RoCENotAvailable: rdma_bind_addr failed: No such device\n"}
+
+=== pool FI_EFA_ENABLE_SHM_TRANSFER=0
+RESULT {"error": "Traceback (most recent call last):\n  File \"/root/rocepool/tests/fakes/pool_scenario.py\", line 39, in <module>\n    h = srv_t.serve(a, echo)\n        ^^^^^^^^^^^^^^^^^^^^\n  File \"/root/rocepool/roce/roce_transport.py\", line 462, in serve\n    raise RoCENotAvailable(_last_error(self._lib))\nroce.roce_transport.RoCENotAvailable: rdma_bind_addr failed: No such device\n"}
+
+=== pool FI_EFA_USE_DEVICE_RDMA=0
+RESULT {"error": "Traceback (most recent call last):\n  File \"/root/rocepool/tests/fakes/pool_scenario.py\", line 39, in <module>\n    h = srv_t.serve(a, echo)\n        ^^^^^^^^^^^^^^^^^^^^\n  File \"/root/rocepool/roce/roce_transport.py\", line 462, in serve\n    raise RoCENotAvailable(_last_error(self._lib))\nroce.roce_transport.RoCENotAvailable: rdma_bind_addr failed: No such device\n"}
+
+=== native
+RESULT {"error": "Traceback (most recent call last):\n  File \"/root/rocepool/tests/fakes/native_scenario.py\", line 289, in <module>\n    fresh = tr.serve_native(\"mdt\", addr())\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/rocepool/roce/roce_transport.py\", line 431, in serve_native\n    raise RoCENotAvailable(_last_error(self._lib))\nroce.roce_transport.RoCENotAvailable: rdma_bind_addr failed: No such device\n"}

@@ -1,0 +1,29 @@
+[aws 14:21:19] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 14:21:20] 1 x c5n.9xlarge: 36 vCPU, 96 GiB, 50 Gigabit, NVMe 0 GB, EFA yes
+[aws 14:21:21] vCPU quota 96 >= 36 needed (instances already running count against it too)
+[aws 14:21:33] launched i-0aae86884d7b1ca83
+[aws 14:21:50] running: 52.14.167.132 (172.31.5.144)
+[aws 14:24:00] 52.14.167.132: ready (efa)
+[aws 14:24:08] command started on 52.14.167.132 (1 hosts); following its progress
+  | [build] transport backend: verbs
+  | [build] using system rdma-core headers
+  |         caps: [ FI_LOCAL_COMM, FI_REMOTE_COMM ]
+  |         caps: [ FI_MSG, FI_RECV, FI_SOURCE ]
+  |         caps: [ FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_READ, FI_WRITE, FI_SEND ]
+  |         caps: [ FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_RECV, FI_REMOTE_READ, FI_REMOTE_WRITE, FI_MULTI_RECV, FI_SOURCE, FI_DIRECTED_RECV ]
+  |         caps: [ FI_MSG, FI_SEND ]
+  |         inject_size: 32
+  |         inject_size: 4096
+  |         max_msg_size: 18446744073709551615
+  |         max_msg_size: 8928
+  |         max_order_raw_size: 0
+  |         max_order_war_size: 0
+  |         max_order_waw_size: 0
+  | === pool X=1
+  | === pool FI_EFA_ENABLE_SHM_TRANSFER=0
+  | === pool FI_EFA_USE_DEVICE_RDMA=0
+  | === native
+[aws 14:24:42] reports in aws_runs/gh-39968825487/: aws_run.out
+[aws 14:24:42] run.sh exit code 0
+[aws 14:24:43] terminating i-0aae86884d7b1ca83
+[aws 14:25:17] all resources released
