@@ -695,7 +695,11 @@ static int ep_drain(struct ofi_ep *e) {
                 o->len = err.len;
                 o->done = 1;
                 if (o->kind == OP_SLOT) o->seq = ++e->arrivals;
-                set_error("completion error: %s (prov %d)", fi_strerror(o->err), err.prov_errno);
+                /* a receive we cancelled ourselves: keep the error that made us cancel it */
+                if (o->err != FI_ECANCELED)
+                    set_error("completion error: %s (prov %d%s%s)", fi_strerror(o->err), err.prov_errno,
+                              err.err_data_size ? ": " : "",
+                              err.err_data_size ? fi_cq_strerror(e->cq, err.prov_errno, err.err_data, NULL, 0) : "");
                 handled++;
             }
             continue;
