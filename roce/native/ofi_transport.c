@@ -1374,7 +1374,12 @@ int roce_client_rdma_read(roce_conn_t *c, const roce_read_t *reads, int n, int t
  * packet aborted the process ("EFA internal error: Packet already
  * processed", 2026-10-23, both OSTs in the first IO500 on EFA). A new
  * client endpoint has a new name (EFA names carry a per-QP qkey). */
-struct name_ent { uint8_t name[256]; size_t len; fi_addr_t addr; int refs; int valid; };
+struct name_ent { uint8_t name[256]; size_t len; fi_addr_t addr; int refs; int valid; long dormant_since; };
+/* Dormant entries are evicted oldest first -- by then their client process
+ * has normally exited -- when there are more than ROCE_OFI_DORMANT_MAX
+ * (default 4096) or the AV refuses an insert. Kept forever they filled
+ * the AV within an IO500 run (every rank of every phase has new endpoints)
+ * and new clients were refused: "peer closed the connection", 2026-10-23. */
 /* Per server-AV index: a client endpoint that went away must not be
  * replied to or read from by a worker still holding one of its requests,
  * and its index, once removed, may be handed to a new client. So: the
@@ -1402,6 +1407,7 @@ struct roce_server {
     size_t nae;
     struct name_ent *names;
     int nnames, cnames;
+    int ndormant;
     struct worker *w;
     int nw;
     int lsock;
@@ -1612,11 +1618,32 @@ static int bind_listen(const char *bind_address, char *bound, size_t bn) {
     return s;
 }
 
+/* remove the longest-dormant client endpoint from the AV (once no worker
+ * holds one of its requests); 0 = one evicted */
+static int evict_oldest_dormant(struct roce_server *s) {
+    int v = -1;
+    for (int i = 0; i < s->nnames; i++)
+        if (s->names[i].valid && s->names[i].refs == 0 &&
+            (v < 0 || s->names[i].dormant_since < s->names[v].dormant_since)) v = i;
+    if (v < 0) return -1;
+    fi_addr_t a = s->names[v].addr;
+    pthread_mutex_lock(&s->av_lk);
+    struct aent *x = &s->ae[a];
+    x->live = 0;
+    x->owed++;
+    if (!x->busy) for (; x->owed; x->owed--) fi_av_remove(s->av, &a, 1, 0);
+    pthread_mutex_unlock(&s->av_lk);
+    s->names[v].valid = 0;
+    s->ndormant--;
+    return 0;
+}
+
 /* insert (or reference) a client endpoint name in the server AV */
 static int name_ref(struct roce_server *s, const uint8_t *name, size_t len, fi_addr_t *out) {
     for (int i = 0; i < s->nnames; i++)
         if (s->names[i].valid && s->names[i].len == len && !memcmp(s->names[i].name, name, len)) {
             if (s->names[i].refs++ == 0) {  /* dormant: live again, in a new epoch */
+                s->ndormant--;
                 pthread_mutex_lock(&s->av_lk);
                 s->ae[s->names[i].addr].epoch++;
                 s->ae[s->names[i].addr].live = 1;
@@ -1625,9 +1652,18 @@ static int name_ref(struct roce_server *s, const uint8_t *name, size_t len, fi_a
             *out = s->names[i].addr;
             return 0;
         }
+    static int dormant_max = -1;
+    if (dormant_max < 0) dormant_max = (int)env_u32("ROCE_OFI_DORMANT_MAX", 4096);
+    while (s->ndormant > dormant_max && evict_oldest_dormant(s) == 0) {}
     fi_addr_t a;
     pthread_mutex_lock(&s->av_lk);
     int rc = fi_av_insert(s->av, name, 1, &a, 0, NULL);
+    for (int tries = 0; rc != 1 && tries < 64 && s->ndormant > 0; tries++) {  /* AV full: make room */
+        pthread_mutex_unlock(&s->av_lk);
+        if (evict_oldest_dormant(s)) { pthread_mutex_lock(&s->av_lk); break; }
+        pthread_mutex_lock(&s->av_lk);
+        rc = fi_av_insert(s->av, name, 1, &a, 0, NULL);
+    }
     if (rc == 1 && a >= s->nae) {
         size_t nn = s->nae ? s->nae : 256;
         while (nn <= a) nn *= 2;
@@ -1666,6 +1702,8 @@ static void name_unref(struct roce_server *s, fi_addr_t a) {
             if (--s->names[i].refs == 0) {
                 /* dormant: no more requests admitted, the AV entry (and EFA's
                  * per-peer state) kept for the endpoint's next connection */
+                s->names[i].dormant_since = now_ms();
+                s->ndormant++;
                 pthread_mutex_lock(&s->av_lk);
                 s->ae[a].live = 0;
                 pthread_mutex_unlock(&s->av_lk);
@@ -1751,7 +1789,14 @@ static void *boot_main(void *arg) {
                 if (!pf[i + 1].revents) continue;
                 char c;
                 ssize_t r = recv(s->conns[i].sock, &c, 1, MSG_PEEK | MSG_DONTWAIT);
-                if (r <= 0 || boot_message(s, &s->conns[i])) drop_conn(s, i);
+                if (r <= 0) { drop_conn(s, i); continue; }
+                if (boot_message(s, &s->conns[i])) {
+                    static atomic_int said;
+                    if (atomic_fetch_add(&said, 1) < 20)
+                        fprintf(stderr, "ofi_transport: %s: bootstrap from a client failed (%s): its connection is "
+                                "closed\n", s->bound, roce_last_error());
+                    drop_conn(s, i);
+                }
             }
             if (pf[0].revents & POLLIN) {
                 int cs = accept4(s->lsock, NULL, NULL, SOCK_CLOEXEC);
@@ -1807,7 +1852,7 @@ roce_server_t *roce_server_start(const char *bind_address, roce_request_handler 
     const char *src_ip = strcmp(host, "0.0.0.0") ? host : (local_ip_for("8.8.8.8", src, sizeof(src)) ? NULL : src);
     s->d = dom_get(src_ip);
     if (!s->d) goto fail;
-    struct fi_av_attr av_attr = {.type = FI_AV_TABLE};
+    struct fi_av_attr av_attr = {.type = FI_AV_TABLE, .count = env_u32("ROCE_OFI_AV_SIZE", 16384)};
     int rc = fi_av_open(s->d->domain, &av_attr, &s->av, NULL);
     if (rc) { set_fi_error("fi_av_open", rc); goto fail; }
     s->lsock = bind_listen(bind_address, s->bound, sizeof(s->bound));
