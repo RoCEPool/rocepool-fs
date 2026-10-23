@@ -174,7 +174,7 @@ jobs:
         run: |
           d="aws_runs/$RUN_ID"; [ -d "$d" ] || exit 0
           out=$(mktemp -d); mkdir -p "$out/$RUN_ID"
-          (cd "$d" && find . -type f ! -name ssh_key ! -name '*.pem' ! -name 'id_*' ! -name 'cluster.conf' -size -20M -print0 \
+          (cd "$d" && find . -type f ! -name ssh_key ! -name '*.pem' ! -name 'id_*' ! -name 'cluster.conf' ! -name 'rocepool.tar.gz' -size -20M -print0 \
              | xargs -0 -I{} cp --parents {} "$out/$RUN_ID/")
           [ -f aws_run.log ] && cp aws_run.log "$out/$RUN_ID/"
           cd "$out" && git init -q && git checkout -q -b "aws-results/$RUN_ID" && git add -A
