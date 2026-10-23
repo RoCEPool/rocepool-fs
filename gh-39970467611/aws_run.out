@@ -1,0 +1,136 @@
+build=0
+[build] transport backend: ofi
+[build] using libfabric at /opt/amazon/efa
+=== pool X=1
+187::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36081:1792766187::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36081:1792766187::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36081:1792766187::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36081:1792766187::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36081:1792766187::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36081:1792766187::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36081:1792766187::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36081:1792766187::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36081:1792766187::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36081:1792766187::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36081:1792766187::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36081:1792766187::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36081:1792766188::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36081:1792766188::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36081:1792766188::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36081:1792766188::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36081:1792766188::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36081:1792766188::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36081:1792766188::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36081:1792766188::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36081:1792766188::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36081:1792766189::shm:ep_ctrl:smr_progress_cmd():1375<warn> unidentified operation type
+libfabric:36081:1792766189::shm:ep_ctrl:smr_progress_cmd():1382<warn> error processing command
+RESULT {"pooled": {"ok": true, "connects": 1}, "unpooled_connects": 50, "concurrent": {"bad": [], "connects": 8, "idle": 8}, "restart": {"ok": true, "connects": 2}, "mismatch": {"raised": true, "msg": "peer unreachable: 172.31.8.244:21003 (reply request_id 8 != 7: connection out of step)", "idle": 0}, "drain": {"reply": "drained", "err": null, "stop_waited_s": 0.4}, "idle_expiry_connects": 2, "error": "Traceback (most recent call last):\n  File \"/root/rocepool/tests/fakes/pool_scenario.py\", line 141, in <module>\n    assert c.send_request(e, req(i, value=big)).value == big\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/rocepool/roce/roce_transport.py\", line 384, in send_request\n    raise PeerUnreachable(peer, RuntimeError(err))\nroce.transport_base.PeerUnreachable: peer unreachable: 172.31.8.244:21005 (timed out waiting for completion)\n"}
+
+=== pool FI_EFA_ENABLE_SHM_TRANSFER=0
+:127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766237::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766237::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766237::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766237::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766237::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766237::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766237::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766237::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766237::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766237::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766237::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766237::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766237::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766238::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766238::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766238::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766238::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766238::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766238::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766238::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766238::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766238::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766238::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766238::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766238::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766238::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766238::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766238::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766238::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766238::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766238::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766238::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766238::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766238::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766238::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766238::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766238::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766238::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766238::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766238::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36488:1792766238::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36488:1792766238::efa:ep_ctrl:efa_qp_create():343<warn> ibv_create_qp failed. errno: 12
+RESULT {"pooled": {"ok": true, "connects": 1}, "unpooled_connects": 50, "concurrent": {"bad": [], "connects": 8, "idle": 8}, "restart": {"ok": true, "connects": 2}, "mismatch": {"raised": true, "msg": "peer unreachable: 172.31.8.244:21003 (reply request_id 8 != 7: connection out of step)", "idle": 0}, "drain": {"reply": "drained", "err": null, "stop_waited_s": 0.4}, "idle_expiry_connects": 2, "bounded": {"open_connections": 64, "buffers_before": 4, "buffers_after": 8, "in_use_after": 0}, "srq_backpressure": {"ok": 120, "all_matched": true, "errors": []}, "error": "Traceback (most recent call last):\n  File \"/root/rocepool/tests/fakes/pool_scenario.py\", line 180, in <module>\n    srv_t.serve(g_addr, slow50)  # (the SRQ is created at the first connection: env stays set until then)\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/rocepool/roce/roce_transport.py\", line 462, in serve\n    raise RoCENotAvailable(_last_error(self._lib))\nroce.roce_transport.RoCENotAvailable: fi_enable: Cannot allocate memory (-12)\n"}
+
+=== native X=1
+6950:1792766267::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36950:1792766267::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36950:1792766267::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36950:1792766267::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36950:1792766267::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36950:1792766267::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36950:1792766267::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36950:1792766267::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36950:1792766267::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36950:1792766267::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_configure_wait():1274<warn> FI_WAIT_FD not supported when SHM is enabled
+libfabric:36950:1792766267::efa:cq:efa_cq_create_comp_channel():127<warn> EFA device does not support CQ interrupts
+libfabric:36950:1792766267::efa:cq:efa_rdm_cq_open():1390<warn> Unable to create extended CQ: Function not implemented
+libfabric:36950:1792766269::shm:ep_ctrl:smr_progress_cmd():1375<warn> unidentified operation type
+libfabric:36950:1792766269::shm:ep_ctrl:smr_progress_cmd():1382<warn> error processing command
+RESULT {"fresh_mdt_stats": {"kind": "mdt", "reqs": 0, "handler_cpu_ns": 0, "handler_wall_ns": 0, "bytes_in": 0, "bytes_out": 0, "inflight_max": 0, "lock_wait_ns": 0, "lock_hold_ns": 0, "lock_stripes": 64, "table_slots": 1048576, "table_registered": true, "table_used": 0, "slots_published": 0, "slots_unpublished": 0, "by_op": {}, "rss_bytes": 1550979072, "numa_free_bytes": -1}, "error": "Traceback (most recent call last):\n  File \"/root/rocepool/tests/fakes/native_scenario.py\", line 295, in <module>\n    res[\"ost_python\"] = ost_script(RemoteEngine(p_ost, RoCETransport()))\n                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/rocepool/tests/fakes/native_scenario.py\", line 76, in ost_script\n    rec(\"big\", lambda: len(eng.get(\"big\")) if eng.put(\"big\", bytes(range(256)) * 4096) else None)\n  File \"/root/rocepool/tests/fakes/native_scenario.py\", line 60, in rec\n    r = fn()\n        ^^^^\n  File \"/root/rocepool/tests/fakes/native_scenario.py\", line 76, in <lambda>\n    rec(\"big\", lambda: len(eng.get(\"big\")) if eng.put(\"big\", bytes(range(256)) * 4096) else None)\n                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/rocepool/roce/remote_engine.py\", line 48, in put\n    version, size = _unpack_put_ok_value(self._call(Op.PUT, key, _pack_put_value(data, expected_version)).value)\n                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/rocepool/roce/remote_engine.py\", line 42, in _call\n    resp = self.transport.send_request(self.address, Frame(op=op, request_id=next(_ids), key=key, value=value))\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/rocepool/roce/roce_transport.py\", line 384, in send_request\n    raise PeerUnreachable(peer, RuntimeError(err))\nroce.transport_base.PeerUnreachable: peer unreachable: 172.31.8.244:21102 (timed out waiting for completion)\n"}
+
+=== native FI_EFA_ENABLE_SHM_TRANSFER=0
+ false, "size": 100, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false}], ["size-exact", "ok", {"is_dir": false, "size": 10, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false}], ["size-dir", "IS_DIR"], ["size-missing", "NOT_FOUND"], ["readdir", "ok", [{"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "Beta"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "alpha"}, {"is_dir": false, "size": 10, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "f"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "m"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "zeta"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "\u00e9"}]], ["readdir-empty", "ok", []], ["child_count", "ok", 6], ["unlink-wrong-type", "NOT_DIR"], ["unlink", "ok", {"is_dir": false, "size": 10, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false}], ["unlink-missing", "NOT_FOUND"], ["rmdir-type", "IS_DIR"], ["create-inline", "ok", {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false}], ["write-inline", "ok", {"is_dir": false, "size": 6, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false}], ["write-inline-overlap", "ok", {"is_dir": false, "size": 6, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false}], ["read-inline", "ok", [2, {"is_dir": false, "size": 6, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false}, "595a576263"]], ["set-size-inline-shrink", "ok", {"is_dir": false, "size": 2, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false}], ["set-size-inline-grow-max", "INLINE"], ["set-size-inline-grow", "ok", {"is_dir": false, "size": 5, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false}], ["write-inline-full", "INLINE_FULL"], ["commit-not-frozen", "NOT_FROZEN"], ["freeze", "ok", [4, {"is_dir": false, "size": 5, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": true}, "5859000000"]], ["freeze-again", "ok", [4, {"is_dir": false, "size": 5, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": true}, "5859000000"]], ["write-frozen", "FROZEN"], ["set-size-frozen", "FROZEN"], ["commit", "ok", {"is_dir": false, "size": 5, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false}], ["commit-again", "ok", {"is_dir": false, "size": 5, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false}], ["write-not-inline", "NOT_INLINE"], ["read-not-inline", "ok", [4, {"is_dir": false, "size": 5, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false}, ""]], ["create-no-inline-flag", "ok", {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false}], ["inline-dir", "IS_DIR"], ["create-inline-then-readdir", "ok", [{"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "Beta"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "alpha"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "m"}, {"is_dir": false, "size": 5, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "s"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "t"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false, "name": "u"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "zeta"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "\u00e9"}]], ["unlink-inline", "ok", {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false}]], "error": "Traceback (most recent call last):\n  File \"/root/rocepool/tests/fakes/native_scenario.py\", line 300, in <module>\n    res[\"dfs_native\"] = dfs_script([native(\"mdt\"), native(\"mdt\")], [native(\"ost\") for _ in range(4)])\n                                                                    ^^^^^^^^^^^^^\n  File \"/root/rocepool/tests/fakes/native_scenario.py\", line 49, in native\n    h = tr.serve_native(kind, addr())\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/rocepool/roce/roce_transport.py\", line 431, in serve_native\n    raise RoCENotAvailable(_last_error(self._lib))\nroce.roce_transport.RoCENotAvailable: fi_enable: Cannot allocate memory (-12)\n"}
+
