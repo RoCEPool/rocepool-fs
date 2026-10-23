@@ -129,6 +129,27 @@ class AwsClusterTests(unittest.TestCase):
         self.assertFalse(self.aws_calls("ec2", "create-key-pair"))
         self.assertFalse(self.aws_calls("ec2", "run-instances"))
 
+    def test_az_without_capacity_moves_to_the_next(self):
+        r = self.run_tool("--mode", "efa", "--nodes", "2", env_extra={"FAKE_AWS_NO_CAPACITY": "us-east-1a"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        runs = self.aws_calls("ec2", "run-instances")
+        self.assertEqual([json.loads(c[c.index("--placement") + 1])["AvailabilityZone"] for c in runs],
+                         ["us-east-1a", "us-east-1d"])
+        nic = json.loads(runs[1][runs[1].index("--network-interfaces") + 1])[0]
+        self.assertEqual(nic["SubnetId"], "subnet-d")
+        self.assertIn("no c6in.32xlarge capacity in us-east-1a", r.stdout)
+
+    def test_no_capacity_anywhere_fails_clearly_and_releases(self):
+        r = self.run_tool("--mode", "rxe", "--nodes", "2", env_extra={"FAKE_AWS_NO_CAPACITY": "us-east-1a,us-east-1d"})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("no capacity for 2 x c6in.16xlarge", r.stdout)
+        # rxe: each AZ with the placement group, then each without
+        runs = self.aws_calls("ec2", "run-instances")
+        self.assertEqual([("GroupName" in json.loads(c[c.index("--placement") + 1])) for c in runs],
+                         [True, True, False, False])
+        for c in (("ec2", "delete-placement-group"), ("ec2", "delete-security-group"), ("ec2", "delete-key-pair")):
+            self.assertTrue(self.aws_calls(*c), c)
+
     def test_failure_after_launch_still_releases(self):
         # a setup that never says SETUP_OK: instances exist, so they must be terminated
         bad = os.path.join(self.bin, "ssh")
