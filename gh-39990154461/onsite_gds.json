@@ -1,0 +1,17 @@
+{
+  "when": "2026-10-23 17:11:49",
+  "inventory": {
+    "gpus": [],
+    "driver": "",
+    "open_kernel_modules": null,
+    "peermem": false,
+    "dmabuf": false,
+    "nics": {},
+    "notes": [
+      "no NVIDIA GPU (nvidia-smi not found or failed)"
+    ]
+  },
+  "emulated": false,
+  "status": "PASS",
+  "summary": "no NVIDIA GPU on this host: nothing to stream into (GPUDirect path covered by tests/test_gds.py)"
+}
