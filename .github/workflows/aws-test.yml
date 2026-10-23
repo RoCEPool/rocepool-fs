@@ -19,7 +19,8 @@ on:
         description: number of instances
         default: "2"
       region:
-        default: us-east-1
+        description: "the account's projects may be limited to one region (us-east-2 for RoCEPool's)"
+        default: us-east-2
       quick:
         description: 30 s IO500 only (skip the 300 s official run)
         default: false
@@ -34,8 +35,11 @@ on:
       budget_usd:
         description: refuse to start if nodes x price x max_hours exceeds this
         default: "30"
+      request_vcpus:
+        description: "ask AWS to raise the on-demand standard vCPU quota (L-1216C47A) in the region to this; empty = don't"
+        default: ""
 permissions:
-  contents: read
+  contents: write   # the reports go to a branch aws-results/<run id> (artifacts are not readable through every client)
 concurrency: aws-test
 jobs:
   run:
@@ -88,11 +92,12 @@ jobs:
           t="${{ inputs.type }}"
           sg=$(aws ec2 describe-security-groups --filters Name=group-name,Values=default --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo none)
           ami=$(aws ssm get-parameter --name /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id --query Parameter.Value --output text 2>&1 | tail -1)
+          allowed=""; denied=""
           check() {  # name, command...: allowed / denied (why) -- a DryRun success is "Request would have succeeded"
             local name="$1"; shift
             out=$("$@" 2>&1); rc=$?
-            if [ $rc -eq 0 ] || echo "$out" | grep -q "DryRunOperation"; then echo "::notice title=allowed::$name"
-            else echo "::warning title=denied::$name -- $(echo "$out" | tr '\n' ' ' | sed 's/.*error occurred//' | cut -c1-300)"; fi
+            if [ $rc -eq 0 ] || echo "$out" | grep -q "DryRunOperation"; then allowed="$allowed%0A$name"
+            else denied="$denied%0A$name -- $(echo "$out" | tr '\n' ' ' | sed 's/.*error occurred//' | cut -c1-260)"; fi
           }
           check "ssm get-parameter (Ubuntu AMI)" aws ssm get-parameter --name /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
           check "ec2 describe-regions" aws ec2 describe-regions
@@ -108,7 +113,19 @@ jobs:
             check "ec2 run-instances $it (dry run)" aws ec2 run-instances --dry-run --image-id "$ami" --instance-type "$it" --count 1
           done
           q=$(aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --query Quota.Value --output text 2>/dev/null || echo "?")
-          echo "::notice title=vCPU quota (on-demand standard)::$q"
+          pending=$(aws service-quotas list-requested-service-quota-change-history-by-quota --service-code ec2 --quota-code L-1216C47A \
+                    --query 'RequestedQuotas[].[DesiredValue,Status,Created]' --output text 2>/dev/null | tr '\t\n' ' ;' | cut -c1-300)
+          echo "::notice title=allowed::${allowed#%0A}"
+          [ -n "$denied" ] && echo "::warning title=denied::${denied#%0A}"
+          echo "::notice title=vCPU quota (on-demand standard)::$q in $AWS_DEFAULT_REGION; requests: ${pending:-none}"
+      - name: request a vCPU quota increase
+        if: ${{ inputs.request_vcpus != '' }}
+        run: |
+          rc=0
+          out=$(aws service-quotas request-service-quota-increase --service-code ec2 --quota-code L-1216C47A \
+                --desired-value "${{ inputs.request_vcpus }}" --query 'RequestedQuota.[Id,Status,DesiredValue]' --output text 2>&1) || rc=$?
+          if [ $rc -eq 0 ]; then echo "::notice title=quota request::$out"
+          else echo "::error title=quota request failed::$(echo "$out" | tr '\n' ' ' | cut -c1-500)"; exit 1; fi
       - name: run on AWS
         if: ${{ !inputs.probe_only }}
         run: |
@@ -118,7 +135,7 @@ jobs:
             --mode "${{ inputs.mode }}" --type "${{ inputs.type }}" --nodes "${{ inputs.nodes }}" \
             --max-hours "${{ inputs.max_hours }}" ${{ inputs.quick && '--quick' || '' }} 2>&1 | tee aws_run.log || rc=$?
           # the progress lines and the outcome, as annotations (readable without the raw log)
-          grep -E "^\[aws " aws_run.log | tail -12 | while IFS= read -r l; do echo "::notice title=aws::${l}"; done
+          echo "::notice title=aws::$(grep -E '^\[aws ' aws_run.log | tail -25 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
           if [ $rc -ne 0 ]; then
             echo "::error title=aws_cluster failed::$(grep -vE '^\s*$' aws_run.log | tail -6 | tr '\n' ' ' | cut -c1-1500)"
           fi
@@ -127,6 +144,18 @@ jobs:
         if: always()
         run: |
           if [ -f "aws_runs/$RUN_ID/state.json" ]; then python3 tools/aws_cluster.py down --run-id "$RUN_ID" --region "${{ inputs.region }}"; fi
+      - name: "reports to branch aws-results/<run id> (no SSH key, no file over 20 MB)"
+        if: ${{ always() && !inputs.probe_only }}
+        run: |
+          d="aws_runs/$RUN_ID"; [ -d "$d" ] || exit 0
+          out=$(mktemp -d); mkdir -p "$out/$RUN_ID"
+          (cd "$d" && find . -type f ! -name ssh_key ! -name '*.pem' ! -name 'id_*' ! -name 'cluster.conf' -size -20M -print0 \
+             | xargs -0 -I{} cp --parents {} "$out/$RUN_ID/")
+          [ -f aws_run.log ] && cp aws_run.log "$out/$RUN_ID/"
+          cd "$out" && git init -q && git checkout -q -b "aws-results/$RUN_ID" && git add -A
+          git -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit -qm "aws-test reports $RUN_ID"
+          git push -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" "aws-results/$RUN_ID"
+          echo "::notice title=reports::branch aws-results/$RUN_ID"
       - name: "reports (without the run SSH key: artifacts of a public repository are readable)"
         if: always()
         uses: actions/upload-artifact@v4
