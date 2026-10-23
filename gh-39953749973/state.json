@@ -1,0 +1,23 @@
+{
+  "run_id": "gh-39953749973",
+  "region": "us-east-2",
+  "mode": "rxe",
+  "type": "c6in.4xlarge",
+  "nodes": 2,
+  "facts": {
+    "arch": "amd64",
+    "efa": false,
+    "vcpus": 16,
+    "mem_mib": 32768,
+    "network": "Up to 50 Gigabit",
+    "nvme": 0
+  },
+  "ami": "ami-0fc53b217ec1ad816",
+  "vpc": "vpc-0599fd0abc5040937",
+  "az": "us-east-2a",
+  "subnet": "subnet-099d60c7e4b358f02",
+  "key": null,
+  "sg": null,
+  "pg": null,
+  "down": true
+}

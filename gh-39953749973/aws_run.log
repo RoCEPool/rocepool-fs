@@ -1,0 +1,11 @@
+[aws 12:30:26] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 12:30:27] 2 x c6in.4xlarge: 16 vCPU, 32 GiB, Up to 50 Gigabit, NVMe 0 GB, EFA no
+[aws 12:30:28] vCPU quota 32 >= 32 needed (instances already running count against it too)
+[aws 12:30:41] no c6in.4xlarge capacity in us-east-2a: trying the next
+[aws 12:30:45] no c6in.4xlarge capacity in us-east-2b: trying the next
+[aws 12:30:50] no c6in.4xlarge capacity in us-east-2c: trying the next
+[aws 12:30:55] no c6in.4xlarge capacity in us-east-2a without a placement group: trying the next
+[aws 12:30:58] no c6in.4xlarge capacity in us-east-2b without a placement group: trying the next
+[aws 12:31:02] no c6in.4xlarge capacity in us-east-2c without a placement group: trying the next
+[aws 12:31:02] FAILED: no capacity for 2 x c6in.4xlarge in us-east-2 (tried us-east-2a, us-east-2b, us-east-2c, us-east-2a (no placement group), us-east-2b (no placement group), us-east-2c (no placement group)): try later, another --type or --region
+[aws 12:31:05] all resources released
