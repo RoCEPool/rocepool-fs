@@ -1,0 +1,17 @@
+[aws 14:26:53] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 14:26:53] 1 x c5n.9xlarge: 36 vCPU, 96 GiB, 50 Gigabit, NVMe 0 GB, EFA yes
+[aws 14:26:54] vCPU quota 96 >= 36 needed (instances already running count against it too)
+[aws 14:27:05] launched i-0495fc97fab1e4fe8
+[aws 14:27:22] running: 18.118.2.70 (172.31.1.219)
+[aws 14:29:40] 18.118.2.70: ready (efa)
+[aws 14:29:44] command started on 18.118.2.70 (1 hosts); following its progress
+  | [build] transport backend: ofi
+  | [build] using libfabric at /opt/amazon/efa
+  | === pool X=1
+  | === pool FI_EFA_ENABLE_SHM_TRANSFER=0
+  | === pool FI_EFA_USE_DEVICE_RDMA=0
+  | === native
+[aws 14:30:26] reports in aws_runs/gh-39969626733/: aws_run.out
+[aws 14:30:26] run.sh exit code 0
+[aws 14:30:27] terminating i-0495fc97fab1e4fe8
+[aws 14:31:01] all resources released

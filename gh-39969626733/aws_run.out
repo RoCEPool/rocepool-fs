@@ -1,0 +1,149 @@
+build=0
+[build] transport backend: ofi
+[build] using libfabric at /opt/amazon/efa
+=== pool X=1
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:36983
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:40763
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:37841
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:45297
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:33281
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:39319
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:38693
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:44835
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:33843
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:34121
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:38055
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:41887
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:33795
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:38423
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:33885
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:43297
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:34899
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:46515
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:34439
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:42499
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:40307
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:42035
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:38089
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:40849
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:34719
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:45087
+libfabric:36150:1792765801::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:35381
+libfabric:36150:1792765802::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:37791
+libfabric:36150:1792765802::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:37783
+Traceback (most recent call last):
+  File "/root/rocepool/tests/fakes/pool_scenario.py", line 141, in <module>
+  File "/root/rocepool/roce/roce_transport.py", line 364, in send_request
+  File "/root/rocepool/roce/roce_transport.py", line 329, in _connect
+roce.transport_base.PeerUnreachable: peer unreachable: 172.31.1.219:21005 (fi_domain: Too many open files (-24))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/rocepool/tests/fakes/pool_scenario.py", line 200, in <module>
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 991, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 1128, in get_code
+  File "<frozen importlib._bootstrap_external>", line 1186, in get_data
+OSError: [Errno 24] Too many open files: '/usr/lib/python3.12/traceback.py'
+
+=== pool FI_EFA_ENABLE_SHM_TRANSFER=0
+libfabric:36360:1792765802::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:41539
+libfabric:36360:1792765802::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:46579
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:41805
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:44303
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:41515
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:41371
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:40679
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:40787
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:42387
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:38413
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:32809
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:38471
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:46639
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:33659
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:40345
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:44527
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:39689
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:42177
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:43513
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:40481
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:37321
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:42851
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:40821
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:35741
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:44297
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:39457
+libfabric:36360:1792765803::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:44361
+libfabric:36360:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:43819
+libfabric:36360:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:34233
+Traceback (most recent call last):
+  File "/root/rocepool/tests/fakes/pool_scenario.py", line 141, in <module>
+  File "/root/rocepool/roce/roce_transport.py", line 364, in send_request
+  File "/root/rocepool/roce/roce_transport.py", line 329, in _connect
+roce.transport_base.PeerUnreachable: peer unreachable: 172.31.1.219:21005 (fi_domain: Too many open files (-24))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/rocepool/tests/fakes/pool_scenario.py", line 200, in <module>
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 991, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 1128, in get_code
+  File "<frozen importlib._bootstrap_external>", line 1186, in get_data
+OSError: [Errno 24] Too many open files: '/usr/lib/python3.12/traceback.py'
+
+=== pool FI_EFA_USE_DEVICE_RDMA=0
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:36533
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:42781
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:44041
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:42029
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:44029
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:43027
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:44275
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:45565
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:40129
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:35079
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:44687
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:44585
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:45173
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:41845
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:46179
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:37803
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:36431
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:33103
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:33717
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:39731
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:43795
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:36815
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:44945
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:40867
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:35025
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:41773
+libfabric:36570:1792765804::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:33589
+libfabric:36570:1792765805::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:44615
+libfabric:36570:1792765805::tcp:av:ofi_av_insert_addr():320<warn> addr already in AV: fi_sockaddr_in://172.31.1.219:38425
+Traceback (most recent call last):
+  File "/root/rocepool/tests/fakes/pool_scenario.py", line 141, in <module>
+  File "/root/rocepool/roce/roce_transport.py", line 364, in send_request
+  File "/root/rocepool/roce/roce_transport.py", line 329, in _connect
+roce.transport_base.PeerUnreachable: peer unreachable: 172.31.1.219:21005 (fi_domain: Too many open files (-24))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/rocepool/tests/fakes/pool_scenario.py", line 200, in <module>
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 991, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 1128, in get_code
+  File "<frozen importlib._bootstrap_external>", line 1186, in get_data
+OSError: [Errno 24] Too many open files: '/usr/lib/python3.12/traceback.py'
+
+=== native
+lse, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "zeta"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "\u00e9"}]], ["readdir-empty", "ok", []], ["child_count", "ok", 6], ["unlink-wrong-type", "NOT_DIR"], ["unlink", "ok", {"is_dir": false, "size": 10, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false}], ["unlink-missing", "NOT_FOUND"], ["rmdir-type", "IS_DIR"], ["create-inline", "ok", {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false}], ["write-inline", "ok", {"is_dir": false, "size": 6, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false}], ["write-inline-overlap", "ok", {"is_dir": false, "size": 6, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false}], ["read-inline", "ok", [2, {"is_dir": false, "size": 6, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false}, "595a576263"]], ["set-size-inline-shrink", "ok", {"is_dir": false, "size": 2, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false}], ["set-size-inline-grow-max", "INLINE"], ["set-size-inline-grow", "ok", {"is_dir": false, "size": 5, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false}], ["write-inline-full", "INLINE_FULL"], ["commit-not-frozen", "NOT_FROZEN"], ["freeze", "ok", [4, {"is_dir": false, "size": 5, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": true}, "5859000000"]], ["freeze-again", "ok", [4, {"is_dir": false, "size": 5, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": true}, "5859000000"]], ["write-frozen", "FROZEN"], ["set-size-frozen", "FROZEN"], ["commit", "ok", {"is_dir": false, "size": 5, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false}], ["commit-again", "ok", {"is_dir": false, "size": 5, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false}], ["write-not-inline", "NOT_INLINE"], ["read-not-inline", "ok", [4, {"is_dir": false, "size": 5, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false}, ""]], ["create-no-inline-flag", "ok", {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false}], ["inline-dir", "IS_DIR"], ["create-inline-then-readdir", "ok", [{"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "Beta"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "alpha"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "m"}, {"is_dir": false, "size": 5, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "s"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "t"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false, "name": "u"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "zeta"}, {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": false, "frozen": false, "name": "\u00e9"}]], ["unlink-inline", "ok", {"is_dir": false, "size": 0, "layout": {"stripe_count": 4, "stripe_size": 1048576, "stripe_offset": 3}, "inline": true, "frozen": false}]], "error": "Traceback (most recent call last):\n  File \"/root/rocepool/tests/fakes/native_scenario.py\", line 300, in <module>\n    res[\"dfs_native\"] = dfs_script([native(\"mdt\"), native(\"mdt\")], [native(\"ost\") for _ in range(4)])\n                                                                    ^^^^^^^^^^^^^\n  File \"/root/rocepool/tests/fakes/native_scenario.py\", line 49, in native\n    h = tr.serve_native(kind, addr())\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/rocepool/roce/roce_transport.py\", line 431, in serve_native\n    raise RoCENotAvailable(_last_error(self._lib))\nroce.roce_transport.RoCENotAvailable: fi_endpoint: Input/output error (-5)\n"}
