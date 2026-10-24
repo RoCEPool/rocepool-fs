@@ -416,6 +416,17 @@ class Run:
                 got.append(f)
             except RuntimeError:
                 pass
+        # every host's kernel log tail (OOM kills, NIC errors) and memory
+        for i, h in enumerate(self.state.get("hosts", [])):
+            try:
+                r = self.ssh(h["public"], "dmesg -T 2>/dev/null | tail -200; echo; free -m; echo; "
+                                          "ps -eo pid,rss,vsz,stat,etime,comm --sort=-rss | head -15",
+                             check=False, timeout=120)
+                with open(os.path.join(self.dir, f"host{i}_kernel.txt"), "w") as f:
+                    f.write(r.stdout)
+                got.append(f"host{i}_kernel.txt")
+            except (RuntimeError, OSError, subprocess.SubprocessError):
+                pass
         # the servers' and clients' logs of the last IO500 (the head's, and the
         # peers' copied there), for diagnosis: the reports name them
         try:

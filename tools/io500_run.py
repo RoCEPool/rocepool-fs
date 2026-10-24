@@ -645,6 +645,15 @@ def main() -> int:
             if s["kind"] == "mdt":
                 s.setdefault("env", {})["ROCEPOOL_MDT_SLOTS"] = str(slots)
         report["mdt_slots"] = slots
+        # the MDTs' inline file bytes (mdtest-hard's 3901-byte files live in
+        # the MDT): bounded, or millions of them outgrow the host -- 15% of
+        # the smallest host's RAM over its MDTs; beyond it files go striped
+        if cluster.real and facts:
+            inl_mib = int(min(f["mem_gib"] for f in facts) * 0.15 * 1024 / max(1, args.mdts_per_node))
+            for s in servers:
+                if s["kind"] == "mdt":
+                    s["env"]["ROCEPOOL_MDT_INLINE_BUDGET_MIB"] = str(inl_mib)
+            report["mdt_inline_budget_mib"] = inl_mib
         if cluster.real and numa_nodes > 1:
             for kind in ("mdt", "ost"):
                 for node in cluster.nodes:
@@ -933,6 +942,17 @@ def main() -> int:
                 break
             time.sleep(0.2)
         snaps.append(("end", snap.take()))
+        # a server still running but no longer answering (the first EFA run:
+        # an MDT missing from the final snapshot, its clients told "EOF")
+        try:
+            answered = {a for a, v in snaps[-1][1].get("servers", {}).items() if isinstance(v, dict) and v.get("kind")}
+        except Exception:  # noqa: BLE001
+            answered = None
+        if answered is not None:
+            mute = [s["addr"] for s, p in zip(servers, procs) if p.poll() is None and s["addr"] not in answered]
+            if mute:
+                report["unresponsive_servers"] = mute
+                print("== server(s) running but not answering at the end: " + ", ".join(mute), flush=True)
         text = open(out_path).read()
         phases, score = _parse_results(text)
         for ph, r in phases.items():

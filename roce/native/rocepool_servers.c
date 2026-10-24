@@ -1255,10 +1255,36 @@ static uint64_t inline_limit(const md_entry *e) {
     return e->has_layout && e->ss && e->ss < l ? e->ss : l;
 }
 
-/* resize the inline buffer to n bytes (zero-filling growth); 0 or -1 */
+/* All inline file bytes this MDT process holds, against a budget:
+ * ROCEPOOL_MDT_INLINE_BUDGET_MIB, default a fifth of the host's memory.
+ * Without one, IO500's mdtest-hard (3901-byte files, millions of them)
+ * grew an MDT past 50 GiB on a 92 GiB host (EFA run, 2026-10-24) and the
+ * run failed there. Beyond the budget new files start striped and an
+ * inline file that would grow answers INLINE_FULL -- the client then
+ * spills it to the OSTs, the path every file above the inline limit takes. */
+static _Atomic uint64_t g_inline_bytes;
+static uint64_t inline_budget(void) {
+    static uint64_t b = UINT64_MAX;
+    if (b == UINT64_MAX) {
+        const char *v = getenv("ROCEPOOL_MDT_INLINE_BUDGET_MIB");
+        if (v && *v) b = (uint64_t)atoll(v) << 20;
+        else {
+            long pages = sysconf(_SC_PHYS_PAGES), psz = sysconf(_SC_PAGESIZE);
+            b = pages > 0 && psz > 0 ? (uint64_t)pages * (uint64_t)psz / 5 : (uint64_t)8 << 30;
+        }
+    }
+    return b;
+}
+static int inline_room(uint64_t more) { return atomic_load(&g_inline_bytes) + more <= inline_budget(); }
+
+/* resize the inline buffer to n bytes (zero-filling growth); 0 or -1
+ * (-2: over the MDT's inline budget) */
 static int inline_resize(md_entry *e, uint64_t n) {
+    if (n > e->size && !inline_room(n - e->size)) return -2;
     uint8_t *d = realloc(e->idata, n ? n : 1);
     if (!d) return -1;
+    if (n >= e->size) atomic_fetch_add(&g_inline_bytes, n - e->size);
+    else atomic_fetch_sub(&g_inline_bytes, e->size - n);
     if (n > e->size) memset(d + e->size, 0, n - e->size);
     e->idata = d;
     e->size = n;
@@ -1344,7 +1370,7 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         e->is_dir = is_dir ? 1 : 0;
         e->has_layout = has_layout ? 1 : 0;
         if (has_layout) { e->sc = rd_u32le(f->val + 4); e->ss = rd_u64le(f->val + 8); e->so = rd_u32le(f->val + 16); }
-        e->inl = !is_dir && inline_ok && inline_limit(e) > 0;
+        e->inl = !is_dir && inline_ok && inline_limit(e) > 0 && inline_room(inline_limit(e));
         e->mtime = e->ctime = now_s();
         e->next = *pp;
         *pp = e;
@@ -1365,7 +1391,9 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
              * attributes were stale -- tell it to redo the write inline */
             if (f->val[1] == 0) { out = frame_error(f, "INLINE", path, out_len); break; }
             if (want > inline_limit(e)) { out = frame_error(f, "INLINE_FULL", path, out_len); break; }
-            if (inline_resize(e, want)) { out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
+            int rr = inline_resize(e, want);
+            if (rr == -2) { out = frame_error(f, "INLINE_FULL", path, out_len); break; }
+            if (rr) { out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
             e->iver++;
         }
         e->size = want;
@@ -1382,6 +1410,7 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         *pp = e->next;
         bk->count--;
         out = entry_frame(f, e, out_len);
+        if (e->inl && e->idata) atomic_fetch_sub(&g_inline_bytes, e->size);
         free(e->idata);
         free(e->name);
         free(e);
@@ -1493,7 +1522,10 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
             out = inline_frame(f, e, 0, UINT64_MAX, out_len);
         } else if (op == 10) {
             if (e->inl && !e->frozen) { out = frame_error(f, "NOT_FROZEN", path, out_len); break; }
-            if (e->inl) { e->inl = 0; e->frozen = 0; free(e->idata); e->idata = NULL; }
+            if (e->inl) {
+                if (e->idata) atomic_fetch_sub(&g_inline_bytes, e->size);
+                e->inl = 0; e->frozen = 0; free(e->idata); e->idata = NULL;
+            }
             out = entry_frame(f, e, out_len);  /* idempotent: every helper may commit */
         } else {
             if (f->val_len < 9) { out = frame_error(f, "MDT_INTERNAL", "short write_inline", out_len); break; }
@@ -1501,7 +1533,9 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
             if (e->frozen) { out = frame_error(f, "FROZEN", path, out_len); break; }
             uint64_t off = rd_u64le(f->val + 1), n = f->val_len - 9, end = off + n;
             if (end > inline_limit(e) || end < off) { out = frame_error(f, "INLINE_FULL", path, out_len); break; }
-            if (end > e->size && inline_resize(e, end)) { out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
+            int rr = end > e->size ? inline_resize(e, end) : 0;
+            if (rr == -2) { out = frame_error(f, "INLINE_FULL", path, out_len); break; }
+            if (rr) { out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
             if (n) memcpy(e->idata + off, f->val + 9, n);
             e->iver++;
             e->mtime = now_s();
@@ -1600,13 +1634,14 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
     if (!rc && n->kind == ROCEPOOL_NATIVE_MDT) {
         rc = buf_printf(&b, ", \"lock_wait_ns\": %llu, \"lock_hold_ns\": %llu, \"lock_stripes\": %d, "
                         "\"table_slots\": %llu, \"table_registered\": %s, \"table_used\": %llu, \"slots_published\": %llu, "
-                        "\"slots_unpublished\": %llu, \"by_op\": {",
+                        "\"slots_unpublished\": %llu, \"inline_bytes\": %llu, \"inline_budget\": %llu, \"by_op\": {",
                         (unsigned long long)atomic_load(&n->mdt->lock_wait_ns),
                         (unsigned long long)atomic_load(&n->mdt->lock_hold_ns), MD_BUCKETS,
                         (unsigned long long)n->mdt->tab.nslots, n->mdt->tab.rkey_ok ? "true" : "false",
                         (unsigned long long)atomic_load(&n->mdt->tab.used),
                         (unsigned long long)atomic_load(&n->mdt->tab.published),
-                        (unsigned long long)atomic_load(&n->mdt->tab.unpublished));
+                        (unsigned long long)atomic_load(&n->mdt->tab.unpublished),
+                        (unsigned long long)atomic_load(&g_inline_bytes), (unsigned long long)inline_budget());
         int first = 1;
         for (int i = 0; i < 16 && !rc; i++) {
             unsigned long long c = atomic_load(&n->mdt->by_op[i]);
