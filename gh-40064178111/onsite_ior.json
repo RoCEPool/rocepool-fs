@@ -1,0 +1,107 @@
+{
+  "benchmark": "IOR/mdtest (real upstream github.com/hpc/ior, unmodified)",
+  "scale": 1,
+  "backend": "dist",
+  "mountpoint": "/mnt/rocepool_iorbench",
+  "cases": [
+    {
+      "name": "shared_1m",
+      "tasks": 2,
+      "block": "4m",
+      "xfer": "1m",
+      "segments": 1,
+      "file_per_process": false,
+      "elapsed_s": 0.31,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 59.43,
+      "write_iops": 1125.65,
+      "read_bw_mib_s": 843.97,
+      "read_iops": 915.24
+    },
+    {
+      "name": "shared_64k",
+      "tasks": 2,
+      "block": "2m",
+      "xfer": "64k",
+      "segments": 1,
+      "file_per_process": false,
+      "elapsed_s": 0.05,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 363.66,
+      "write_iops": 8760.0,
+      "read_bw_mib_s": 867.49,
+      "read_iops": 15169.0
+    },
+    {
+      "name": "fpp_1m",
+      "tasks": 4,
+      "block": "2m",
+      "xfer": "1m",
+      "segments": 1,
+      "file_per_process": true,
+      "elapsed_s": 0.05,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 857.99,
+      "write_iops": 3957.0,
+      "read_bw_mib_s": 1345.46,
+      "read_iops": 1407.19
+    },
+    {
+      "name": "shared_4m_large",
+      "tasks": 2,
+      "block": "32m",
+      "xfer": "4m",
+      "segments": 1,
+      "file_per_process": false,
+      "elapsed_s": 0.24,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 784.2,
+      "write_iops": 196.95,
+      "read_bw_mib_s": 953.71,
+      "read_iops": 370.08
+    },
+    {
+      "name": "fpp_256k",
+      "tasks": 4,
+      "block": "4m",
+      "xfer": "256k",
+      "segments": 1,
+      "file_per_process": true,
+      "elapsed_s": 0.09,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 483.49,
+      "write_iops": 10185.0,
+      "read_bw_mib_s": 1485.76,
+      "read_iops": 6220.0
+    }
+  ],
+  "dist_config": {
+    "fuse_threads": 4,
+    "attr_ttl_s": 3.0,
+    "osts": 4,
+    "mdts": 2,
+    "servers": "native",
+    "client": "native"
+  },
+  "mdtest": {
+    "tasks": 2,
+    "n": 200,
+    "elapsed_s": 1.16,
+    "hard": false,
+    "returncode": 0,
+    "ops_per_sec": {
+      "File creation": 5056.12,
+      "File stat": 1114024.967,
+      "File read": 88810.629,
+      "File removal": 9516.126,
+      "Tree creation": 1618.173,
+      "Tree removal": 3175.098
+    }
+  },
+  "ok": true
+}

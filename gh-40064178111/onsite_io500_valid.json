@@ -1,0 +1,8973 @@
+{
+ "benchmark": "IO500 (official app, github.com/IO500/io500)",
+ "cluster": "real RoCE: 2 hosts 172.31.7.218, 172.31.1.175",
+ "nodes": 2,
+ "ranks": 64,
+ "ranks_per_node": 32,
+ "mdts": 2,
+ "osts": 2,
+ "stonewall_s": 300,
+ "valid_procedure": true,
+ "cpu_cores_here": 36,
+ "reference": {
+  "WEKA_Afton_10node": {
+   "score": 105.94,
+   "bw_gib_s": 33.28,
+   "md_kiops": 337.29
+  }
+ },
+ "name_resolution": {
+  "before": {
+   "0": {
+    "ip-172-31-7-218": "172.31.7.218",
+    "ip-172-31-1-175": "172.31.1.175"
+   },
+   "1": {
+    "ip-172-31-7-218": "172.31.7.218",
+    "ip-172-31-1-175": "172.31.1.175"
+   }
+  },
+  "broken": {}
+ },
+ "clock_offsets_s": {
+  "1": 0.141
+ },
+ "ost_tier": {
+  "mode": "auto",
+  "nodes": {
+   "0": {
+    "recommendation": {
+     "tier": "file:/rocepool_tier/rocepool_ost_{n}.tier:94",
+     "p2pmem": null,
+     "notes": [
+      "no NVMe-backed file system with room: the tier goes on / (/dev/root, 188 GiB free; not NVMe -- slower)"
+     ],
+     "tier_dir": "/rocepool_tier",
+     "tier_mount": {
+      "device": "/dev/root",
+      "namespace": "",
+      "mountpoint": "/",
+      "fstype": "ext4",
+      "free_bytes": 202369990656,
+      "via": null
+     },
+     "tier_write": {
+      "mib_s": 141.5,
+      "seconds": 7.24
+     }
+    },
+    "kernel": "7.0.0-1014-aws",
+    "nvme": [
+     "nvme0"
+    ],
+    "error": null
+   },
+   "1": {
+    "recommendation": {
+     "tier": "file:/rocepool_tier/rocepool_ost_{n}.tier:94",
+     "p2pmem": null,
+     "notes": [
+      "no NVMe-backed file system with room: the tier goes on / (/dev/root, 188 GiB free; not NVMe -- slower)"
+     ],
+     "tier_dir": "/rocepool_tier",
+     "tier_mount": {
+      "device": "/dev/root",
+      "namespace": "",
+      "mountpoint": "/",
+      "fstype": "ext4",
+      "free_bytes": 202620395520,
+      "via": null
+     },
+     "tier_write": {
+      "mib_s": 142.0,
+      "seconds": 7.21
+     }
+    },
+    "kernel": "7.0.0-1014-aws",
+    "nvme": [
+     "nvme0"
+    ],
+    "error": null
+   }
+  }
+ },
+ "capacity": {
+  "budget_gib": 202.4,
+  "bounded_by": {
+   "ost": "172.31.1.175:19951",
+   "kind": "tier",
+   "gib": 112.5
+  },
+  "ior_easy_gib": 91.0,
+  "ior_hard_gib": 101.2,
+  "split": "measured ior-easy-write 0.25 GiB/s, ior-hard-write 0.424 GiB/s: ior-hard 101 GiB, ior-easy 91 GiB (needs 85 GiB for 300 s)"
+ },
+ "mdt_slots": 67108864,
+ "mdt_inline_budget_mib": 14177,
+ "numa_nodes_per_host": 1,
+ "rank_binding": "numa",
+ "client": "intercept",
+ "direct_read": false,
+ "fuse_channel": "none",
+ "unresponsive_servers": [
+  "172.31.7.218:19901",
+  "172.31.1.175:19901"
+ ],
+ "ost_latency_ms": {
+  "172.31.7.218:19951": 1.54,
+  "172.31.1.175:19951": 0.96
+ },
+ "validity": {
+  "valid": false,
+  "reasons": [],
+  "unexpected": [],
+  "find_found": null,
+  "diagnosis": []
+ },
+ "returncode": 255,
+ "phases": {
+  "ior-easy-write": {
+   "value": 0.244768,
+   "unit": "GiB/s",
+   "time_s": 347.47,
+   "invalid": false,
+   "ops": 91267795832.01279
+  },
+  "mdtest-easy-write": {
+   "value": 79.200891,
+   "unit": "kIOPS",
+   "time_s": 444.218,
+   "invalid": false,
+   "ops": 35101359.685854
+  },
+  "ior-hard-write": {
+   "value": 0.269877,
+   "unit": "GiB/s",
+   "time_s": 307.693,
+   "invalid": false,
+   "ops": 89143168729.08801
+  }
+ },
+ "score": {},
+ "wall_s": 1329.1,
+ "io500_output_tail": [
+  "IO500 version  (standard)",
+  "[RESULT]       ior-easy-write        0.244768 GiB/s : time 347.470 seconds",
+  "[RESULT]    mdtest-easy-write       79.200891 kIOPS : time 444.218 seconds",
+  "[      ]            timestamp        0.000000 kIOPS : time 0.000 seconds",
+  "[RESULT]       ior-hard-write        0.269877 GiB/s : time 307.693 seconds",
+  "ERROR: close(44) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 24",
+  "ERROR: close(34) failed, (aiori-POSIX.c:896)",
+  "ERROR: close(45) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 55",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 6",
+  "ERROR: close(44) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 16",
+  "ERROR: close(38) failed, (aiori-POSIX.c:896)",
+  "ERROR: close(44) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 47",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 31",
+  "ERROR: close(34) failed, (aiori-POSIX.c:896)",
+  "ERROR: close(40) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 52",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 22",
+  "ERROR: close(38) failed, (aiori-POSIX.c:896)",
+  "ERROR: close(44) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 20",
+  "ERROR: close(40) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 25",
+  "ERROR: close(40) failed, (aiori-POSIX.c:896)",
+  "ERROR: close(33) failed, (aiori-POSIX.c:896)",
+  "ERROR: close(37) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 35",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 26",
+  "ERROR: close(34) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 2",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 44",
+  "ERROR: close(33) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 62",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 1",
+  "ERROR: close(40) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 14",
+  "ERROR: close(31) failed, (aiori-POSIX.c:896)",
+  "ERROR: close(40) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 34",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 12",
+  "ERROR: close(34) failed, (aiori-POSIX.c:896)",
+  "ERROR: close(44) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 50",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 29",
+  "ERROR: close(34) failed, (aiori-POSIX.c:896)",
+  "ERROR: close(44) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 63",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 10",
+  "ERROR: close(40) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 11",
+  "ERROR: close(27) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 32",
+  "ERROR: close(38) failed, (aiori-POSIX.c:896)",
+  "application called MPI_Abort(MPI_COMM_WORLD, -1) - process 43",
+  "ERROR: close(38) failed, (aiori-POSIX.c:896)"
+ ],
+ "config": {
+  "paused_between_phases": false,
+  "ior_easy_block_mib_per_rank": 1456,
+  "ior_hard_segments_per_rank": 36123,
+  "mdtest_easy_n": 1000000,
+  "mdtest_hard_n": 1000000,
+  "client_threads": 16,
+  "attr_ttl_s": 3.0,
+  "client": "intercept",
+  "intercept_io_threads": 4,
+  "ost_tier": "auto",
+  "ost_ram_cache_mib": 18903
+ },
+ "servers": [
+  {
+   "kind": "mdt",
+   "node": 0,
+   "addr": "172.31.7.218:19901",
+   "env": {
+    "ROCEPOOL_MDT_SLOTS": "67108864",
+    "ROCEPOOL_MDT_INLINE_BUDGET_MIB": "14177"
+   },
+   "log": "/root/rocepool/.bench_cache/io500_run/mdt0_19901.log"
+  },
+  {
+   "kind": "mdt",
+   "node": 1,
+   "addr": "172.31.1.175:19901",
+   "env": {
+    "ROCEPOOL_MDT_SLOTS": "67108864",
+    "ROCEPOOL_MDT_INLINE_BUDGET_MIB": "14177"
+   },
+   "log": "/root/rocepool/.bench_cache/io500_run/mdt1_19901.log"
+  },
+  {
+   "kind": "ost",
+   "node": 0,
+   "addr": "172.31.7.218:19951",
+   "env": {
+    "ROCEPOOL_OST_TIER": "file:/rocepool_tier/rocepool_ost_0.tier:94",
+    "ROCEPOOL_OST_RAM_CACHE_MIB": "18903"
+   },
+   "tier": "file:/rocepool_tier/rocepool_ost_0.tier:94",
+   "log": "/root/rocepool/.bench_cache/io500_run/ost0_19951.log"
+  },
+  {
+   "kind": "ost",
+   "node": 1,
+   "addr": "172.31.1.175:19951",
+   "env": {
+    "ROCEPOOL_OST_TIER": "file:/rocepool_tier/rocepool_ost_1.tier:94",
+    "ROCEPOOL_OST_RAM_CACHE_MIB": "18903"
+   },
+   "tier": "file:/rocepool_tier/rocepool_ost_1.tier:94",
+   "log": "/root/rocepool/.bench_cache/io500_run/ost1_19951.log"
+  }
+ ],
+ "snapshots": [
+  {
+   "phase": "start",
+   "t": 3600.466711978,
+   "servers": {
+    "172.31.7.218:19901": {
+     "kind": "mdt",
+     "reqs": 0,
+     "handler_cpu_ns": 0,
+     "handler_wall_ns": 0,
+     "bytes_in": 0,
+     "bytes_out": 0,
+     "inflight_max": 0,
+     "lock_wait_ns": 0,
+     "lock_hold_ns": 0,
+     "lock_stripes": 64,
+     "table_slots": 67108864,
+     "table_registered": true,
+     "table_used": 0,
+     "slots_published": 0,
+     "slots_unpublished": 0,
+     "inline_bytes": 0,
+     "inline_budget": 14865661952,
+     "by_op": {},
+     "rss_bytes": 17519529984,
+     "numa_free_bytes": -1
+    },
+    "172.31.1.175:19901": {
+     "kind": "mdt",
+     "reqs": 0,
+     "handler_cpu_ns": 0,
+     "handler_wall_ns": 0,
+     "bytes_in": 0,
+     "bytes_out": 0,
+     "inflight_max": 0,
+     "lock_wait_ns": 0,
+     "lock_hold_ns": 0,
+     "lock_stripes": 64,
+     "table_slots": 67108864,
+     "table_registered": true,
+     "table_used": 0,
+     "slots_published": 0,
+     "slots_unpublished": 0,
+     "inline_bytes": 0,
+     "inline_budget": 14865661952,
+     "by_op": {},
+     "rss_bytes": 17519448064,
+     "numa_free_bytes": -1
+    },
+    "172.31.7.218:19951": {
+     "kind": "ost",
+     "reqs": 0,
+     "handler_cpu_ns": 0,
+     "handler_wall_ns": 0,
+     "bytes_in": 0,
+     "bytes_out": 0,
+     "inflight_max": 0,
+     "objects": 0,
+     "bytes": 0,
+     "leases": 0,
+     "lease_misses": 0,
+     "arena_bytes": 0,
+     "tier": "file",
+     "tier_capacity": 100931731456,
+     "tier_used": 0,
+     "tier_direct": true,
+     "ram_cache_bytes": 0,
+     "ram_cache_budget": 19821232128,
+     "direct_writes": 0,
+     "tier_reads": 0,
+     "evictions": 0,
+     "by_op": {},
+     "rss_bytes": 340299776,
+     "numa_free_bytes": -1
+    },
+    "172.31.1.175:19951": {
+     "kind": "ost",
+     "reqs": 0,
+     "handler_cpu_ns": 0,
+     "handler_wall_ns": 0,
+     "bytes_in": 0,
+     "bytes_out": 0,
+     "inflight_max": 0,
+     "objects": 0,
+     "bytes": 0,
+     "leases": 0,
+     "lease_misses": 0,
+     "arena_bytes": 0,
+     "tier": "file",
+     "tier_capacity": 100931731456,
+     "tier_used": 0,
+     "tier_direct": true,
+     "ram_cache_bytes": 0,
+     "ram_cache_budget": 19821232128,
+     "direct_writes": 0,
+     "tier_reads": 0,
+     "evictions": 0,
+     "by_op": {},
+     "rss_bytes": 340336640,
+     "numa_free_bytes": -1
+    }
+   },
+   "procs": [
+    {
+     "pid": 275437,
+     "role": "mdt",
+     "addr": "172.31.7.218:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 5.83
+      },
+      "server": {
+       "user": 0.9999999999999999,
+       "sys": 1.8999999999999997
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.8600000000000003
+      }
+     },
+     "rss_kb": 17108920,
+     "node": 0
+    },
+    {
+     "pid": 275439,
+     "role": "ost",
+     "addr": "172.31.7.218:19951",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.18
+      },
+      "server": {
+       "user": 1.05,
+       "sys": 1.8599999999999997
+      },
+      "exited": {
+       "user": 0.009999999999999787,
+       "sys": 0.10000000000000053
+      }
+     },
+     "rss_kb": 332324,
+     "node": 0
+    },
+    {
+     "pid": 47296,
+     "role": "ost",
+     "addr": "172.31.1.175:19951",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.18
+      },
+      "server": {
+       "user": 1.1400000000000001,
+       "sys": 2.2600000000000002
+      },
+      "exited": {
+       "user": 0.029999999999999805,
+       "sys": 0.07999999999999963
+      }
+     },
+     "rss_kb": 332360,
+     "node": 1
+    },
+    {
+     "pid": 47297,
+     "role": "mdt",
+     "addr": "172.31.1.175:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 6.26
+      },
+      "server": {
+       "user": 0.92,
+       "sys": 1.8499999999999999
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.8000000000000007
+      }
+     },
+     "rss_kb": 17108840,
+     "node": 1
+    }
+   ],
+   "hosts": {
+    "0": {
+     "user": 15944.36,
+     "nice": 4.21,
+     "system": 6949.2,
+     "idle": 93651.72,
+     "iowait": 6750.1,
+     "irq": 0.0,
+     "softirq": 8.07,
+     "steal": 3.8,
+     "cores": 36
+    },
+    "1": {
+     "user": 9506.67,
+     "nice": 4.23,
+     "system": 4652.57,
+     "idle": 102728.31,
+     "iowait": 6747.5,
+     "irq": 0.0,
+     "softirq": 6.96,
+     "steal": 4.32,
+     "cores": 36
+    }
+   }
+  },
+  {
+   "phase": "ior-easy-write",
+   "t": 3601.28037468,
+   "servers": {
+    "172.31.7.218:19901": {
+     "kind": "mdt",
+     "reqs": 2,
+     "handler_cpu_ns": 26786,
+     "handler_wall_ns": 26199,
+     "bytes_in": 71,
+     "bytes_out": 111,
+     "inflight_max": 1,
+     "lock_wait_ns": 18307,
+     "lock_hold_ns": 2150,
+     "lock_stripes": 64,
+     "table_slots": 67108864,
+     "table_registered": true,
+     "table_used": 1,
+     "slots_published": 1,
+     "slots_unpublished": 0,
+     "inline_bytes": 0,
+     "inline_budget": 14865661952,
+     "by_op": {
+      "1": 1,
+      "2": 1
+     },
+     "rss_bytes": 17519558656,
+     "numa_free_bytes": -1
+    },
+    "172.31.1.175:19901": {
+     "kind": "mdt",
+     "reqs": 5,
+     "handler_cpu_ns": 27469,
+     "handler_wall_ns": 26857,
+     "bytes_in": 244,
+     "bytes_out": 392,
+     "inflight_max": 1,
+     "lock_wait_ns": 11372,
+     "lock_hold_ns": 3227,
+     "lock_stripes": 64,
+     "table_slots": 67108864,
+     "table_registered": true,
+     "table_used": 2,
+     "slots_published": 2,
+     "slots_unpublished": 0,
+     "inline_bytes": 0,
+     "inline_budget": 14865661952,
+     "by_op": {
+      "1": 3,
+      "2": 2
+     },
+     "rss_bytes": 17519476736,
+     "numa_free_bytes": -1
+    },
+    "172.31.7.218:19951": {
+     "kind": "ost",
+     "reqs": 0,
+     "handler_cpu_ns": 0,
+     "handler_wall_ns": 0,
+     "bytes_in": 0,
+     "bytes_out": 0,
+     "inflight_max": 0,
+     "objects": 0,
+     "bytes": 0,
+     "leases": 0,
+     "lease_misses": 0,
+     "arena_bytes": 0,
+     "tier": "file",
+     "tier_capacity": 100931731456,
+     "tier_used": 0,
+     "tier_direct": true,
+     "ram_cache_bytes": 0,
+     "ram_cache_budget": 19821232128,
+     "direct_writes": 0,
+     "tier_reads": 0,
+     "evictions": 0,
+     "by_op": {},
+     "rss_bytes": 340299776,
+     "numa_free_bytes": -1
+    },
+    "172.31.1.175:19951": {
+     "kind": "ost",
+     "reqs": 0,
+     "handler_cpu_ns": 0,
+     "handler_wall_ns": 0,
+     "bytes_in": 0,
+     "bytes_out": 0,
+     "inflight_max": 0,
+     "objects": 0,
+     "bytes": 0,
+     "leases": 0,
+     "lease_misses": 0,
+     "arena_bytes": 0,
+     "tier": "file",
+     "tier_capacity": 100931731456,
+     "tier_used": 0,
+     "tier_direct": true,
+     "ram_cache_bytes": 0,
+     "ram_cache_budget": 19821232128,
+     "direct_writes": 0,
+     "tier_reads": 0,
+     "evictions": 0,
+     "by_op": {},
+     "rss_bytes": 340336640,
+     "numa_free_bytes": -1
+    }
+   },
+   "procs": [
+    {
+     "pid": 275437,
+     "role": "mdt",
+     "addr": "172.31.7.218:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 5.83
+      },
+      "server": {
+       "user": 1.1,
+       "sys": 2.21
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.9000000000000004
+      }
+     },
+     "rss_kb": 17108948,
+     "node": 0
+    },
+    {
+     "pid": 275439,
+     "role": "ost",
+     "addr": "172.31.7.218:19951",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.18
+      },
+      "server": {
+       "user": 1.2300000000000002,
+       "sys": 2.09
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.10999999999999988
+      }
+     },
+     "rss_kb": 332328,
+     "node": 0
+    },
+    {
+     "pid": 275563,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.06
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 117980,
+     "node": 0
+    },
+    {
+     "pid": 275564,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19020,
+     "node": 0
+    },
+    {
+     "pid": 275565,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.01
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 18976,
+     "node": 0
+    },
+    {
+     "pid": 275566,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19088,
+     "node": 0
+    },
+    {
+     "pid": 275567,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.01
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19020,
+     "node": 0
+    },
+    {
+     "pid": 275568,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.0,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 24272,
+     "node": 0
+    },
+    {
+     "pid": 275569,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19028,
+     "node": 0
+    },
+    {
+     "pid": 275570,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19084,
+     "node": 0
+    },
+    {
+     "pid": 275571,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 23644,
+     "node": 0
+    },
+    {
+     "pid": 275572,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19084,
+     "node": 0
+    },
+    {
+     "pid": 275573,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.01,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19028,
+     "node": 0
+    },
+    {
+     "pid": 275574,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19008,
+     "node": 0
+    },
+    {
+     "pid": 275575,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19028,
+     "node": 0
+    },
+    {
+     "pid": 275576,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.02,
+       "sys": 0.01
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19072,
+     "node": 0
+    },
+    {
+     "pid": 275577,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 18996,
+     "node": 0
+    },
+    {
+     "pid": 275578,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19036,
+     "node": 0
+    },
+    {
+     "pid": 275579,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 20968,
+     "node": 0
+    },
+    {
+     "pid": 275580,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 18956,
+     "node": 0
+    },
+    {
+     "pid": 275581,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.02,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19016,
+     "node": 0
+    },
+    {
+     "pid": 275582,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.02,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 18988,
+     "node": 0
+    },
+    {
+     "pid": 275583,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19116,
+     "node": 0
+    },
+    {
+     "pid": 275584,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19032,
+     "node": 0
+    },
+    {
+     "pid": 275585,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.02,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19044,
+     "node": 0
+    },
+    {
+     "pid": 275586,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.02,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19868,
+     "node": 0
+    },
+    {
+     "pid": 275587,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.02,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19080,
+     "node": 0
+    },
+    {
+     "pid": 275588,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.02,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19084,
+     "node": 0
+    },
+    {
+     "pid": 275589,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 22352,
+     "node": 0
+    },
+    {
+     "pid": 275590,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.009999999999999998
+      }
+     },
+     "rss_kb": 36768,
+     "node": 0
+    },
+    {
+     "pid": 275591,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.03
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      },
+      "exited": {
+       "user": 0.01,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19156,
+     "node": 0
+    },
+    {
+     "pid": 275592,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19024,
+     "node": 0
+    },
+    {
+     "pid": 275593,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.02,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19084,
+     "node": 0
+    },
+    {
+     "pid": 275594,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.01,
+       "sys": 0.02
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 18964,
+     "node": 0
+    },
+    {
+     "pid": 47296,
+     "role": "ost",
+     "addr": "172.31.1.175:19951",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.18
+      },
+      "server": {
+       "user": 1.3400000000000003,
+       "sys": 2.68
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.1299999999999999
+      }
+     },
+     "rss_kb": 529588,
+     "node": 1
+    },
+    {
+     "pid": 47297,
+     "role": "mdt",
+     "addr": "172.31.1.175:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 6.26
+      },
+      "server": {
+       "user": 1.2200000000000002,
+       "sys": 2.1
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.9400000000000013
+      }
+     },
+     "rss_kb": 17109048,
+     "node": 1
+    },
+    {
+     "pid": 47465,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.06,
+       "sys": 0.15
+      },
+      "fuse_io": {
+       "user": 0.03,
+       "sys": 0.09
+      },
+      "exited": {
+       "user": 0.010000000000000009,
+       "sys": 0.010000000000000009
+      }
+     },
+     "rss_kb": 216620,
+     "node": 1
+    },
+    {
+     "pid": 47466,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.06,
+       "sys": 0.15
+      },
+      "fuse_io": {
+       "user": 0.03,
+       "sys": 0.11000000000000001
+      },
+      "exited": {
+       "user": 0.010000000000000009,
+       "sys": 0.010000000000000009
+      }
+     },
+     "rss_kb": 289388,
+     "node": 1
+    },
+    {
+     "pid": 47467,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.06,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.04
+      }
+     },
+     "rss_kb": 289344,
+     "node": 1
+    },
+    {
+     "pid": 47468,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.05,
+       "sys": 0.11
+      },
+      "fuse_io": {
+       "user": 0.03,
+       "sys": 0.09
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.01999999999999999
+      }
+     },
+     "rss_kb": 216696,
+     "node": 1
+    },
+    {
+     "pid": 47469,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.04
+      }
+     },
+     "rss_kb": 289340,
+     "node": 1
+    },
+    {
+     "pid": 47470,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.14
+      },
+      "fuse_io": {
+       "user": 0.02,
+       "sys": 0.1
+      },
+      "exited": {
+       "user": 0.020000000000000004,
+       "sys": 0.009999999999999981
+      }
+     },
+     "rss_kb": 216624,
+     "node": 1
+    },
+    {
+     "pid": 47471,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.009999999999999981
+      }
+     },
+     "rss_kb": 216600,
+     "node": 1
+    },
+    {
+     "pid": 47472,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.1,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.009999999999999981
+      }
+     },
+     "rss_kb": 216556,
+     "node": 1
+    },
+    {
+     "pid": 47473,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.11,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.009999999999999981
+      }
+     },
+     "rss_kb": 216632,
+     "node": 1
+    },
+    {
+     "pid": 47474,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.19
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.01999999999999999
+      }
+     },
+     "rss_kb": 216668,
+     "node": 1
+    },
+    {
+     "pid": 47475,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.09,
+       "sys": 0.19
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.009999999999999981
+      }
+     },
+     "rss_kb": 216680,
+     "node": 1
+    },
+    {
+     "pid": 47476,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.06,
+       "sys": 0.14
+      },
+      "fuse_io": {
+       "user": 0.04,
+       "sys": 0.1
+      },
+      "exited": {
+       "user": 0.01999999999999999,
+       "sys": 0.009999999999999981
+      }
+     },
+     "rss_kb": 216672,
+     "node": 1
+    },
+    {
+     "pid": 47477,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.11,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.009999999999999981
+      }
+     },
+     "rss_kb": 216608,
+     "node": 1
+    },
+    {
+     "pid": 47478,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.1,
+       "sys": 0.19
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.01999999999999999
+      }
+     },
+     "rss_kb": 216684,
+     "node": 1
+    },
+    {
+     "pid": 47479,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.04,
+       "sys": 0.14
+      },
+      "fuse_io": {
+       "user": 0.03,
+       "sys": 0.1
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.009999999999999981
+      }
+     },
+     "rss_kb": 216552,
+     "node": 1
+    },
+    {
+     "pid": 47480,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.03,
+       "sys": 0.15
+      },
+      "fuse_io": {
+       "user": 0.03,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.020000000000000004,
+       "sys": 0.010000000000000009
+      }
+     },
+     "rss_kb": 289312,
+     "node": 1
+    },
+    {
+     "pid": 47481,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.1,
+       "sys": 0.21
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.04
+      }
+     },
+     "rss_kb": 216656,
+     "node": 1
+    },
+    {
+     "pid": 47482,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.1,
+       "sys": 0.2
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.01999999999999999
+      }
+     },
+     "rss_kb": 216588,
+     "node": 1
+    },
+    {
+     "pid": 47483,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.09,
+       "sys": 0.21
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.010000000000000009
+      }
+     },
+     "rss_kb": 289400,
+     "node": 1
+    },
+    {
+     "pid": 47484,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.09,
+       "sys": 0.23
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.020000000000000018
+      }
+     },
+     "rss_kb": 289336,
+     "node": 1
+    },
+    {
+     "pid": 47485,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.1,
+       "sys": 0.23
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.020000000000000018
+      }
+     },
+     "rss_kb": 289348,
+     "node": 1
+    },
+    {
+     "pid": 47486,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.1,
+       "sys": 0.21
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 289396,
+     "node": 1
+    },
+    {
+     "pid": 47487,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.17
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.009999999999999981
+      }
+     },
+     "rss_kb": 289344,
+     "node": 1
+    },
+    {
+     "pid": 47488,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.05,
+       "sys": 0.14
+      },
+      "fuse_io": {
+       "user": 0.03,
+       "sys": 0.1
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.01999999999999999
+      }
+     },
+     "rss_kb": 289408,
+     "node": 1
+    },
+    {
+     "pid": 47489,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.17
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.05
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.009999999999999981
+      }
+     },
+     "rss_kb": 216712,
+     "node": 1
+    },
+    {
+     "pid": 47490,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.11,
+       "sys": 0.19
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.009999999999999981
+      }
+     },
+     "rss_kb": 216696,
+     "node": 1
+    },
+    {
+     "pid": 47491,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.24
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.019999999999999962
+      }
+     },
+     "rss_kb": 289388,
+     "node": 1
+    },
+    {
+     "pid": 47492,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.1,
+       "sys": 0.18
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.010000000000000009
+      }
+     },
+     "rss_kb": 216616,
+     "node": 1
+    },
+    {
+     "pid": 47493,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.09,
+       "sys": 0.24
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.010000000000000009,
+       "sys": 0.010000000000000009
+      }
+     },
+     "rss_kb": 289408,
+     "node": 1
+    },
+    {
+     "pid": 47494,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.21
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.03
+      },
+      "exited": {
+       "user": 0.009999999999999995,
+       "sys": 0.010000000000000009
+      }
+     },
+     "rss_kb": 216696,
+     "node": 1
+    },
+    {
+     "pid": 47495,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.06,
+       "sys": 0.17
+      },
+      "fuse_io": {
+       "user": 0.0,
+       "sys": 0.04
+      },
+      "exited": {
+       "user": 0.010000000000000009,
+       "sys": 0.009999999999999981
+      }
+     },
+     "rss_kb": 216740,
+     "node": 1
+    },
+    {
+     "pid": 47496,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.06,
+       "sys": 0.19
+      },
+      "fuse_io": {
+       "user": 0.03,
+       "sys": 0.07
+      },
+      "exited": {
+       "user": 0.010000000000000009,
+       "sys": 0.010000000000000009
+      }
+     },
+     "rss_kb": 289436,
+     "node": 1
+    }
+   ],
+   "hosts": {
+    "0": {
+     "user": 15944.88,
+     "nice": 4.21,
+     "system": 6949.73,
+     "idle": 93675.73,
+     "iowait": 6750.1,
+     "irq": 0.0,
+     "softirq": 8.09,
+     "steal": 3.8,
+     "cores": 36
+    },
+    "1": {
+     "user": 9510.07,
+     "nice": 4.23,
+     "system": 4660.89,
+     "idle": 102745.75,
+     "iowait": 6747.79,
+     "irq": 0.0,
+     "softirq": 7.01,
+     "steal": 4.33,
+     "cores": 36
+    }
+   }
+  },
+  {
+   "phase": "mdtest-easy-write",
+   "t": 3948.874847435,
+   "servers": {
+    "172.31.7.218:19901": {
+     "kind": "mdt",
+     "reqs": 4941,
+     "handler_cpu_ns": 18607800,
+     "handler_wall_ns": 17232852,
+     "bytes_in": 348749,
+     "bytes_out": 529261,
+     "inflight_max": 2,
+     "lock_wait_ns": 3325632,
+     "lock_hold_ns": 5188660,
+     "lock_stripes": 64,
+     "table_slots": 67108864,
+     "table_registered": true,
+     "table_used": 30,
+     "slots_published": 2582,
+     "slots_unpublished": 0,
+     "inline_bytes": 0,
+     "inline_budget": 14865661952,
+     "by_op": {
+      "1": 2359,
+      "2": 30,
+      "3": 2465,
+      "9": 58,
+      "10": 29
+     },
+     "rss_bytes": 17519710208,
+     "numa_free_bytes": -1
+    },
+    "172.31.1.175:19901": {
+     "kind": "mdt",
+     "reqs": 6063,
+     "handler_cpu_ns": 24630382,
+     "handler_wall_ns": 23004214,
+     "bytes_in": 426026,
+     "bytes_out": 646940,
+     "inflight_max": 5,
+     "lock_wait_ns": 4392446,
+     "lock_hold_ns": 6684184,
+     "lock_stripes": 64,
+     "table_slots": 67108864,
+     "table_registered": true,
+     "table_used": 38,
+     "slots_published": 3118,
+     "slots_unpublished": 0,
+     "inline_bytes": 0,
+     "inline_budget": 14865661952,
+     "by_op": {
+      "1": 2945,
+      "2": 38,
+      "3": 2975,
+      "9": 70,
+      "10": 35
+     },
+     "rss_bytes": 17519673344,
+     "numa_free_bytes": -1
+    },
+    "172.31.7.218:19951": {
+     "kind": "ost",
+     "reqs": 43578,
+     "handler_cpu_ns": 2995379061,
+     "handler_wall_ns": 3040281374493,
+     "bytes_in": 45637949279,
+     "bytes_out": 4226834,
+     "inflight_max": 9,
+     "objects": 43520,
+     "bytes": 45634027520,
+     "leases": 0,
+     "lease_misses": 0,
+     "arena_bytes": 67108864,
+     "tier": "file",
+     "tier_capacity": 100931731456,
+     "tier_used": 45634027520,
+     "tier_direct": true,
+     "ram_cache_bytes": 0,
+     "ram_cache_budget": 19821232128,
+     "direct_writes": 43520,
+     "tier_reads": 0,
+     "evictions": 0,
+     "by_op": {
+      "1": 43549,
+      "42": 29
+     },
+     "rss_bytes": 552165376,
+     "numa_free_bytes": -1
+    },
+    "172.31.1.175:19951": {
+     "kind": "ost",
+     "reqs": 43590,
+     "handler_cpu_ns": 3133739001,
+     "handler_wall_ns": 2805323784506,
+     "bytes_in": 45637950305,
+     "bytes_out": 4227950,
+     "inflight_max": 9,
+     "objects": 43520,
+     "bytes": 45634027520,
+     "leases": 0,
+     "lease_misses": 0,
+     "arena_bytes": 67108864,
+     "tier": "file",
+     "tier_capacity": 100931731456,
+     "tier_used": 45634027520,
+     "tier_direct": true,
+     "ram_cache_bytes": 0,
+     "ram_cache_budget": 19821232128,
+     "direct_writes": 43520,
+     "tier_reads": 0,
+     "evictions": 0,
+     "by_op": {
+      "1": 43555,
+      "42": 35
+     },
+     "rss_bytes": 552173568,
+     "numa_free_bytes": -1
+    }
+   },
+   "procs": [
+    {
+     "pid": 275437,
+     "role": "mdt",
+     "addr": "172.31.7.218:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 5.83
+      },
+      "server": {
+       "user": 101.94999999999999,
+       "sys": 159.69000000000003
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 4.159999999999968
+      }
+     },
+     "rss_kb": 17109096,
+     "node": 0
+    },
+    {
+     "pid": 275439,
+     "role": "ost",
+     "addr": "172.31.7.218:19951",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.18
+      },
+      "server": {
+       "user": 22.32,
+       "sys": 6.370000000000001
+      },
+      "exited": {
+       "user": 0.05000000000000071,
+       "sys": 0.0699999999999994
+      }
+     },
+     "rss_kb": 539228,
+     "node": 0
+    },
+    {
+     "pid": 275563,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 3.09,
+       "sys": 3.06
+      },
+      "fuse_io": {
+       "user": 25.13,
+       "sys": 31.16
+      },
+      "exited": {
+       "user": 0.060000000000002274,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 215648,
+     "node": 0
+    },
+    {
+     "pid": 275564,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.0,
+       "sys": 1.82
+      },
+      "fuse_io": {
+       "user": 27.07,
+       "sys": 33.26
+      },
+      "exited": {
+       "user": 0.0799999999999983,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287480,
+     "node": 0
+    },
+    {
+     "pid": 275565,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.96,
+       "sys": 3.24
+      },
+      "fuse_io": {
+       "user": 27.35,
+       "sys": 33.49
+      },
+      "exited": {
+       "user": 0.04999999999999716,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287488,
+     "node": 0
+    },
+    {
+     "pid": 275566,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.82,
+       "sys": 1.65
+      },
+      "fuse_io": {
+       "user": 26.84,
+       "sys": 32.15
+      },
+      "exited": {
+       "user": 0.08999999999999986,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214888,
+     "node": 0
+    },
+    {
+     "pid": 275567,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.74,
+       "sys": 2.69
+      },
+      "fuse_io": {
+       "user": 27.769999999999996,
+       "sys": 33.02
+      },
+      "exited": {
+       "user": 0.060000000000002274,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214820,
+     "node": 0
+    },
+    {
+     "pid": 275568,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.03,
+       "sys": 1.9
+      },
+      "fuse_io": {
+       "user": 27.619999999999997,
+       "sys": 33.330000000000005
+      },
+      "exited": {
+       "user": 0.05000000000000071,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214836,
+     "node": 0
+    },
+    {
+     "pid": 275569,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.82,
+       "sys": 2.85
+      },
+      "fuse_io": {
+       "user": 27.35,
+       "sys": 33.82
+      },
+      "exited": {
+       "user": 0.05999999999999872,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287508,
+     "node": 0
+    },
+    {
+     "pid": 275570,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.66,
+       "sys": 2.65
+      },
+      "fuse_io": {
+       "user": 25.509999999999998,
+       "sys": 31.639999999999997
+      },
+      "exited": {
+       "user": 0.060000000000002274,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214848,
+     "node": 0
+    },
+    {
+     "pid": 275571,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.84,
+       "sys": 2.89
+      },
+      "fuse_io": {
+       "user": 26.35,
+       "sys": 32.089999999999996
+      },
+      "exited": {
+       "user": 0.03999999999999915,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 215632,
+     "node": 0
+    },
+    {
+     "pid": 275572,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.86,
+       "sys": 2.93
+      },
+      "fuse_io": {
+       "user": 26.81,
+       "sys": 32.61000000000001
+      },
+      "exited": {
+       "user": 0.07000000000000028,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287604,
+     "node": 0
+    },
+    {
+     "pid": 275573,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.63,
+       "sys": 3.05
+      },
+      "fuse_io": {
+       "user": 26.72,
+       "sys": 33.33
+      },
+      "exited": {
+       "user": 0.030000000000001137,
+       "sys": 0.020000000000003126
+      }
+     },
+     "rss_kb": 287508,
+     "node": 0
+    },
+    {
+     "pid": 275574,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.86,
+       "sys": 1.78
+      },
+      "fuse_io": {
+       "user": 26.19,
+       "sys": 31.79
+      },
+      "exited": {
+       "user": 0.07000000000000028,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214824,
+     "node": 0
+    },
+    {
+     "pid": 275575,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.91,
+       "sys": 1.79
+      },
+      "fuse_io": {
+       "user": 27.62,
+       "sys": 34.48
+      },
+      "exited": {
+       "user": 0.04999999999999716,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287492,
+     "node": 0
+    },
+    {
+     "pid": 275576,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.68,
+       "sys": 2.7
+      },
+      "fuse_io": {
+       "user": 26.81,
+       "sys": 33.29
+      },
+      "exited": {
+       "user": 0.0400000000000027,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287532,
+     "node": 0
+    },
+    {
+     "pid": 275577,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.82,
+       "sys": 1.9
+      },
+      "fuse_io": {
+       "user": 27.96,
+       "sys": 34.379999999999995
+      },
+      "exited": {
+       "user": 0.03999999999999915,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214752,
+     "node": 0
+    },
+    {
+     "pid": 275578,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.86,
+       "sys": 1.72
+      },
+      "fuse_io": {
+       "user": 27.97,
+       "sys": 34.19
+      },
+      "exited": {
+       "user": 0.08000000000000185,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287556,
+     "node": 0
+    },
+    {
+     "pid": 275579,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 3.07,
+       "sys": 3.2
+      },
+      "fuse_io": {
+       "user": 26.66,
+       "sys": 33.42
+      },
+      "exited": {
+       "user": 0.05000000000000071,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 288360,
+     "node": 0
+    },
+    {
+     "pid": 275580,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.81,
+       "sys": 1.76
+      },
+      "fuse_io": {
+       "user": 27.79,
+       "sys": 33.91
+      },
+      "exited": {
+       "user": 0.060000000000002274,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214752,
+     "node": 0
+    },
+    {
+     "pid": 275581,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 3.07,
+       "sys": 3.15
+      },
+      "fuse_io": {
+       "user": 27.51,
+       "sys": 33.04
+      },
+      "exited": {
+       "user": 0.05999999999999872,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287532,
+     "node": 0
+    },
+    {
+     "pid": 275582,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.86,
+       "sys": 1.76
+      },
+      "fuse_io": {
+       "user": 27.03,
+       "sys": 33.199999999999996
+      },
+      "exited": {
+       "user": 0.07000000000000028,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287504,
+     "node": 0
+    },
+    {
+     "pid": 275583,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.86,
+       "sys": 2.85
+      },
+      "fuse_io": {
+       "user": 25.89,
+       "sys": 31.580000000000005
+      },
+      "exited": {
+       "user": 0.05999999999999872,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 288444,
+     "node": 0
+    },
+    {
+     "pid": 275584,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.77,
+       "sys": 2.79
+      },
+      "fuse_io": {
+       "user": 25.88,
+       "sys": 31.900000000000002
+      },
+      "exited": {
+       "user": 0.060000000000002274,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214764,
+     "node": 0
+    },
+    {
+     "pid": 275585,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.64,
+       "sys": 1.55
+      },
+      "fuse_io": {
+       "user": 25.009999999999998,
+       "sys": 30.51
+      },
+      "exited": {
+       "user": 0.07000000000000028,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214804,
+     "node": 0
+    },
+    {
+     "pid": 275586,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.5,
+       "sys": 1.2
+      },
+      "fuse_io": {
+       "user": 26.35,
+       "sys": 32.99
+      },
+      "exited": {
+       "user": 0.09999999999999787,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287544,
+     "node": 0
+    },
+    {
+     "pid": 275587,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 3.2,
+       "sys": 3.15
+      },
+      "fuse_io": {
+       "user": 26.240000000000002,
+       "sys": 32.010000000000005
+      },
+      "exited": {
+       "user": 0.07000000000000028,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 215700,
+     "node": 0
+    },
+    {
+     "pid": 275588,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.0,
+       "sys": 1.97
+      },
+      "fuse_io": {
+       "user": 27.759999999999998,
+       "sys": 34.63
+      },
+      "exited": {
+       "user": 0.07000000000000028,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287600,
+     "node": 0
+    },
+    {
+     "pid": 275589,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.9,
+       "sys": 1.85
+      },
+      "fuse_io": {
+       "user": 28.12,
+       "sys": 34.34
+      },
+      "exited": {
+       "user": 0.05000000000000071,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214752,
+     "node": 0
+    },
+    {
+     "pid": 275590,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.75,
+       "sys": 1.55
+      },
+      "fuse_io": {
+       "user": 28.18,
+       "sys": 34.44
+      },
+      "exited": {
+       "user": 0.05999999999999872,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287540,
+     "node": 0
+    },
+    {
+     "pid": 275591,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.8,
+       "sys": 1.74
+      },
+      "fuse_io": {
+       "user": 26.49,
+       "sys": 33.620000000000005
+      },
+      "exited": {
+       "user": 0.08999999999999986,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214848,
+     "node": 0
+    },
+    {
+     "pid": 275592,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.81,
+       "sys": 2.92
+      },
+      "fuse_io": {
+       "user": 27.85,
+       "sys": 33.58
+      },
+      "exited": {
+       "user": 0.05000000000000071,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214820,
+     "node": 0
+    },
+    {
+     "pid": 275593,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 3.05,
+       "sys": 3.18
+      },
+      "fuse_io": {
+       "user": 27.68,
+       "sys": 32.94
+      },
+      "exited": {
+       "user": 0.07000000000000028,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214884,
+     "node": 0
+    },
+    {
+     "pid": 275594,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 3.0,
+       "sys": 3.2
+      },
+      "fuse_io": {
+       "user": 27.08,
+       "sys": 32.88
+      },
+      "exited": {
+       "user": 0.05000000000000071,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287472,
+     "node": 0
+    },
+    {
+     "pid": 47296,
+     "role": "ost",
+     "addr": "172.31.1.175:19951",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.18
+      },
+      "server": {
+       "user": 26.16,
+       "sys": 16.490000000000002
+      },
+      "exited": {
+       "user": 0.08000000000000185,
+       "sys": 0.029999999999997584
+      }
+     },
+     "rss_kb": 539232,
+     "node": 1
+    },
+    {
+     "pid": 47297,
+     "role": "mdt",
+     "addr": "172.31.1.175:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 6.26
+      },
+      "server": {
+       "user": 117.08999999999999,
+       "sys": 170.64999999999998
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 4.28000000000003
+      }
+     },
+     "rss_kb": 17109060,
+     "node": 1
+    },
+    {
+     "pid": 47465,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.91,
+       "sys": 2.89
+      },
+      "fuse_io": {
+       "user": 27.35,
+       "sys": 34.09
+      },
+      "exited": {
+       "user": 0.04999999999999716,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 215548,
+     "node": 1
+    },
+    {
+     "pid": 47466,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.57,
+       "sys": 2.56
+      },
+      "fuse_io": {
+       "user": 26.05,
+       "sys": 33.199999999999996
+      },
+      "exited": {
+       "user": 0.05000000000000071,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287480,
+     "node": 1
+    },
+    {
+     "pid": 47467,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.9,
+       "sys": 3.22
+      },
+      "fuse_io": {
+       "user": 27.46,
+       "sys": 33.879999999999995
+      },
+      "exited": {
+       "user": 0.05000000000000071,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 288276,
+     "node": 1
+    },
+    {
+     "pid": 47468,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.84,
+       "sys": 2.83
+      },
+      "fuse_io": {
+       "user": 27.33,
+       "sys": 33.78
+      },
+      "exited": {
+       "user": 0.05000000000000071,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214780,
+     "node": 1
+    },
+    {
+     "pid": 47469,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.72,
+       "sys": 1.68
+      },
+      "fuse_io": {
+       "user": 26.43,
+       "sys": 32.34
+      },
+      "exited": {
+       "user": 0.05000000000000071,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 288284,
+     "node": 1
+    },
+    {
+     "pid": 47470,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.83,
+       "sys": 2.83
+      },
+      "fuse_io": {
+       "user": 26.310000000000002,
+       "sys": 32.19
+      },
+      "exited": {
+       "user": 0.05000000000000071,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214720,
+     "node": 1
+    },
+    {
+     "pid": 47471,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 3.01,
+       "sys": 3.06
+      },
+      "fuse_io": {
+       "user": 25.93,
+       "sys": 32.38
+      },
+      "exited": {
+       "user": 0.060000000000002274,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214712,
+     "node": 1
+    },
+    {
+     "pid": 47472,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.83,
+       "sys": 3.15
+      },
+      "fuse_io": {
+       "user": 27.090000000000003,
+       "sys": 33.89
+      },
+      "exited": {
+       "user": 0.05999999999999872,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214708,
+     "node": 1
+    },
+    {
+     "pid": 47473,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.96,
+       "sys": 2.99
+      },
+      "fuse_io": {
+       "user": 27.240000000000002,
+       "sys": 32.97
+      },
+      "exited": {
+       "user": 0.04999999999999716,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 215548,
+     "node": 1
+    },
+    {
+     "pid": 47474,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.87,
+       "sys": 1.79
+      },
+      "fuse_io": {
+       "user": 26.15,
+       "sys": 31.57
+      },
+      "exited": {
+       "user": 0.05999999999999872,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214764,
+     "node": 1
+    },
+    {
+     "pid": 47475,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.07,
+       "sys": 1.89
+      },
+      "fuse_io": {
+       "user": 28.369999999999997,
+       "sys": 34.59
+      },
+      "exited": {
+       "user": 0.060000000000002274,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214772,
+     "node": 1
+    },
+    {
+     "pid": 47476,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.77,
+       "sys": 2.98
+      },
+      "fuse_io": {
+       "user": 26.25,
+       "sys": 32.9
+      },
+      "exited": {
+       "user": 0.05000000000000071,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214748,
+     "node": 1
+    },
+    {
+     "pid": 47477,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.01,
+       "sys": 2.03
+      },
+      "fuse_io": {
+       "user": 28.11,
+       "sys": 34.76
+      },
+      "exited": {
+       "user": 0.0400000000000027,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 215536,
+     "node": 1
+    },
+    {
+     "pid": 47478,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.89,
+       "sys": 1.8
+      },
+      "fuse_io": {
+       "user": 28.54,
+       "sys": 34.75
+      },
+      "exited": {
+       "user": 0.03999999999999915,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214788,
+     "node": 1
+    },
+    {
+     "pid": 47479,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.57,
+       "sys": 1.38
+      },
+      "fuse_io": {
+       "user": 25.019999999999996,
+       "sys": 31.07
+      },
+      "exited": {
+       "user": 0.07000000000000384,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 215468,
+     "node": 1
+    },
+    {
+     "pid": 47480,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.54,
+       "sys": 2.59
+      },
+      "fuse_io": {
+       "user": 27.33,
+       "sys": 34.17999999999999
+      },
+      "exited": {
+       "user": 0.060000000000002274,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287404,
+     "node": 1
+    },
+    {
+     "pid": 47481,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.97,
+       "sys": 1.97
+      },
+      "fuse_io": {
+       "user": 27.72,
+       "sys": 34.59
+      },
+      "exited": {
+       "user": 0.07000000000000384,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 215604,
+     "node": 1
+    },
+    {
+     "pid": 47482,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.85,
+       "sys": 1.8
+      },
+      "fuse_io": {
+       "user": 28.200000000000003,
+       "sys": 35.379999999999995
+      },
+      "exited": {
+       "user": 0.05999999999999517,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214696,
+     "node": 1
+    },
+    {
+     "pid": 47483,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.85,
+       "sys": 1.93
+      },
+      "fuse_io": {
+       "user": 27.5,
+       "sys": 33.97
+      },
+      "exited": {
+       "user": 0.03999999999999915,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287532,
+     "node": 1
+    },
+    {
+     "pid": 47484,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.81,
+       "sys": 2.97
+      },
+      "fuse_io": {
+       "user": 27.849999999999998,
+       "sys": 34.08
+      },
+      "exited": {
+       "user": 0.060000000000002274,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287452,
+     "node": 1
+    },
+    {
+     "pid": 47485,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.77,
+       "sys": 1.81
+      },
+      "fuse_io": {
+       "user": 28.55,
+       "sys": 34.82
+      },
+      "exited": {
+       "user": 0.05999999999999872,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 288276,
+     "node": 1
+    },
+    {
+     "pid": 47486,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.75,
+       "sys": 2.96
+      },
+      "fuse_io": {
+       "user": 27.029999999999998,
+       "sys": 33.8
+      },
+      "exited": {
+       "user": 0.0400000000000027,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287528,
+     "node": 1
+    },
+    {
+     "pid": 47487,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.98,
+       "sys": 3.12
+      },
+      "fuse_io": {
+       "user": 27.589999999999996,
+       "sys": 34.53
+      },
+      "exited": {
+       "user": 0.05000000000000426,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287472,
+     "node": 1
+    },
+    {
+     "pid": 47488,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.87,
+       "sys": 1.71
+      },
+      "fuse_io": {
+       "user": 28.68,
+       "sys": 35.379999999999995
+      },
+      "exited": {
+       "user": 0.05999999999999872,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287504,
+     "node": 1
+    },
+    {
+     "pid": 47489,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.98,
+       "sys": 3.07
+      },
+      "fuse_io": {
+       "user": 26.509999999999998,
+       "sys": 34.01
+      },
+      "exited": {
+       "user": 0.07000000000000028,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 215624,
+     "node": 1
+    },
+    {
+     "pid": 47490,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.21,
+       "sys": 2.11
+      },
+      "fuse_io": {
+       "user": 27.54,
+       "sys": 34.21
+      },
+      "exited": {
+       "user": 0.05999999999999872,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214788,
+     "node": 1
+    },
+    {
+     "pid": 47491,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.87,
+       "sys": 2.95
+      },
+      "fuse_io": {
+       "user": 27.009999999999998,
+       "sys": 33.349999999999994
+      },
+      "exited": {
+       "user": 0.05000000000000071,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287492,
+     "node": 1
+    },
+    {
+     "pid": 47492,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.97,
+       "sys": 3.23
+      },
+      "fuse_io": {
+       "user": 25.03,
+       "sys": 31.25
+      },
+      "exited": {
+       "user": 0.030000000000001137,
+       "sys": 0.010000000000005116
+      }
+     },
+     "rss_kb": 214692,
+     "node": 1
+    },
+    {
+     "pid": 47493,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.92,
+       "sys": 1.88
+      },
+      "fuse_io": {
+       "user": 27.66,
+       "sys": 35.1
+      },
+      "exited": {
+       "user": 0.07000000000000028,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 288332,
+     "node": 1
+    },
+    {
+     "pid": 47494,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.67,
+       "sys": 2.86
+      },
+      "fuse_io": {
+       "user": 27.35,
+       "sys": 33.63
+      },
+      "exited": {
+       "user": 0.039999999999995595,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 214808,
+     "node": 1
+    },
+    {
+     "pid": 47495,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 2.91,
+       "sys": 3.1
+      },
+      "fuse_io": {
+       "user": 27.28,
+       "sys": 33.69
+      },
+      "exited": {
+       "user": 0.03999999999999915,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 215664,
+     "node": 1
+    },
+    {
+     "pid": 47496,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 1.8,
+       "sys": 1.75
+      },
+      "fuse_io": {
+       "user": 28.259999999999998,
+       "sys": 35.09
+      },
+      "exited": {
+       "user": 0.060000000000002274,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 287532,
+     "node": 1
+    }
+   ],
+   "hosts": {
+    "0": {
+     "user": 16366.87,
+     "nice": 4.21,
+     "system": 7450.66,
+     "idle": 100910.32,
+     "iowait": 8821.83,
+     "irq": 0.0,
+     "softirq": 8.25,
+     "steal": 4.13,
+     "cores": 36
+    },
+    "1": {
+     "user": 9980.6,
+     "nice": 4.23,
+     "system": 5230.13,
+     "idle": 110095.99,
+     "iowait": 8628.46,
+     "irq": 0.0,
+     "softirq": 7.16,
+     "steal": 4.71,
+     "cores": 36
+    }
+   }
+  },
+  {
+   "phase": "timestamp",
+   "t": 4393.026373838,
+   "servers": {
+    "172.31.7.218:19901": {
+     "error": "peer unreachable: 172.31.7.218:19901 (server could not handle the request (status 1))"
+    },
+    "172.31.1.175:19901": {
+     "error": "peer unreachable: 172.31.1.175:19901 (server could not handle the request (status 1))"
+    },
+    "172.31.7.218:19951": {
+     "kind": "ost",
+     "reqs": 43597,
+     "handler_cpu_ns": 3001119000,
+     "handler_wall_ns": 3040288116892,
+     "bytes_in": 45638388055,
+     "bytes_out": 4228295,
+     "inflight_max": 9,
+     "objects": 43524,
+     "bytes": 45636371136,
+     "leases": 0,
+     "lease_misses": 0,
+     "arena_bytes": 67108864,
+     "tier": "file",
+     "tier_capacity": 100931731456,
+     "tier_used": 45638221824,
+     "tier_direct": true,
+     "ram_cache_bytes": 4194304,
+     "ram_cache_budget": 19821232128,
+     "direct_writes": 43520,
+     "tier_reads": 0,
+     "evictions": 0,
+     "by_op": {
+      "1": 43552,
+      "11": 11,
+      "42": 35
+     },
+     "rss_bytes": 555315200,
+     "numa_free_bytes": -1
+    },
+    "172.31.1.175:19951": {
+     "kind": "ost",
+     "reqs": 43594,
+     "handler_cpu_ns": 3137810885,
+     "handler_wall_ns": 2805329386263,
+     "bytes_in": 45638138621,
+     "bytes_out": 4228266,
+     "inflight_max": 9,
+     "objects": 43523,
+     "bytes": 45636248320,
+     "leases": 0,
+     "lease_misses": 0,
+     "arena_bytes": 67108864,
+     "tier": "file",
+     "tier_capacity": 100931731456,
+     "tier_used": 45637173248,
+     "tier_direct": true,
+     "ram_cache_bytes": 3145728,
+     "ram_cache_budget": 19821232128,
+     "direct_writes": 43520,
+     "tier_reads": 0,
+     "evictions": 0,
+     "by_op": {
+      "1": 43555,
+      "11": 4,
+      "42": 35
+     },
+     "rss_bytes": 554405888,
+     "numa_free_bytes": -1
+    }
+   },
+   "procs": [
+    {
+     "pid": 275437,
+     "role": "mdt",
+     "addr": "172.31.7.218:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 5.83
+      },
+      "server": {
+       "user": 911.4399999999998,
+       "sys": 1157.62
+      },
+      "exited": {
+       "user": 1.1368683772161603e-13,
+       "sys": 0.09000000000014552
+      }
+     },
+     "rss_kb": 19710812,
+     "node": 0
+    },
+    {
+     "pid": 275439,
+     "role": "ost",
+     "addr": "172.31.7.218:19951",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.18
+      },
+      "server": {
+       "user": 119.61999999999999,
+       "sys": 138.52
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.3599999999999852
+      }
+     },
+     "rss_kb": 546156,
+     "node": 0
+    },
+    {
+     "pid": 275563,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 158.76,
+       "sys": 8.75
+      },
+      "fuse_io": {
+       "user": 25.13,
+       "sys": 31.16
+      },
+      "exited": {
+       "user": 5.75,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281768,
+     "node": 0
+    },
+    {
+     "pid": 275564,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 159.24,
+       "sys": 8.06
+      },
+      "fuse_io": {
+       "user": 27.07,
+       "sys": 33.26
+      },
+      "exited": {
+       "user": 6.319999999999993,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353624,
+     "node": 0
+    },
+    {
+     "pid": 275565,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.68,
+       "sys": 9.07
+      },
+      "fuse_io": {
+       "user": 27.35,
+       "sys": 33.5
+      },
+      "exited": {
+       "user": 5.8799999999999955,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353628,
+     "node": 0
+    },
+    {
+     "pid": 275566,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 164.39,
+       "sys": 8.36
+      },
+      "fuse_io": {
+       "user": 26.84,
+       "sys": 32.15
+      },
+      "exited": {
+       "user": 6.810000000000002,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281032,
+     "node": 0
+    },
+    {
+     "pid": 275567,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.07,
+       "sys": 10.15
+      },
+      "fuse_io": {
+       "user": 27.769999999999996,
+       "sys": 33.02
+      },
+      "exited": {
+       "user": 7.510000000000019,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280952,
+     "node": 0
+    },
+    {
+     "pid": 275568,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 163.26,
+       "sys": 8.58
+      },
+      "fuse_io": {
+       "user": 27.619999999999997,
+       "sys": 33.330000000000005
+      },
+      "exited": {
+       "user": 6.730000000000018,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280984,
+     "node": 0
+    },
+    {
+     "pid": 275569,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.73,
+       "sys": 8.64
+      },
+      "fuse_io": {
+       "user": 27.35,
+       "sys": 33.82
+      },
+      "exited": {
+       "user": 5.840000000000003,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353648,
+     "node": 0
+    },
+    {
+     "pid": 275570,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 159.22,
+       "sys": 8.88
+      },
+      "fuse_io": {
+       "user": 25.509999999999998,
+       "sys": 31.639999999999997
+      },
+      "exited": {
+       "user": 6.2900000000000205,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280984,
+     "node": 0
+    },
+    {
+     "pid": 275571,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 164.87,
+       "sys": 8.98
+      },
+      "fuse_io": {
+       "user": 26.35,
+       "sys": 32.089999999999996
+      },
+      "exited": {
+       "user": 6.1299999999999955,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281772,
+     "node": 0
+    },
+    {
+     "pid": 275572,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.6,
+       "sys": 11.68
+      },
+      "fuse_io": {
+       "user": 26.81,
+       "sys": 32.61000000000001
+      },
+      "exited": {
+       "user": 8.819999999999993,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353740,
+     "node": 0
+    },
+    {
+     "pid": 275573,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 159.95,
+       "sys": 7.84
+      },
+      "fuse_io": {
+       "user": 26.72,
+       "sys": 33.33
+      },
+      "exited": {
+       "user": 4.810000000000002,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353644,
+     "node": 0
+    },
+    {
+     "pid": 275574,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.36,
+       "sys": 8.07
+      },
+      "fuse_io": {
+       "user": 26.19,
+       "sys": 31.79
+      },
+      "exited": {
+       "user": 6.359999999999985,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280960,
+     "node": 0
+    },
+    {
+     "pid": 275575,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.72,
+       "sys": 9.77
+      },
+      "fuse_io": {
+       "user": 27.62,
+       "sys": 34.48
+      },
+      "exited": {
+       "user": 8.030000000000001,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353636,
+     "node": 0
+    },
+    {
+     "pid": 275576,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 159.18,
+       "sys": 8.53
+      },
+      "fuse_io": {
+       "user": 26.81,
+       "sys": 33.29
+      },
+      "exited": {
+       "user": 5.8700000000000045,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353672,
+     "node": 0
+    },
+    {
+     "pid": 275577,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 157.9,
+       "sys": 7.92
+      },
+      "fuse_io": {
+       "user": 27.96,
+       "sys": 34.379999999999995
+      },
+      "exited": {
+       "user": 6.059999999999974,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280884,
+     "node": 0
+    },
+    {
+     "pid": 275578,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.83,
+       "sys": 8.21
+      },
+      "fuse_io": {
+       "user": 27.97,
+       "sys": 34.19
+      },
+      "exited": {
+       "user": 6.569999999999993,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353696,
+     "node": 0
+    },
+    {
+     "pid": 275579,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 164.9,
+       "sys": 8.94
+      },
+      "fuse_io": {
+       "user": 26.66,
+       "sys": 33.42
+      },
+      "exited": {
+       "user": 5.789999999999992,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 354500,
+     "node": 0
+    },
+    {
+     "pid": 275580,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 164.59,
+       "sys": 9.83
+      },
+      "fuse_io": {
+       "user": 27.79,
+       "sys": 33.91
+      },
+      "exited": {
+       "user": 8.129999999999995,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280884,
+     "node": 0
+    },
+    {
+     "pid": 275581,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 163.19,
+       "sys": 8.41
+      },
+      "fuse_io": {
+       "user": 27.51,
+       "sys": 33.04
+      },
+      "exited": {
+       "user": 5.320000000000022,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353668,
+     "node": 0
+    },
+    {
+     "pid": 275582,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.98,
+       "sys": 8.41
+      },
+      "fuse_io": {
+       "user": 27.03,
+       "sys": 33.199999999999996
+      },
+      "exited": {
+       "user": 6.730000000000018,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353640,
+     "node": 0
+    },
+    {
+     "pid": 275583,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 165.21,
+       "sys": 8.92
+      },
+      "fuse_io": {
+       "user": 25.89,
+       "sys": 31.580000000000005
+      },
+      "exited": {
+       "user": 6.129999999999967,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 354584,
+     "node": 0
+    },
+    {
+     "pid": 275584,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 157.86,
+       "sys": 7.57
+      },
+      "fuse_io": {
+       "user": 25.88,
+       "sys": 31.900000000000002
+      },
+      "exited": {
+       "user": 4.849999999999994,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280904,
+     "node": 0
+    },
+    {
+     "pid": 275585,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.55,
+       "sys": 9.61
+      },
+      "fuse_io": {
+       "user": 25.009999999999998,
+       "sys": 30.51
+      },
+      "exited": {
+       "user": 8.129999999999995,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280936,
+     "node": 0
+    },
+    {
+     "pid": 275586,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 163.22,
+       "sys": 8.45
+      },
+      "fuse_io": {
+       "user": 26.35,
+       "sys": 32.99
+      },
+      "exited": {
+       "user": 7.349999999999994,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353680,
+     "node": 0
+    },
+    {
+     "pid": 275587,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 166.48,
+       "sys": 8.82
+      },
+      "fuse_io": {
+       "user": 26.240000000000002,
+       "sys": 32.010000000000005
+      },
+      "exited": {
+       "user": 5.740000000000009,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281836,
+     "node": 0
+    },
+    {
+     "pid": 275588,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 153.98,
+       "sys": 7.13
+      },
+      "fuse_io": {
+       "user": 27.759999999999998,
+       "sys": 34.63
+      },
+      "exited": {
+       "user": 5.250000000000028,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353748,
+     "node": 0
+    },
+    {
+     "pid": 275589,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.89,
+       "sys": 8.51
+      },
+      "fuse_io": {
+       "user": 28.12,
+       "sys": 34.34
+      },
+      "exited": {
+       "user": 6.710000000000008,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280888,
+     "node": 0
+    },
+    {
+     "pid": 275590,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.64,
+       "sys": 10.15
+      },
+      "fuse_io": {
+       "user": 28.18,
+       "sys": 34.44
+      },
+      "exited": {
+       "user": 8.670000000000016,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353692,
+     "node": 0
+    },
+    {
+     "pid": 275591,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.93,
+       "sys": 8.53
+      },
+      "fuse_io": {
+       "user": 26.49,
+       "sys": 33.620000000000005
+      },
+      "exited": {
+       "user": 6.869999999999976,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280984,
+     "node": 0
+    },
+    {
+     "pid": 275592,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 164.17,
+       "sys": 9.09
+      },
+      "fuse_io": {
+       "user": 27.85,
+       "sys": 33.58
+      },
+      "exited": {
+       "user": 6.220000000000027,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280956,
+     "node": 0
+    },
+    {
+     "pid": 275593,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 166.13,
+       "sys": 10.48
+      },
+      "fuse_io": {
+       "user": 27.68,
+       "sys": 32.94
+      },
+      "exited": {
+       "user": 7.3700000000000045,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281016,
+     "node": 0
+    },
+    {
+     "pid": 275594,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 164.66,
+       "sys": 8.7
+      },
+      "fuse_io": {
+       "user": 27.08,
+       "sys": 32.88
+      },
+      "exited": {
+       "user": 5.539999999999992,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353612,
+     "node": 0
+    },
+    {
+     "pid": 47296,
+     "role": "ost",
+     "addr": "172.31.1.175:19951",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.18
+      },
+      "server": {
+       "user": 140.88,
+       "sys": 171.26999999999998
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.35000000000002274
+      }
+     },
+     "rss_kb": 891584,
+     "node": 1
+    },
+    {
+     "pid": 47297,
+     "role": "mdt",
+     "addr": "172.31.1.175:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 6.26
+      },
+      "server": {
+       "user": 824.47,
+       "sys": 861.19
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 1.009999999999991
+      }
+     },
+     "rss_kb": 19709872,
+     "node": 1
+    },
+    {
+     "pid": 47465,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.73,
+       "sys": 9.73
+      },
+      "fuse_io": {
+       "user": 27.36,
+       "sys": 34.09
+      },
+      "exited": {
+       "user": 6.880000000000024,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281684,
+     "node": 1
+    },
+    {
+     "pid": 47466,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 156.56,
+       "sys": 8.78
+      },
+      "fuse_io": {
+       "user": 26.05,
+       "sys": 33.199999999999996
+      },
+      "exited": {
+       "user": 6.279999999999973,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353620,
+     "node": 1
+    },
+    {
+     "pid": 47467,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.83,
+       "sys": 9.54
+      },
+      "fuse_io": {
+       "user": 27.46,
+       "sys": 33.879999999999995
+      },
+      "exited": {
+       "user": 6.369999999999976,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 354420,
+     "node": 1
+    },
+    {
+     "pid": 47468,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.61,
+       "sys": 10.09
+      },
+      "fuse_io": {
+       "user": 27.33,
+       "sys": 33.78
+      },
+      "exited": {
+       "user": 7.310000000000002,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280924,
+     "node": 1
+    },
+    {
+     "pid": 47469,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.03,
+       "sys": 8.62
+      },
+      "fuse_io": {
+       "user": 26.43,
+       "sys": 32.35
+      },
+      "exited": {
+       "user": 7.009999999999991,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 354436,
+     "node": 1
+    },
+    {
+     "pid": 47470,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.28,
+       "sys": 9.11
+      },
+      "fuse_io": {
+       "user": 26.310000000000002,
+       "sys": 32.19
+      },
+      "exited": {
+       "user": 6.329999999999984,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280860,
+     "node": 1
+    },
+    {
+     "pid": 47471,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 158.61,
+       "sys": 9.35
+      },
+      "fuse_io": {
+       "user": 25.93,
+       "sys": 32.38
+      },
+      "exited": {
+       "user": 6.349999999999966,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280844,
+     "node": 1
+    },
+    {
+     "pid": 47472,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 152.07,
+       "sys": 8.32
+      },
+      "fuse_io": {
+       "user": 27.1,
+       "sys": 33.89
+      },
+      "exited": {
+       "user": 5.219999999999999,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280848,
+     "node": 1
+    },
+    {
+     "pid": 47473,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 158.94,
+       "sys": 9.29
+      },
+      "fuse_io": {
+       "user": 27.240000000000002,
+       "sys": 32.980000000000004
+      },
+      "exited": {
+       "user": 6.349999999999994,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281688,
+     "node": 1
+    },
+    {
+     "pid": 47474,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.06,
+       "sys": 8.89
+      },
+      "fuse_io": {
+       "user": 26.16,
+       "sys": 31.57
+      },
+      "exited": {
+       "user": 7.159999999999997,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280908,
+     "node": 1
+    },
+    {
+     "pid": 47475,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.02,
+       "sys": 9.77
+      },
+      "fuse_io": {
+       "user": 28.369999999999997,
+       "sys": 34.59
+      },
+      "exited": {
+       "user": 7.949999999999989,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280920,
+     "node": 1
+    },
+    {
+     "pid": 47476,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 155.37,
+       "sys": 9.06
+      },
+      "fuse_io": {
+       "user": 26.25,
+       "sys": 32.91
+      },
+      "exited": {
+       "user": 6.139999999999986,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280884,
+     "node": 1
+    },
+    {
+     "pid": 47477,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 158.76,
+       "sys": 9.35
+      },
+      "fuse_io": {
+       "user": 28.11,
+       "sys": 34.82
+      },
+      "exited": {
+       "user": 7.4199999999999875,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281688,
+     "node": 1
+    },
+    {
+     "pid": 47478,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 153.02,
+       "sys": 7.81
+      },
+      "fuse_io": {
+       "user": 28.54,
+       "sys": 34.75
+      },
+      "exited": {
+       "user": 6.050000000000011,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280920,
+     "node": 1
+    },
+    {
+     "pid": 47479,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 154.42,
+       "sys": 7.47
+      },
+      "fuse_io": {
+       "user": 25.019999999999996,
+       "sys": 31.07
+      },
+      "exited": {
+       "user": 6.159999999999997,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281612,
+     "node": 1
+    },
+    {
+     "pid": 47480,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 159.09,
+       "sys": 8.99
+      },
+      "fuse_io": {
+       "user": 27.339999999999996,
+       "sys": 34.17999999999999
+      },
+      "exited": {
+       "user": 6.449999999999989,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353540,
+     "node": 1
+    },
+    {
+     "pid": 47481,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.58,
+       "sys": 9.56
+      },
+      "fuse_io": {
+       "user": 27.73,
+       "sys": 34.59
+      },
+      "exited": {
+       "user": 7.650000000000006,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281744,
+     "node": 1
+    },
+    {
+     "pid": 47482,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 157.79,
+       "sys": 8.45
+      },
+      "fuse_io": {
+       "user": 28.200000000000003,
+       "sys": 35.379999999999995
+      },
+      "exited": {
+       "user": 6.719999999999999,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280840,
+     "node": 1
+    },
+    {
+     "pid": 47483,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.02,
+       "sys": 8.99
+      },
+      "fuse_io": {
+       "user": 27.5,
+       "sys": 33.97
+      },
+      "exited": {
+       "user": 7.099999999999994,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353668,
+     "node": 1
+    },
+    {
+     "pid": 47484,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.11,
+       "sys": 9.86
+      },
+      "fuse_io": {
+       "user": 27.849999999999998,
+       "sys": 34.08
+      },
+      "exited": {
+       "user": 6.9599999999999795,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353592,
+     "node": 1
+    },
+    {
+     "pid": 47485,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.78,
+       "sys": 8.71
+      },
+      "fuse_io": {
+       "user": 28.55,
+       "sys": 34.83
+      },
+      "exited": {
+       "user": 6.9599999999999795,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 354424,
+     "node": 1
+    },
+    {
+     "pid": 47486,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 156.88,
+       "sys": 8.46
+      },
+      "fuse_io": {
+       "user": 27.029999999999998,
+       "sys": 33.8
+      },
+      "exited": {
+       "user": 5.550000000000011,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353668,
+     "node": 1
+    },
+    {
+     "pid": 47487,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.31,
+       "sys": 9.97
+      },
+      "fuse_io": {
+       "user": 27.589999999999996,
+       "sys": 34.53
+      },
+      "exited": {
+       "user": 6.909999999999997,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353612,
+     "node": 1
+    },
+    {
+     "pid": 47488,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 151.63,
+       "sys": 7.16
+      },
+      "fuse_io": {
+       "user": 28.68,
+       "sys": 35.379999999999995
+      },
+      "exited": {
+       "user": 5.52000000000001,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353656,
+     "node": 1
+    },
+    {
+     "pid": 47489,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.26,
+       "sys": 9.96
+      },
+      "fuse_io": {
+       "user": 26.509999999999998,
+       "sys": 34.01
+      },
+      "exited": {
+       "user": 6.970000000000027,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281764,
+     "node": 1
+    },
+    {
+     "pid": 47490,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.42,
+       "sys": 8.93
+      },
+      "fuse_io": {
+       "user": 27.54,
+       "sys": 34.21
+      },
+      "exited": {
+       "user": 6.880000000000024,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280948,
+     "node": 1
+    },
+    {
+     "pid": 47491,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 158.85,
+       "sys": 9.23
+      },
+      "fuse_io": {
+       "user": 27.009999999999998,
+       "sys": 33.349999999999994
+      },
+      "exited": {
+       "user": 6.350000000000023,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353628,
+     "node": 1
+    },
+    {
+     "pid": 47492,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 152.49,
+       "sys": 7.97
+      },
+      "fuse_io": {
+       "user": 25.03,
+       "sys": 31.25
+      },
+      "exited": {
+       "user": 4.780000000000001,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280828,
+     "node": 1
+    },
+    {
+     "pid": 47493,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 156.63,
+       "sys": 8.14
+      },
+      "fuse_io": {
+       "user": 27.66,
+       "sys": 35.1
+      },
+      "exited": {
+       "user": 6.3300000000000125,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 354484,
+     "node": 1
+    },
+    {
+     "pid": 47494,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.95,
+       "sys": 10.04
+      },
+      "fuse_io": {
+       "user": 27.35,
+       "sys": 33.64
+      },
+      "exited": {
+       "user": 7.230000000000018,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280948,
+     "node": 1
+    },
+    {
+     "pid": 47495,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.07,
+       "sys": 10.26
+      },
+      "fuse_io": {
+       "user": 27.28,
+       "sys": 33.69
+      },
+      "exited": {
+       "user": 7.210000000000008,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281804,
+     "node": 1
+    },
+    {
+     "pid": 47496,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 154.73,
+       "sys": 9.71
+      },
+      "fuse_io": {
+       "user": 28.259999999999998,
+       "sys": 35.09
+      },
+      "exited": {
+       "user": 8.03000000000003,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353672,
+     "node": 1
+    }
+   ],
+   "hosts": {
+    "0": {
+     "user": 21829.25,
+     "nice": 4.21,
+     "system": 8688.65,
+     "idle": 108937.58,
+     "iowait": 8821.91,
+     "irq": 0.0,
+     "softirq": 8.33,
+     "steal": 4.51,
+     "cores": 36
+    },
+    "1": {
+     "user": 15106.27,
+     "nice": 4.23,
+     "system": 6126.19,
+     "idle": 118660.74,
+     "iowait": 8628.47,
+     "irq": 0.0,
+     "softirq": 7.23,
+     "steal": 4.94,
+     "cores": 36
+    }
+   }
+  },
+  {
+   "phase": "ior-hard-write",
+   "t": 4393.756259043,
+   "servers": {
+    "172.31.7.218:19901": {
+     "error": "peer unreachable: 172.31.7.218:19901 (server could not handle the request (status 1))"
+    },
+    "172.31.1.175:19901": {
+     "error": "peer unreachable: 172.31.1.175:19901 (server could not handle the request (status 1))"
+    },
+    "172.31.7.218:19951": {
+     "kind": "ost",
+     "reqs": 51539,
+     "handler_cpu_ns": 5138556170,
+     "handler_wall_ns": 3043916685140,
+     "bytes_in": 45996232833,
+     "bytes_out": 4855713,
+     "inflight_max": 9,
+     "objects": 43870,
+     "bytes": 45999293728,
+     "leases": 0,
+     "lease_misses": 0,
+     "arena_bytes": 402653184,
+     "tier": "file",
+     "tier_capacity": 100931731456,
+     "tier_used": 46001029120,
+     "tier_direct": true,
+     "ram_cache_bytes": 367001600,
+     "ram_cache_budget": 19821232128,
+     "direct_writes": 43521,
+     "tier_reads": 1,
+     "evictions": 0,
+     "by_op": {
+      "1": 43552,
+      "11": 7958,
+      "42": 35
+     },
+     "rss_bytes": 919883776,
+     "numa_free_bytes": -1
+    },
+    "172.31.1.175:19951": {
+     "kind": "ost",
+     "reqs": 51549,
+     "handler_cpu_ns": 5490004818,
+     "handler_wall_ns": 2809738796280,
+     "bytes_in": 45996644610,
+     "bytes_out": 4856711,
+     "inflight_max": 9,
+     "objects": 43870,
+     "bytes": 45999634976,
+     "leases": 0,
+     "lease_misses": 0,
+     "arena_bytes": 402653184,
+     "tier": "file",
+     "tier_capacity": 100931731456,
+     "tier_used": 46001029120,
+     "tier_direct": true,
+     "ram_cache_bytes": 367001600,
+     "ram_cache_budget": 19821232128,
+     "direct_writes": 43520,
+     "tier_reads": 0,
+     "evictions": 0,
+     "by_op": {
+      "1": 43555,
+      "11": 7964,
+      "42": 35
+     },
+     "rss_bytes": 920133632,
+     "numa_free_bytes": -1
+    }
+   },
+   "procs": [
+    {
+     "pid": 275437,
+     "role": "mdt",
+     "addr": "172.31.7.218:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 5.83
+      },
+      "server": {
+       "user": 911.9800000000001,
+       "sys": 1157.8599999999997
+      },
+      "exited": {
+       "user": 0.009999999999877218,
+       "sys": 0.1000000000003638
+      }
+     },
+     "rss_kb": 19710860,
+     "node": 0
+    },
+    {
+     "pid": 275439,
+     "role": "ost",
+     "addr": "172.31.7.218:19951",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.18
+      },
+      "server": {
+       "user": 119.7,
+       "sys": 141.64
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.4000000000000057
+      }
+     },
+     "rss_kb": 904492,
+     "node": 0
+    },
+    {
+     "pid": 275563,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 158.85,
+       "sys": 8.77
+      },
+      "fuse_io": {
+       "user": 25.13,
+       "sys": 31.16
+      },
+      "exited": {
+       "user": 5.77000000000001,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281768,
+     "node": 0
+    },
+    {
+     "pid": 275564,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 159.31,
+       "sys": 8.08
+      },
+      "fuse_io": {
+       "user": 27.07,
+       "sys": 33.26
+      },
+      "exited": {
+       "user": 6.349999999999994,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353624,
+     "node": 0
+    },
+    {
+     "pid": 275565,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.76,
+       "sys": 9.09
+      },
+      "fuse_io": {
+       "user": 27.35,
+       "sys": 33.5
+      },
+      "exited": {
+       "user": 5.900000000000006,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353628,
+     "node": 0
+    },
+    {
+     "pid": 275566,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 164.48,
+       "sys": 8.38
+      },
+      "fuse_io": {
+       "user": 26.84,
+       "sys": 32.15
+      },
+      "exited": {
+       "user": 6.8300000000000125,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281032,
+     "node": 0
+    },
+    {
+     "pid": 275567,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.16,
+       "sys": 10.16
+      },
+      "fuse_io": {
+       "user": 27.769999999999996,
+       "sys": 33.02
+      },
+      "exited": {
+       "user": 7.530000000000001,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280952,
+     "node": 0
+    },
+    {
+     "pid": 275568,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 163.33,
+       "sys": 8.6
+      },
+      "fuse_io": {
+       "user": 27.619999999999997,
+       "sys": 33.330000000000005
+      },
+      "exited": {
+       "user": 6.759999999999991,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280984,
+     "node": 0
+    },
+    {
+     "pid": 275569,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.82,
+       "sys": 8.65
+      },
+      "fuse_io": {
+       "user": 27.35,
+       "sys": 33.84
+      },
+      "exited": {
+       "user": 5.850000000000023,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353648,
+     "node": 0
+    },
+    {
+     "pid": 275570,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 159.3,
+       "sys": 8.91
+      },
+      "fuse_io": {
+       "user": 25.52,
+       "sys": 31.639999999999997
+      },
+      "exited": {
+       "user": 6.309999999999974,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280984,
+     "node": 0
+    },
+    {
+     "pid": 275571,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 164.95,
+       "sys": 8.99
+      },
+      "fuse_io": {
+       "user": 26.35,
+       "sys": 32.1
+      },
+      "exited": {
+       "user": 6.150000000000006,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281772,
+     "node": 0
+    },
+    {
+     "pid": 275572,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.69,
+       "sys": 11.69
+      },
+      "fuse_io": {
+       "user": 26.81,
+       "sys": 32.61000000000001
+      },
+      "exited": {
+       "user": 8.830000000000013,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353744,
+     "node": 0
+    },
+    {
+     "pid": 275573,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.03,
+       "sys": 7.85
+      },
+      "fuse_io": {
+       "user": 26.72,
+       "sys": 33.33
+      },
+      "exited": {
+       "user": 4.840000000000003,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353644,
+     "node": 0
+    },
+    {
+     "pid": 275574,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.43,
+       "sys": 8.09
+      },
+      "fuse_io": {
+       "user": 26.19,
+       "sys": 31.79
+      },
+      "exited": {
+       "user": 6.389999999999986,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280964,
+     "node": 0
+    },
+    {
+     "pid": 275575,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.8,
+       "sys": 9.79
+      },
+      "fuse_io": {
+       "user": 27.62,
+       "sys": 34.48
+      },
+      "exited": {
+       "user": 8.049999999999983,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353640,
+     "node": 0
+    },
+    {
+     "pid": 275576,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 159.26,
+       "sys": 8.54
+      },
+      "fuse_io": {
+       "user": 26.81,
+       "sys": 33.29
+      },
+      "exited": {
+       "user": 5.890000000000015,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353672,
+     "node": 0
+    },
+    {
+     "pid": 275577,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 157.98,
+       "sys": 7.94
+      },
+      "fuse_io": {
+       "user": 27.96,
+       "sys": 34.379999999999995
+      },
+      "exited": {
+       "user": 6.0800000000000125,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280884,
+     "node": 0
+    },
+    {
+     "pid": 275578,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.92,
+       "sys": 8.22
+      },
+      "fuse_io": {
+       "user": 27.97,
+       "sys": 34.19
+      },
+      "exited": {
+       "user": 6.590000000000003,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353696,
+     "node": 0
+    },
+    {
+     "pid": 275579,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 164.98,
+       "sys": 8.97
+      },
+      "fuse_io": {
+       "user": 26.67,
+       "sys": 33.43
+      },
+      "exited": {
+       "user": 5.810000000000031,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 354500,
+     "node": 0
+    },
+    {
+     "pid": 275580,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 164.67,
+       "sys": 9.85
+      },
+      "fuse_io": {
+       "user": 27.79,
+       "sys": 33.91
+      },
+      "exited": {
+       "user": 8.160000000000025,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280884,
+     "node": 0
+    },
+    {
+     "pid": 275581,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 163.28,
+       "sys": 8.43
+      },
+      "fuse_io": {
+       "user": 27.51,
+       "sys": 33.04
+      },
+      "exited": {
+       "user": 5.340000000000003,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353668,
+     "node": 0
+    },
+    {
+     "pid": 275582,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 163.07,
+       "sys": 8.41
+      },
+      "fuse_io": {
+       "user": 27.049999999999997,
+       "sys": 33.199999999999996
+      },
+      "exited": {
+       "user": 6.719999999999999,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353640,
+     "node": 0
+    },
+    {
+     "pid": 275583,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 165.28,
+       "sys": 8.94
+      },
+      "fuse_io": {
+       "user": 25.89,
+       "sys": 31.580000000000005
+      },
+      "exited": {
+       "user": 6.159999999999997,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 354584,
+     "node": 0
+    },
+    {
+     "pid": 275584,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 157.95,
+       "sys": 7.58
+      },
+      "fuse_io": {
+       "user": 25.889999999999997,
+       "sys": 31.900000000000002
+      },
+      "exited": {
+       "user": 4.850000000000023,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280904,
+     "node": 0
+    },
+    {
+     "pid": 275585,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.64,
+       "sys": 9.62
+      },
+      "fuse_io": {
+       "user": 25.009999999999998,
+       "sys": 30.51
+      },
+      "exited": {
+       "user": 8.140000000000015,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280936,
+     "node": 0
+    },
+    {
+     "pid": 275586,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 163.32,
+       "sys": 8.46
+      },
+      "fuse_io": {
+       "user": 26.36,
+       "sys": 32.99
+      },
+      "exited": {
+       "user": 7.359999999999985,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353684,
+     "node": 0
+    },
+    {
+     "pid": 275587,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 166.56,
+       "sys": 8.84
+      },
+      "fuse_io": {
+       "user": 26.240000000000002,
+       "sys": 32.010000000000005
+      },
+      "exited": {
+       "user": 5.759999999999991,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281836,
+     "node": 0
+    },
+    {
+     "pid": 275588,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 154.08,
+       "sys": 7.15
+      },
+      "fuse_io": {
+       "user": 27.77,
+       "sys": 34.63
+      },
+      "exited": {
+       "user": 5.259999999999991,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353748,
+     "node": 0
+    },
+    {
+     "pid": 275589,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.99,
+       "sys": 8.53
+      },
+      "fuse_io": {
+       "user": 28.13,
+       "sys": 34.34
+      },
+      "exited": {
+       "user": 6.719999999999999,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280888,
+     "node": 0
+    },
+    {
+     "pid": 275590,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.73,
+       "sys": 10.17
+      },
+      "fuse_io": {
+       "user": 28.18,
+       "sys": 34.44
+      },
+      "exited": {
+       "user": 8.680000000000007,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353692,
+     "node": 0
+    },
+    {
+     "pid": 275591,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.01,
+       "sys": 8.55
+      },
+      "fuse_io": {
+       "user": 26.49,
+       "sys": 33.620000000000005
+      },
+      "exited": {
+       "user": 6.889999999999986,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280984,
+     "node": 0
+    },
+    {
+     "pid": 275592,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 164.25,
+       "sys": 9.1
+      },
+      "fuse_io": {
+       "user": 27.85,
+       "sys": 33.58
+      },
+      "exited": {
+       "user": 6.240000000000009,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280960,
+     "node": 0
+    },
+    {
+     "pid": 275593,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 166.2,
+       "sys": 10.5
+      },
+      "fuse_io": {
+       "user": 27.689999999999998,
+       "sys": 32.95
+      },
+      "exited": {
+       "user": 7.380000000000024,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281020,
+     "node": 0
+    },
+    {
+     "pid": 275594,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 164.76,
+       "sys": 8.71
+      },
+      "fuse_io": {
+       "user": 27.08,
+       "sys": 32.88
+      },
+      "exited": {
+       "user": 5.560000000000031,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353612,
+     "node": 0
+    },
+    {
+     "pid": 47296,
+     "role": "ost",
+     "addr": "172.31.1.175:19951",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.18
+      },
+      "server": {
+       "user": 140.88,
+       "sys": 172.59000000000003
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.339999999999975
+      }
+     },
+     "rss_kb": 1041732,
+     "node": 1
+    },
+    {
+     "pid": 47297,
+     "role": "mdt",
+     "addr": "172.31.1.175:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 6.26
+      },
+      "server": {
+       "user": 824.54,
+       "sys": 861.28
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 1.009999999999991
+      }
+     },
+     "rss_kb": 19709872,
+     "node": 1
+    },
+    {
+     "pid": 47465,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.76,
+       "sys": 9.74
+      },
+      "fuse_io": {
+       "user": 27.369999999999997,
+       "sys": 34.09
+      },
+      "exited": {
+       "user": 6.8799999999999955,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281684,
+     "node": 1
+    },
+    {
+     "pid": 47466,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 156.6,
+       "sys": 8.79
+      },
+      "fuse_io": {
+       "user": 26.05,
+       "sys": 33.199999999999996
+      },
+      "exited": {
+       "user": 6.280000000000001,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353620,
+     "node": 1
+    },
+    {
+     "pid": 47467,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.87,
+       "sys": 9.55
+      },
+      "fuse_io": {
+       "user": 27.47,
+       "sys": 33.879999999999995
+      },
+      "exited": {
+       "user": 6.3700000000000045,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 354420,
+     "node": 1
+    },
+    {
+     "pid": 47468,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.64,
+       "sys": 10.1
+      },
+      "fuse_io": {
+       "user": 27.33,
+       "sys": 33.78
+      },
+      "exited": {
+       "user": 7.320000000000022,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280924,
+     "node": 1
+    },
+    {
+     "pid": 47469,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.07,
+       "sys": 8.63
+      },
+      "fuse_io": {
+       "user": 26.43,
+       "sys": 32.35
+      },
+      "exited": {
+       "user": 7.009999999999991,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 354436,
+     "node": 1
+    },
+    {
+     "pid": 47470,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.31,
+       "sys": 9.12
+      },
+      "fuse_io": {
+       "user": 26.32,
+       "sys": 32.19
+      },
+      "exited": {
+       "user": 6.340000000000003,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280860,
+     "node": 1
+    },
+    {
+     "pid": 47471,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 158.64,
+       "sys": 9.36
+      },
+      "fuse_io": {
+       "user": 25.94,
+       "sys": 32.38
+      },
+      "exited": {
+       "user": 6.360000000000014,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280844,
+     "node": 1
+    },
+    {
+     "pid": 47472,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 152.11,
+       "sys": 8.32
+      },
+      "fuse_io": {
+       "user": 27.1,
+       "sys": 33.89
+      },
+      "exited": {
+       "user": 5.219999999999999,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280848,
+     "node": 1
+    },
+    {
+     "pid": 47473,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 158.98,
+       "sys": 9.3
+      },
+      "fuse_io": {
+       "user": 27.240000000000002,
+       "sys": 32.980000000000004
+      },
+      "exited": {
+       "user": 6.360000000000014,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281688,
+     "node": 1
+    },
+    {
+     "pid": 47474,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.1,
+       "sys": 8.9
+      },
+      "fuse_io": {
+       "user": 26.16,
+       "sys": 31.57
+      },
+      "exited": {
+       "user": 7.159999999999997,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280908,
+     "node": 1
+    },
+    {
+     "pid": 47475,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.06,
+       "sys": 9.78
+      },
+      "fuse_io": {
+       "user": 28.369999999999997,
+       "sys": 34.59
+      },
+      "exited": {
+       "user": 7.949999999999989,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280920,
+     "node": 1
+    },
+    {
+     "pid": 47476,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 155.4,
+       "sys": 9.07
+      },
+      "fuse_io": {
+       "user": 26.25,
+       "sys": 32.91
+      },
+      "exited": {
+       "user": 6.150000000000006,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280884,
+     "node": 1
+    },
+    {
+     "pid": 47477,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 158.8,
+       "sys": 9.36
+      },
+      "fuse_io": {
+       "user": 28.11,
+       "sys": 34.82
+      },
+      "exited": {
+       "user": 7.4199999999999875,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281688,
+     "node": 1
+    },
+    {
+     "pid": 47478,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 153.06,
+       "sys": 7.82
+      },
+      "fuse_io": {
+       "user": 28.54,
+       "sys": 34.75
+      },
+      "exited": {
+       "user": 6.060000000000002,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280920,
+     "node": 1
+    },
+    {
+     "pid": 47479,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 154.46,
+       "sys": 7.48
+      },
+      "fuse_io": {
+       "user": 25.019999999999996,
+       "sys": 31.07
+      },
+      "exited": {
+       "user": 6.159999999999968,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281612,
+     "node": 1
+    },
+    {
+     "pid": 47480,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 159.13,
+       "sys": 8.99
+      },
+      "fuse_io": {
+       "user": 27.339999999999996,
+       "sys": 34.17999999999999
+      },
+      "exited": {
+       "user": 6.460000000000008,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353540,
+     "node": 1
+    },
+    {
+     "pid": 47481,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.62,
+       "sys": 9.56
+      },
+      "fuse_io": {
+       "user": 27.73,
+       "sys": 34.59
+      },
+      "exited": {
+       "user": 7.659999999999997,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281744,
+     "node": 1
+    },
+    {
+     "pid": 47482,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 157.83,
+       "sys": 8.46
+      },
+      "fuse_io": {
+       "user": 28.21,
+       "sys": 35.379999999999995
+      },
+      "exited": {
+       "user": 6.7099999999999795,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280840,
+     "node": 1
+    },
+    {
+     "pid": 47483,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.05,
+       "sys": 9.0
+      },
+      "fuse_io": {
+       "user": 27.5,
+       "sys": 33.97
+      },
+      "exited": {
+       "user": 7.119999999999976,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353668,
+     "node": 1
+    },
+    {
+     "pid": 47484,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.15,
+       "sys": 9.87
+      },
+      "fuse_io": {
+       "user": 27.849999999999998,
+       "sys": 34.08
+      },
+      "exited": {
+       "user": 6.960000000000008,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353592,
+     "node": 1
+    },
+    {
+     "pid": 47485,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.82,
+       "sys": 8.72
+      },
+      "fuse_io": {
+       "user": 28.55,
+       "sys": 34.83
+      },
+      "exited": {
+       "user": 6.969999999999999,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 354424,
+     "node": 1
+    },
+    {
+     "pid": 47486,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 156.92,
+       "sys": 8.47
+      },
+      "fuse_io": {
+       "user": 27.029999999999998,
+       "sys": 33.8
+      },
+      "exited": {
+       "user": 5.560000000000002,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353668,
+     "node": 1
+    },
+    {
+     "pid": 47487,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.36,
+       "sys": 9.97
+      },
+      "fuse_io": {
+       "user": 27.589999999999996,
+       "sys": 34.53
+      },
+      "exited": {
+       "user": 6.9199999999999875,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353612,
+     "node": 1
+    },
+    {
+     "pid": 47488,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 151.67,
+       "sys": 7.17
+      },
+      "fuse_io": {
+       "user": 28.68,
+       "sys": 35.379999999999995
+      },
+      "exited": {
+       "user": 5.52000000000001,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353656,
+     "node": 1
+    },
+    {
+     "pid": 47489,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 162.31,
+       "sys": 9.97
+      },
+      "fuse_io": {
+       "user": 26.509999999999998,
+       "sys": 34.01
+      },
+      "exited": {
+       "user": 6.960000000000008,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281764,
+     "node": 1
+    },
+    {
+     "pid": 47490,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.46,
+       "sys": 8.93
+      },
+      "fuse_io": {
+       "user": 27.54,
+       "sys": 34.21
+      },
+      "exited": {
+       "user": 6.889999999999986,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280948,
+     "node": 1
+    },
+    {
+     "pid": 47491,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 158.89,
+       "sys": 9.24
+      },
+      "fuse_io": {
+       "user": 27.009999999999998,
+       "sys": 33.349999999999994
+      },
+      "exited": {
+       "user": 6.360000000000014,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353628,
+     "node": 1
+    },
+    {
+     "pid": 47492,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 152.53,
+       "sys": 7.98
+      },
+      "fuse_io": {
+       "user": 25.03,
+       "sys": 31.25
+      },
+      "exited": {
+       "user": 4.789999999999992,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280828,
+     "node": 1
+    },
+    {
+     "pid": 47493,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 156.67,
+       "sys": 8.14
+      },
+      "fuse_io": {
+       "user": 27.67,
+       "sys": 35.1
+      },
+      "exited": {
+       "user": 6.320000000000022,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 354484,
+     "node": 1
+    },
+    {
+     "pid": 47494,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 161.99,
+       "sys": 10.04
+      },
+      "fuse_io": {
+       "user": 27.35,
+       "sys": 33.64
+      },
+      "exited": {
+       "user": 7.240000000000009,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280948,
+     "node": 1
+    },
+    {
+     "pid": 47495,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 160.1,
+       "sys": 10.27
+      },
+      "fuse_io": {
+       "user": 27.28,
+       "sys": 33.69
+      },
+      "exited": {
+       "user": 7.230000000000018,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281804,
+     "node": 1
+    },
+    {
+     "pid": 47496,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 154.76,
+       "sys": 9.72
+      },
+      "fuse_io": {
+       "user": 28.259999999999998,
+       "sys": 35.09
+      },
+      "exited": {
+       "user": 8.04000000000002,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353672,
+     "node": 1
+    }
+   ],
+   "hosts": {
+    "0": {
+     "user": 21832.49,
+     "nice": 4.21,
+     "system": 8692.02,
+     "idle": 108955.46,
+     "iowait": 8821.91,
+     "irq": 0.0,
+     "softirq": 8.34,
+     "steal": 4.51,
+     "cores": 36
+    },
+    "1": {
+     "user": 15107.34,
+     "nice": 4.23,
+     "system": 6127.72,
+     "idle": 118669.73,
+     "iowait": 8628.47,
+     "irq": 0.0,
+     "softirq": 7.23,
+     "steal": 4.94,
+     "cores": 36
+    }
+   }
+  },
+  {
+   "phase": "mdtest-hard-write",
+   "t": 4700.793880093,
+   "servers": {
+    "172.31.7.218:19901": {
+     "error": "peer unreachable: 172.31.7.218:19901 (server could not handle the request (status 1))"
+    },
+    "172.31.1.175:19901": {
+     "error": "peer unreachable: 172.31.1.175:19901 (server could not handle the request (status 1))"
+    },
+    "172.31.7.218:19951": {
+     "kind": "ost",
+     "reqs": 1034264,
+     "handler_cpu_ns": 340658336373,
+     "handler_wall_ns": 5479179799109,
+     "bytes_in": 90281156548,
+     "bytes_out": 82490988,
+     "inflight_max": 9,
+     "objects": 86028,
+     "bytes": 90206896128,
+     "leases": 0,
+     "lease_misses": 0,
+     "arena_bytes": 20199768064,
+     "tier": "file",
+     "tier_capacity": 100931731456,
+     "tier_used": 90206896128,
+     "tier_direct": true,
+     "ram_cache_bytes": 19821232128,
+     "ram_cache_budget": 19821232128,
+     "direct_writes": 43739,
+     "tier_reads": 219,
+     "evictions": 23605,
+     "by_op": {
+      "1": 43552,
+      "11": 990677,
+      "42": 35
+     },
+     "rss_bytes": 20472078336,
+     "numa_free_bytes": -1
+    },
+    "172.31.1.175:19951": {
+     "kind": "ost",
+     "reqs": 1034255,
+     "handler_cpu_ns": 305210029811,
+     "handler_wall_ns": 3406211996487,
+     "bytes_in": 90280637984,
+     "bytes_out": 82490485,
+     "inflight_max": 9,
+     "objects": 86028,
+     "bytes": 90206377984,
+     "leases": 0,
+     "lease_misses": 0,
+     "arena_bytes": 20199768064,
+     "tier": "file",
+     "tier_capacity": 100931731456,
+     "tier_used": 90206896128,
+     "tier_direct": true,
+     "ram_cache_bytes": 19821232128,
+     "ram_cache_budget": 19821232128,
+     "direct_writes": 43731,
+     "tier_reads": 211,
+     "evictions": 23605,
+     "by_op": {
+      "1": 43555,
+      "11": 990665,
+      "42": 35
+     },
+     "rss_bytes": 20470935552,
+     "numa_free_bytes": -1
+    }
+   },
+   "procs": [
+    {
+     "pid": 275437,
+     "role": "mdt",
+     "addr": "172.31.7.218:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 5.83
+      },
+      "server": {
+       "user": 1011.4899999999999,
+       "sys": 1272.25
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.2400000000000091
+      }
+     },
+     "rss_kb": 19710860,
+     "node": 0
+    },
+    {
+     "pid": 275439,
+     "role": "ost",
+     "addr": "172.31.7.218:19951",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.18
+      },
+      "server": {
+       "user": 197.55,
+       "sys": 533.07
+      },
+      "exited": {
+       "user": 0.0999999999999659,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 19992264,
+     "node": 0
+    },
+    {
+     "pid": 275563,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 182.35,
+       "sys": 16.36
+      },
+      "fuse_io": {
+       "user": 26.759999999999998,
+       "sys": 32.67
+      },
+      "exited": {
+       "user": 13.320000000000022,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281772,
+     "node": 0
+    },
+    {
+     "pid": 275564,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 182.45,
+       "sys": 16.14
+      },
+      "fuse_io": {
+       "user": 27.939999999999998,
+       "sys": 33.7
+      },
+      "exited": {
+       "user": 13.79000000000002,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353628,
+     "node": 0
+    },
+    {
+     "pid": 275565,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 185.69,
+       "sys": 17.46
+      },
+      "fuse_io": {
+       "user": 28.11,
+       "sys": 34.0
+      },
+      "exited": {
+       "user": 13.45999999999998,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353632,
+     "node": 0
+    },
+    {
+     "pid": 275566,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 187.82,
+       "sys": 16.44
+      },
+      "fuse_io": {
+       "user": 27.61,
+       "sys": 32.599999999999994
+      },
+      "exited": {
+       "user": 13.47999999999999,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281040,
+     "node": 0
+    },
+    {
+     "pid": 275567,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 186.5,
+       "sys": 18.44
+      },
+      "fuse_io": {
+       "user": 28.5,
+       "sys": 33.56
+      },
+      "exited": {
+       "user": 13.189999999999998,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281772,
+     "node": 0
+    },
+    {
+     "pid": 275568,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 186.43,
+       "sys": 16.63
+      },
+      "fuse_io": {
+       "user": 28.379999999999995,
+       "sys": 33.910000000000004
+      },
+      "exited": {
+       "user": 13.710000000000008,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280988,
+     "node": 0
+    },
+    {
+     "pid": 275569,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 184.72,
+       "sys": 16.86
+      },
+      "fuse_io": {
+       "user": 28.11,
+       "sys": 34.36
+      },
+      "exited": {
+       "user": 13.640000000000015,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353652,
+     "node": 0
+    },
+    {
+     "pid": 275570,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 182.23,
+       "sys": 17.18
+      },
+      "fuse_io": {
+       "user": 26.26,
+       "sys": 32.15
+      },
+      "exited": {
+       "user": 12.970000000000027,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280988,
+     "node": 0
+    },
+    {
+     "pid": 275571,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 187.95,
+       "sys": 17.27
+      },
+      "fuse_io": {
+       "user": 27.1,
+       "sys": 32.66
+      },
+      "exited": {
+       "user": 13.300000000000011,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281776,
+     "node": 0
+    },
+    {
+     "pid": 275572,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 185.62,
+       "sys": 19.94
+      },
+      "fuse_io": {
+       "user": 27.58,
+       "sys": 33.09
+      },
+      "exited": {
+       "user": 13.210000000000008,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353748,
+     "node": 0
+    },
+    {
+     "pid": 275573,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 183.25,
+       "sys": 15.85
+      },
+      "fuse_io": {
+       "user": 27.49,
+       "sys": 33.82
+      },
+      "exited": {
+       "user": 13.310000000000002,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353648,
+     "node": 0
+    },
+    {
+     "pid": 275574,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 183.49,
+       "sys": 16.34
+      },
+      "fuse_io": {
+       "user": 26.89,
+       "sys": 32.4
+      },
+      "exited": {
+       "user": 13.580000000000013,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280968,
+     "node": 0
+    },
+    {
+     "pid": 275575,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 185.78,
+       "sys": 17.97
+      },
+      "fuse_io": {
+       "user": 28.379999999999995,
+       "sys": 34.949999999999996
+      },
+      "exited": {
+       "user": 13.800000000000011,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 354456,
+     "node": 0
+    },
+    {
+     "pid": 275576,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 182.4,
+       "sys": 16.75
+      },
+      "fuse_io": {
+       "user": 27.57,
+       "sys": 33.81
+      },
+      "exited": {
+       "user": 13.669999999999987,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353680,
+     "node": 0
+    },
+    {
+     "pid": 275577,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 181.18,
+       "sys": 16.03
+      },
+      "fuse_io": {
+       "user": 28.68,
+       "sys": 34.84
+      },
+      "exited": {
+       "user": 14.0,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280888,
+     "node": 0
+    },
+    {
+     "pid": 275578,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 187.17,
+       "sys": 16.18
+      },
+      "fuse_io": {
+       "user": 28.64,
+       "sys": 34.64
+      },
+      "exited": {
+       "user": 14.090000000000003,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353704,
+     "node": 0
+    },
+    {
+     "pid": 275579,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 188.07,
+       "sys": 17.03
+      },
+      "fuse_io": {
+       "user": 27.39,
+       "sys": 33.949999999999996
+      },
+      "exited": {
+       "user": 13.650000000000034,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 354508,
+     "node": 0
+    },
+    {
+     "pid": 275580,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 187.54,
+       "sys": 18.39
+      },
+      "fuse_io": {
+       "user": 28.550000000000004,
+       "sys": 34.5
+      },
+      "exited": {
+       "user": 13.379999999999995,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280892,
+     "node": 0
+    },
+    {
+     "pid": 275581,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 186.5,
+       "sys": 16.49
+      },
+      "fuse_io": {
+       "user": 28.28,
+       "sys": 33.510000000000005
+      },
+      "exited": {
+       "user": 13.77000000000001,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353672,
+     "node": 0
+    },
+    {
+     "pid": 275582,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 186.27,
+       "sys": 16.49
+      },
+      "fuse_io": {
+       "user": 27.849999999999998,
+       "sys": 33.76
+      },
+      "exited": {
+       "user": 13.650000000000006,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353644,
+     "node": 0
+    },
+    {
+     "pid": 275583,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 188.39,
+       "sys": 17.11
+      },
+      "fuse_io": {
+       "user": 26.630000000000003,
+       "sys": 32.04
+      },
+      "exited": {
+       "user": 13.200000000000017,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 354588,
+     "node": 0
+    },
+    {
+     "pid": 275584,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 180.99,
+       "sys": 15.79
+      },
+      "fuse_io": {
+       "user": 26.6,
+       "sys": 32.37
+      },
+      "exited": {
+       "user": 13.539999999999992,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280912,
+     "node": 0
+    },
+    {
+     "pid": 275585,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 184.66,
+       "sys": 17.9
+      },
+      "fuse_io": {
+       "user": 25.840000000000003,
+       "sys": 30.97
+      },
+      "exited": {
+       "user": 12.72999999999999,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280940,
+     "node": 0
+    },
+    {
+     "pid": 275586,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 187.22,
+       "sys": 16.49
+      },
+      "fuse_io": {
+       "user": 27.099999999999998,
+       "sys": 33.48
+      },
+      "exited": {
+       "user": 13.810000000000002,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353688,
+     "node": 0
+    },
+    {
+     "pid": 275587,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 189.93,
+       "sys": 16.95
+      },
+      "fuse_io": {
+       "user": 26.97,
+       "sys": 32.58
+      },
+      "exited": {
+       "user": 13.409999999999997,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281844,
+     "node": 0
+    },
+    {
+     "pid": 275588,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 177.67,
+       "sys": 15.08
+      },
+      "fuse_io": {
+       "user": 28.6,
+       "sys": 35.16
+      },
+      "exited": {
+       "user": 13.710000000000008,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353752,
+     "node": 0
+    },
+    {
+     "pid": 275589,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 187.62,
+       "sys": 16.66
+      },
+      "fuse_io": {
+       "user": 28.83,
+       "sys": 34.870000000000005
+      },
+      "exited": {
+       "user": 14.01000000000002,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280892,
+     "node": 0
+    },
+    {
+     "pid": 275590,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 185.67,
+       "sys": 18.47
+      },
+      "fuse_io": {
+       "user": 28.97,
+       "sys": 34.97
+      },
+      "exited": {
+       "user": 13.610000000000014,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353696,
+     "node": 0
+    },
+    {
+     "pid": 275591,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 184.91,
+       "sys": 16.83
+      },
+      "fuse_io": {
+       "user": 27.22,
+       "sys": 34.1
+      },
+      "exited": {
+       "user": 13.990000000000009,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280988,
+     "node": 0
+    },
+    {
+     "pid": 275592,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 187.26,
+       "sys": 17.18
+      },
+      "fuse_io": {
+       "user": 28.72,
+       "sys": 34.11
+      },
+      "exited": {
+       "user": 13.640000000000015,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 280964,
+     "node": 0
+    },
+    {
+     "pid": 275593,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 188.98,
+       "sys": 19.02
+      },
+      "fuse_io": {
+       "user": 28.52,
+       "sys": 33.43
+      },
+      "exited": {
+       "user": 12.780000000000001,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 281024,
+     "node": 0
+    },
+    {
+     "pid": 275594,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 187.84,
+       "sys": 16.75
+      },
+      "fuse_io": {
+       "user": 27.919999999999998,
+       "sys": 33.37
+      },
+      "exited": {
+       "user": 13.580000000000013,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 353616,
+     "node": 0
+    },
+    {
+     "pid": 47296,
+     "role": "ost",
+     "addr": "172.31.1.175:19951",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.18
+      },
+      "server": {
+       "user": 202.37,
+       "sys": 605.1100000000001
+      },
+      "exited": {
+       "user": 0.029999999999972715,
+       "sys": 0.08999999999991815
+      }
+     },
+     "rss_kb": 19991148,
+     "node": 1
+    },
+    {
+     "pid": 47297,
+     "role": "mdt",
+     "addr": "172.31.1.175:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 6.26
+      },
+      "server": {
+       "user": 903.01,
+       "sys": 963.7299999999999
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 1.1100000000001273
+      }
+     },
+     "rss_kb": 19856840,
+     "node": 1
+    },
+    {
+     "pid": 47465,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 186.14,
+       "sys": 17.88
+      },
+      "fuse_io": {
+       "user": 28.11,
+       "sys": 34.65
+      },
+      "exited": {
+       "user": 11.969999999999999,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 347236,
+     "node": 1
+    },
+    {
+     "pid": 47466,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 179.67,
+       "sys": 17.04
+      },
+      "fuse_io": {
+       "user": 26.85,
+       "sys": 33.72
+      },
+      "exited": {
+       "user": 11.830000000000013,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 419172,
+     "node": 1
+    },
+    {
+     "pid": 47467,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 184.16,
+       "sys": 17.79
+      },
+      "fuse_io": {
+       "user": 28.22,
+       "sys": 34.42
+      },
+      "exited": {
+       "user": 11.740000000000009,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 419972,
+     "node": 1
+    },
+    {
+     "pid": 47468,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 186.09,
+       "sys": 18.34
+      },
+      "fuse_io": {
+       "user": 28.07,
+       "sys": 34.31999999999999
+      },
+      "exited": {
+       "user": 11.72999999999999,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 346476,
+     "node": 1
+    },
+    {
+     "pid": 47469,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 183.27,
+       "sys": 16.98
+      },
+      "fuse_io": {
+       "user": 27.18,
+       "sys": 32.85
+      },
+      "exited": {
+       "user": 11.589999999999975,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 419980,
+     "node": 1
+    },
+    {
+     "pid": 47470,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 184.52,
+       "sys": 17.4
+      },
+      "fuse_io": {
+       "user": 27.109999999999996,
+       "sys": 32.7
+      },
+      "exited": {
+       "user": 11.490000000000009,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 346412,
+     "node": 1
+    },
+    {
+     "pid": 47471,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 181.86,
+       "sys": 17.64
+      },
+      "fuse_io": {
+       "user": 26.67,
+       "sys": 32.92
+      },
+      "exited": {
+       "user": 11.509999999999962,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 346400,
+     "node": 1
+    },
+    {
+     "pid": 47472,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 175.58,
+       "sys": 16.6
+      },
+      "fuse_io": {
+       "user": 27.89,
+       "sys": 34.43
+      },
+      "exited": {
+       "user": 12.179999999999978,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 346400,
+     "node": 1
+    },
+    {
+     "pid": 47473,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 182.47,
+       "sys": 17.29
+      },
+      "fuse_io": {
+       "user": 27.990000000000002,
+       "sys": 33.53
+      },
+      "exited": {
+       "user": 11.669999999999987,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 347240,
+     "node": 1
+    },
+    {
+     "pid": 47474,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 183.46,
+       "sys": 17.17
+      },
+      "fuse_io": {
+       "user": 26.87,
+       "sys": 32.09
+      },
+      "exited": {
+       "user": 11.319999999999993,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 346448,
+     "node": 1
+    },
+    {
+     "pid": 47475,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 184.4,
+       "sys": 18.14
+      },
+      "fuse_io": {
+       "user": 29.13,
+       "sys": 35.06999999999999
+      },
+      "exited": {
+       "user": 11.969999999999999,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 346464,
+     "node": 1
+    },
+    {
+     "pid": 47476,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 178.56,
+       "sys": 17.23
+      },
+      "fuse_io": {
+       "user": 27.0,
+       "sys": 33.46
+      },
+      "exited": {
+       "user": 11.639999999999986,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 346436,
+     "node": 1
+    },
+    {
+     "pid": 47477,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 182.13,
+       "sys": 17.54
+      },
+      "fuse_io": {
+       "user": 28.8,
+       "sys": 35.43
+      },
+      "exited": {
+       "user": 12.139999999999986,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 347228,
+     "node": 1
+    },
+    {
+     "pid": 47478,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 176.35,
+       "sys": 15.9
+      },
+      "fuse_io": {
+       "user": 29.37,
+       "sys": 35.3
+      },
+      "exited": {
+       "user": 12.330000000000013,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 346472,
+     "node": 1
+    },
+    {
+     "pid": 47479,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 178.14,
+       "sys": 15.54
+      },
+      "fuse_io": {
+       "user": 25.79,
+       "sys": 31.57
+      },
+      "exited": {
+       "user": 11.500000000000028,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 347160,
+     "node": 1
+    },
+    {
+     "pid": 47480,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 182.37,
+       "sys": 17.17
+      },
+      "fuse_io": {
+       "user": 28.02,
+       "sys": 34.79
+      },
+      "exited": {
+       "user": 12.399999999999977,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 419096,
+     "node": 1
+    },
+    {
+     "pid": 47481,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 184.12,
+       "sys": 17.76
+      },
+      "fuse_io": {
+       "user": 28.349999999999998,
+       "sys": 35.06
+      },
+      "exited": {
+       "user": 12.159999999999997,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 347296,
+     "node": 1
+    },
+    {
+     "pid": 47482,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 181.1,
+       "sys": 16.69
+      },
+      "fuse_io": {
+       "user": 28.979999999999997,
+       "sys": 35.910000000000004
+      },
+      "exited": {
+       "user": 12.500000000000028,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 346388,
+     "node": 1
+    },
+    {
+     "pid": 47483,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 183.23,
+       "sys": 17.21
+      },
+      "fuse_io": {
+       "user": 28.24,
+       "sys": 34.53999999999999
+      },
+      "exited": {
+       "user": 12.030000000000001,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 419220,
+     "node": 1
+    },
+    {
+     "pid": 47484,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 184.53,
+       "sys": 18.1
+      },
+      "fuse_io": {
+       "user": 28.619999999999997,
+       "sys": 34.54
+      },
+      "exited": {
+       "user": 11.870000000000005,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 419144,
+     "node": 1
+    },
+    {
+     "pid": 47485,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 185.28,
+       "sys": 16.98
+      },
+      "fuse_io": {
+       "user": 29.39,
+       "sys": 35.33
+      },
+      "exited": {
+       "user": 12.119999999999976,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 419964,
+     "node": 1
+    },
+    {
+     "pid": 47486,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 180.34,
+       "sys": 16.47
+      },
+      "fuse_io": {
+       "user": 27.779999999999998,
+       "sys": 34.31
+      },
+      "exited": {
+       "user": 12.280000000000001,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 419220,
+     "node": 1
+    },
+    {
+     "pid": 47487,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 184.49,
+       "sys": 18.27
+      },
+      "fuse_io": {
+       "user": 28.29,
+       "sys": 35.08
+      },
+      "exited": {
+       "user": 11.859999999999985,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 419164,
+     "node": 1
+    },
+    {
+     "pid": 47488,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 175.21,
+       "sys": 15.05
+      },
+      "fuse_io": {
+       "user": 29.43,
+       "sys": 36.01
+      },
+      "exited": {
+       "user": 12.629999999999995,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 419196,
+     "node": 1
+    },
+    {
+     "pid": 47489,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 185.5,
+       "sys": 18.1
+      },
+      "fuse_io": {
+       "user": 27.31,
+       "sys": 34.51
+      },
+      "exited": {
+       "user": 12.009999999999991,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 347320,
+     "node": 1
+    },
+    {
+     "pid": 47490,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 183.97,
+       "sys": 17.28
+      },
+      "fuse_io": {
+       "user": 28.26,
+       "sys": 34.73
+      },
+      "exited": {
+       "user": 12.01000000000002,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 346488,
+     "node": 1
+    },
+    {
+     "pid": 47491,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 182.43,
+       "sys": 17.34
+      },
+      "fuse_io": {
+       "user": 27.79,
+       "sys": 33.900000000000006
+      },
+      "exited": {
+       "user": 11.849999999999994,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 419184,
+     "node": 1
+    },
+    {
+     "pid": 47492,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 176.14,
+       "sys": 16.0
+      },
+      "fuse_io": {
+       "user": 25.75,
+       "sys": 31.790000000000003
+      },
+      "exited": {
+       "user": 11.430000000000007,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 346384,
+     "node": 1
+    },
+    {
+     "pid": 47493,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 180.05,
+       "sys": 16.2
+      },
+      "fuse_io": {
+       "user": 28.439999999999998,
+       "sys": 35.62
+      },
+      "exited": {
+       "user": 12.389999999999986,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 420024,
+     "node": 1
+    },
+    {
+     "pid": 47494,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 185.11,
+       "sys": 18.5
+      },
+      "fuse_io": {
+       "user": 28.159999999999997,
+       "sys": 34.14
+      },
+      "exited": {
+       "user": 11.70999999999998,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 346500,
+     "node": 1
+    },
+    {
+     "pid": 47495,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 183.17,
+       "sys": 18.59
+      },
+      "fuse_io": {
+       "user": 28.06,
+       "sys": 34.25
+      },
+      "exited": {
+       "user": 11.680000000000007,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 347356,
+     "node": 1
+    },
+    {
+     "pid": 47496,
+     "role": "io500",
+     "addr": "",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 177.96,
+       "sys": 18.05
+      },
+      "fuse_io": {
+       "user": 28.930000000000003,
+       "sys": 35.599999999999994
+      },
+      "exited": {
+       "user": 11.969999999999999,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 419224,
+     "node": 1
+    }
+   ],
+   "hosts": {
+    "0": {
+     "user": 22336.94,
+     "nice": 4.21,
+     "system": 9353.48,
+     "idle": 117488.81,
+     "iowait": 9231.7,
+     "irq": 0.0,
+     "softirq": 8.41,
+     "steal": 4.82,
+     "cores": 36
+    },
+    "1": {
+     "user": 15581.44,
+     "nice": 4.23,
+     "system": 6774.08,
+     "idle": 127385.88,
+     "iowait": 8887.0,
+     "irq": 0.0,
+     "softirq": 7.28,
+     "steal": 5.1,
+     "cores": 36
+    }
+   }
+  },
+  {
+   "phase": "end",
+   "t": 4929.060167987,
+   "servers": {
+    "172.31.7.218:19901": {
+     "error": "peer unreachable: 172.31.7.218:19901 (server could not handle the request (status 1))"
+    },
+    "172.31.1.175:19901": {
+     "error": "peer unreachable: 172.31.1.175:19901 (server could not handle the request (status 1))"
+    },
+    "172.31.7.218:19951": {
+     "kind": "ost",
+     "reqs": 3590210,
+     "handler_cpu_ns": 376430731324,
+     "handler_wall_ns": 5523813616703,
+     "bytes_in": 100553086376,
+     "bytes_out": 404131119,
+     "inflight_max": 9,
+     "objects": 2641972,
+     "bytes": 100177477632,
+     "leases": 0,
+     "lease_misses": 0,
+     "arena_bytes": 41137733632,
+     "tier": "file",
+     "tier_capacity": 100931731456,
+     "tier_used": 100675878912,
+     "tier_direct": true,
+     "ram_cache_bytes": 19821395968,
+     "ram_cache_budget": 19821232128,
+     "direct_writes": 43739,
+     "tier_reads": 219,
+     "evictions": 33589,
+     "by_op": {
+      "1": 43553,
+      "11": 3546621,
+      "42": 36
+     },
+     "rss_bytes": 31529074688,
+     "numa_free_bytes": -1
+    },
+    "172.31.1.175:19951": {
+     "kind": "ost",
+     "reqs": 3588234,
+     "handler_cpu_ns": 340317250121,
+     "handler_wall_ns": 3444218810299,
+     "bytes_in": 100544623691,
+     "bytes_out": 403882751,
+     "inflight_max": 9,
+     "objects": 2639995,
+     "bytes": 100169403251,
+     "leases": 0,
+     "lease_misses": 0,
+     "arena_bytes": 41070624768,
+     "tier": "file",
+     "tier_capacity": 100931731456,
+     "tier_used": 100667944960,
+     "tier_direct": true,
+     "ram_cache_bytes": 19820638208,
+     "ram_cache_budget": 19821232128,
+     "direct_writes": 43731,
+     "tier_reads": 211,
+     "evictions": 33582,
+     "by_op": {
+      "1": 43561,
+      "11": 3544632,
+      "42": 41
+     },
+     "rss_bytes": 31519244288,
+     "numa_free_bytes": -1
+    }
+   },
+   "procs": [
+    {
+     "pid": 275437,
+     "role": "mdt",
+     "addr": "172.31.7.218:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 5.83
+      },
+      "server": {
+       "user": 1419.9399999999998,
+       "sys": 1825.6899999999998
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.14000000000032742
+      }
+     },
+     "rss_kb": 35226920,
+     "node": 0
+    },
+    {
+     "pid": 275439,
+     "role": "ost",
+     "addr": "172.31.7.218:19951",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.18
+      },
+      "server": {
+       "user": 346.62999999999994,
+       "sys": 710.86
+      },
+      "exited": {
+       "user": 0.11000000000007049,
+       "sys": 0.0
+      }
+     },
+     "rss_kb": 30790112,
+     "node": 0
+    },
+    {
+     "pid": 47296,
+     "role": "ost",
+     "addr": "172.31.1.175:19951",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 0.18
+      },
+      "server": {
+       "user": 334.89000000000004,
+       "sys": 750.13
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.10000000000002274
+      }
+     },
+     "rss_kb": 30780512,
+     "node": 1
+    },
+    {
+     "pid": 47297,
+     "role": "mdt",
+     "addr": "172.31.1.175:19901",
+     "mntns": "mnt:[4026531832]",
+     "cpu": {
+      "other": {
+       "user": 0.08,
+       "sys": 6.26
+      },
+      "server": {
+       "user": 1273.56,
+       "sys": 1376.9500000000003
+      },
+      "exited": {
+       "user": 0.0,
+       "sys": 0.8499999999996817
+      }
+     },
+     "rss_kb": 35225600,
+     "node": 1
+    }
+   ],
+   "hosts": {
+    "0": {
+     "user": 25750.67,
+     "nice": 4.21,
+     "system": 10165.32,
+     "idle": 120770.4,
+     "iowait": 9278.38,
+     "irq": 0.0,
+     "softirq": 8.47,
+     "steal": 5.03,
+     "cores": 36
+    },
+    "1": {
+     "user": 18789.13,
+     "nice": 4.23,
+     "system": 7398.01,
+     "idle": 130880.98,
+     "iowait": 8929.5,
+     "irq": 0.0,
+     "softirq": 7.33,
+     "steal": 5.21,
+     "cores": 36
+    }
+   }
+  }
+ ],
+ "node_facts": [
+  {
+   "cores": 36,
+   "mem_gib": 92.3,
+   "mem_avail_gib": 83.0,
+   "nic_gbps": null,
+   "netdev": "ens5",
+   "nvme_count": 1,
+   "nvme_gib": 200.0,
+   "numa_nodes": 1
+  },
+  {
+   "cores": 36,
+   "mem_gib": 92.3,
+   "mem_avail_gib": 83.1,
+   "nic_gbps": null,
+   "netdev": "ens5",
+   "nvme_count": 1,
+   "nvme_gib": 200.0,
+   "numa_nodes": 1
+  }
+ ],
+ "analysis": {
+  "measured_per_op": {
+   "ior-easy-write": {
+    "ops": 91267795832.01279,
+    "nodes": 2,
+    "unit": "byte",
+    "measured": 0.244768,
+    "measured_unit": "GiB/s",
+    "time_s": 347.47,
+    "cpu_s_per_op": {
+     "client": 0.0,
+     "ranks": 4.569903285137787e-08,
+     "server_handler": 6.762847653690157e-11,
+     "server_transport": 6.652814308440051e-09,
+     "emulator": 0.0
+    },
+    "emulator_share": 0.0,
+    "kinds": {
+     "mdt": {
+      "rpcs_per_op": 1.204915698878172e-07,
+      "bytes_per_op": 2.136742738467635e-05,
+      "hot_share": 0.5508775120487406,
+      "servers": 2,
+      "cpu_us_per_req": 3.926882513412749,
+      "hold_us_per_req_hot": 1.1028321228128095,
+      "lock_stripes": 64,
+      "hot_cpu_us_per_req": 4.0612269725982175
+     },
+     "ost": {
+      "rpcs_per_op": 9.550794911322405e-07,
+      "bytes_per_op": 1.0001814280254746,
+      "hot_share": 0.5000688325991189,
+      "servers": 2,
+      "cpu_us_per_req": 70.31385441905286,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 1,
+      "hot_cpu_us_per_req": 71.89123654507915,
+      "tier": "file",
+      "tier_capacity": 201863462912,
+      "direct_writes_per_op": 9.536770249191243e-07
+     }
+    },
+    "missing_data": [],
+    "fuse": {
+     "reqs_per_op": 0.0,
+     "mix_per_op": {},
+     "client_cpu_us_per_req": 0.0,
+     "writes_per_op": 0.0
+    },
+    "host_busy": 0.09578633955321077,
+    "host_softirq_share": 0.00015786445045347844
+   },
+   "mdtest-easy-write": {
+    "ops": 35101359.685854,
+    "nodes": 2,
+    "unit": "op",
+    "measured": 79.200891,
+    "measured_unit": "kIOPS",
+    "time_s": 444.218,
+    "cpu_s_per_op": {
+     "client": 0.0,
+     "ranks": 0.00031174860740252166,
+     "server_handler": 2.795282885851914e-10,
+     "server_transport": 0.00010554463477578715,
+     "emulator": 0.0
+    },
+    "emulator_share": 0.0,
+    "kinds": {
+     "ost": {
+      "rpcs_per_op": 6.55245272714296e-07,
+      "bytes_per_op": 0.01791580171332898,
+      "hot_share": 0.8260869565217391,
+      "servers": 2,
+      "cpu_us_per_req": 426.601,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 1,
+      "hot_cpu_us_per_req": 302.10205263157894,
+      "tier": "file",
+      "tier_capacity": 201863462912,
+      "direct_writes_per_op": 0.0
+     }
+    },
+    "missing_data": [
+     "server 172.31.7.218:19901",
+     "server 172.31.1.175:19901"
+    ],
+    "fuse": {
+     "reqs_per_op": 0.0,
+     "mix_per_op": {},
+     "client_cpu_us_per_req": 0.0,
+     "writes_per_op": 0.0
+    },
+    "host_busy": 0.43400570903047464,
+    "host_softirq_share": 1.1789801978485999e-05
+   },
+   "ior-hard-write": {
+    "ops": 89143168729.08801,
+    "nodes": 2,
+    "unit": "byte",
+    "measured": 0.269877,
+    "measured_unit": "GiB/s",
+    "time_s": 307.693,
+    "cpu_s_per_op": {
+     "client": 0.0,
+     "ranks": 2.793180941959851e-08,
+     "server_handler": 7.12606265014581e-09,
+     "server_transport": 8.111672550047547e-09,
+     "emulator": 0.0
+    },
+    "emulator_share": 0.0,
+    "kinds": {
+     "ost": {
+      "rpcs_per_op": 2.2048027100910837e-05,
+      "bytes_per_op": 0.995299891208026,
+      "hot_share": 0.5000048335454157,
+      "servers": 2,
+      "cpu_us_per_req": 323.20636297890894,
+      "hold_us_per_req_hot": 0.0,
+      "lock_stripes": 1,
+      "hot_cpu_us_per_req": 341.4177722180671,
+      "tier": "file",
+      "tier_capacity": 201863462912,
+      "direct_writes_per_op": 4.812483178646694e-09
+     }
+    },
+    "missing_data": [
+     "server 172.31.7.218:19901",
+     "server 172.31.1.175:19901"
+    ],
+    "fuse": {
+     "reqs_per_op": 0.0,
+     "mix_per_op": {},
+     "client_cpu_us_per_req": 0.0,
+     "writes_per_op": 0.0
+    },
+    "host_busy": 0.1131890572428899,
+    "host_softirq_share": 5.247140308531863e-05
+   }
+  },
+  "profile": {
+   "nodes": 2,
+   "cores": 36,
+   "cpu_speed": 1.0,
+   "nic_gbps": 100,
+   "ram_gib": 92.3,
+   "ranks_per_node": 32,
+   "client_threads": 16,
+   "rtt_us": 6.0,
+   "rdma_msg_cpu_us": 2.0,
+   "memcpy_gb_s": 10.0,
+   "cpu_util": 0.85,
+   "nic_eff": 0.85,
+   "mem_usable": 0.6,
+   "fuse_mount_kops": 150.0,
+   "fuse_mount_gib_s": 4.0,
+   "fuse_req_overhead_us": 25.0,
+   "lock_convoy": 1.5,
+   "nvme_gib": 200.0,
+   "nvme_gib_s": 2.5,
+   "name": "these hosts",
+   "intercept": true
+  },
+  "projection": {
+   "phases": {
+    "ior-easy-write": {
+     "value": 1.0,
+     "unit": "GiB/s",
+     "bottleneck": "nvme_capacity",
+     "next_limit": {
+      "name": "cpu_cluster",
+      "value": 1.2398454763821225
+     },
+     "limits": {
+      "cpu_cluster": 1.2398454763821225,
+      "mdt_lock": 91353.97364798593,
+      "cpu_hot_node": 1.2398454763821225,
+      "client_threads": 338.1760027544935,
+      "nic": 39.58120942115784,
+      "latency": 1.2963884453341719,
+      "nvme_capacity": 1.0,
+      "nvme_bw": 5.0
+     }
+    },
+    "mdtest-easy-write": {
+     "value": 196.31184375531166,
+     "unit": "kIOPS",
+     "bottleneck": "cpu_hot_node",
+     "next_limit": {
+      "name": "cpu_cluster",
+      "value": 196.3118437553117
+     },
+     "limits": {
+      "cpu_cluster": 196.3118437553117,
+      "cpu_hot_node": 196.31184375531166,
+      "client_threads": 223337489.82010663,
+      "latency": 205.29342878914414
+     }
+    },
+    "ior-hard-write": {
+     "value": 0.3333333333333333,
+     "unit": "GiB/s",
+     "bottleneck": "nvme_capacity",
+     "next_limit": {
+      "name": "cpu_hot_node",
+      "value": 1.6125828647333686
+     },
+     "limits": {
+      "cpu_cluster": 1.6125828647333689,
+      "cpu_hot_node": 1.6125828647333686,
+      "client_threads": 8.052530551548587,
+      "nic": 39.58120942115784,
+      "latency": 1.680073062811224,
+      "nvme_capacity": 0.3333333333333333,
+      "nvme_bw": 5.0
+     }
+    }
+   },
+   "bw_gib_s": 0.5773502691896257,
+   "md_kiops": 196.31184375531157,
+   "score": 10.646158736241015
+  },
+  "score_band": {
+   "pessimistic": 6.5791793473672895,
+   "optimistic": 12.413060968769146
+  },
+  "sensitivity": {
+   "fuse_mount_kops": [
+    10.646158736241015,
+    10.646158736241015
+   ],
+   "fuse_mount_gib_s": [
+    10.646158736241015,
+    10.646158736241015
+   ],
+   "fuse_req_overhead_us": [
+    10.646158736241015,
+    10.646158736241015
+   ],
+   "nvme_gib_s": [
+    10.646158736241015,
+    10.646158736241015
+   ],
+   "lock_convoy": [
+    10.646158736241015,
+    10.646158736241015
+   ],
+   "rdma_msg_cpu_us": [
+    10.64615869148804,
+    10.646158758617505
+   ],
+   "cpu_speed": [
+    6.579333300889589,
+    12.413060891802974
+   ],
+   "rtt_us": [
+    10.646158736241015,
+    10.646158736241015
+   ]
+  },
+  "scenarios": [
+   {
+    "key": "as_is",
+    "text": "as measured, valid 300 s run",
+    "score": 10.646158736241015,
+    "bw_gib_s": 0.5773502691896257,
+    "md_kiops": 196.31184375531157,
+    "bottlenecks": {
+     "ior-easy-write": "nvme_capacity",
+     "mdtest-easy-write": "cpu_hot_node",
+     "ior-hard-write": "nvme_capacity"
+    }
+   },
+   {
+    "key": "dir_sharding",
+    "text": "+ one directory's entries spread over all MDTs (name hash), finer MDT locks (done: ROCEPOOL_DIR_STRIPE=1 + MD_BUCKETS; a no-op on a run that already has them)",
+    "score": 10.646158736241015,
+    "bw_gib_s": 0.5773502691896257,
+    "md_kiops": 196.31184375531157,
+    "bottlenecks": {
+     "ior-easy-write": "nvme_capacity",
+     "mdtest-easy-write": "cpu_hot_node",
+     "ior-hard-write": "nvme_capacity"
+    }
+   },
+   {
+    "key": "parallel_writes",
+    "text": "+ FOPEN_PARALLEL_DIRECT_WRITES: no per-node inode lock on a shared file",
+    "score": 10.646158736241015,
+    "bw_gib_s": 0.5773502691896257,
+    "md_kiops": 196.31184375531157,
+    "bottlenecks": {
+     "ior-easy-write": "nvme_capacity",
+     "mdtest-easy-write": "cpu_hot_node",
+     "ior-hard-write": "nvme_capacity"
+    }
+   },
+   {
+    "key": "fuse_uring",
+    "text": "+ FUSE over io_uring (per-core queues, Linux 6.14+): ~3x per-mount rate, less wake-up cost (implemented: io500_run.py probes it against /dev/fuse on the hosts and uses the faster; a no-op on a run that already used it)",
+    "score": 10.646158736241015,
+    "bw_gib_s": 0.5773502691896257,
+    "md_kiops": 196.31184375531157,
+    "bottlenecks": {
+     "ior-easy-write": "nvme_capacity",
+     "mdtest-easy-write": "cpu_hot_node",
+     "ior-hard-write": "nvme_capacity"
+    }
+   },
+   {
+    "key": "intercept",
+    "text": "+ the LD_PRELOAD interception library in every rank (no FUSE channel, no kernel on the I/O path; implemented: io500_run.py --client auto probes it against FUSE and uses the faster; a no-op on a run that already used it)",
+    "score": 10.646158736241015,
+    "bw_gib_s": 0.5773502691896257,
+    "md_kiops": 196.31184375531157,
+    "bottlenecks": {
+     "ior-easy-write": "nvme_capacity",
+     "mdtest-easy-write": "cpu_hot_node",
+     "ior-hard-write": "nvme_capacity"
+    }
+   },
+   {
+    "key": "one_sided",
+    "text": "+ one-sided reads and lookups (client RDMA READs stripes and MDT entries; implemented: io500_run.py --direct-read auto probes it; a no-op on a run that already used it -- its effect is in the measured per-op server CPU)",
+    "score": 10.646158736241015,
+    "bw_gib_s": 0.5773502691896257,
+    "md_kiops": 196.31184375531157,
+    "bottlenecks": {
+     "ior-easy-write": "nvme_capacity",
+     "mdtest-easy-write": "cpu_hot_node",
+     "ior-hard-write": "nvme_capacity"
+    }
+   },
+   {
+    "key": "nvme_tier",
+    "text": "+ the OST's NVMe tier for the 300 s write phases (implemented: roce/native/ost_tier.c, io500_run.py --ost-tier auto; a no-op on a run that already had it -- its limits are then the drives' capacity and write bandwidth)",
+    "score": 10.646158736241015,
+    "bw_gib_s": 0.5773502691896257,
+    "md_kiops": 196.31184375531157,
+    "bottlenecks": {
+     "ior-easy-write": "nvme_capacity",
+     "mdtest-easy-write": "cpu_hot_node",
+     "ior-hard-write": "nvme_capacity"
+    }
+   }
+  ],
+  "vs_weka": {
+   "score_ratio": 9.951006989907581,
+   "bw_ratio": 57.642650875892244,
+   "md_ratio": 1.7181337281942473
+  }
+ }
+}
