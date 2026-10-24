@@ -62,6 +62,8 @@ def main() -> int:
     ap.add_argument("--seconds", type=float, default=400)
     ap.add_argument("--idle", type=float, default=0)
     ap.add_argument("--port", type=int, default=24300)
+    ap.add_argument("--client-host", help="run the client processes on this host over ssh (root@IP; the tree at the same "
+                                          "path there): clients and servers on different hosts")
     a = ap.parse_args()
     env = dict(os.environ, PYTHONPATH=ROOT)
     env.setdefault("ROCE_TRANSPORT_LIB", os.path.join(ROOT, "roce/native/libroce_transport.so"))
@@ -76,8 +78,24 @@ def main() -> int:
     cenv = dict(env, LD_PRELOAD=os.path.join(ROOT, "roce/native/librocepool_intercept.so"), ROCEPOOL_PREFIX="/mnt/rp",
                 ROCEPOOL_MDTS=mdts, ROCEPOOL_OSTS=osts)
     t0 = time.time()
-    ps = [subprocess.Popen([sys.executable, "-c", CHILD, str(r), str(a.seconds), str(a.idle)], env=cenv,
-                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) for r in range(a.procs)]
+    if a.client_host:
+        import base64
+        import shlex
+        code = base64.b64encode(CHILD.encode()).decode()
+        exports = " ".join(f"{k}={shlex.quote(cenv[k])}" for k in
+                           ("PYTHONPATH", "ROCE_TRANSPORT_LIB", "LD_PRELOAD", "ROCEPOOL_PREFIX", "ROCEPOOL_MDTS",
+                            "ROCEPOOL_OSTS") if k in cenv)
+        extra = " ".join(f"{k}={shlex.quote(v)}" for k, v in os.environ.items() if k.startswith(("ROCE_", "FI_")))
+
+        def launch(r):
+            cmd = (f"ulimit -n 1048576 2>/dev/null; cd {shlex.quote(ROOT)} && env {exports} {extra} python3 -c "
+                   f"\"$(echo {code} | base64 -d)\" {r} {a.seconds} {a.idle}")
+            return subprocess.Popen(["ssh", "-o", "BatchMode=yes", a.client_host, cmd], stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, text=True)
+        ps = [launch(r) for r in range(a.procs)]
+    else:
+        ps = [subprocess.Popen([sys.executable, "-c", CHILD, str(r), str(a.seconds), str(a.idle)], env=cenv,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) for r in range(a.procs)]
     total = bad = 0
     for p in ps:
         out = p.communicate()[0]
