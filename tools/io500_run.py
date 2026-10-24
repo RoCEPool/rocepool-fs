@@ -663,6 +663,14 @@ def main() -> int:
                         s["numa_node"] = j % numa_nodes
             print(f"== NUMA: {numa_nodes} nodes per host; each MDT/OST pinned to one, ranks bound to NUMA", flush=True)
         report["numa_nodes_per_host"] = numa_nodes
+        # millions of files: the MDT's allocations (and EFA's registrations)
+        # take more memory mappings than the default vm.max_map_count
+        # (65530) allows -- malloc then fails with RAM free
+        if cluster.real:
+            for node in cluster.nodes:
+                cluster.run(node.index, ["sh", "-c", "[ $(cat /proc/sys/vm/max_map_count) -ge 1048576 ] || "
+                                                     "sysctl -qw vm.max_map_count=1048576 || true"], env, net=False,
+                            capture_output=True, timeout=60)
         # every server's output goes to its own file (a pipe nobody drains
         # would block a chatty server, and the file is what a crash leaves)
         procs = []

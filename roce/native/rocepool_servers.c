@@ -90,7 +90,24 @@ static uint8_t *frame_alloc(uint8_t op, const frame_t *req, size_t val_len, uint
     /* a large reply (a GET's stripe) is built in a registered buffer the
      * transport RDMA WRITEs to the client as is -- no copy on the way out */
     uint8_t *b = roce_reply_alloc(total);
-    if (!b) return NULL;
+    if (!b) {
+        /* every request of this server then fails ("could not handle the
+         * request"): say why, once a minute, with the process's mapping
+         * count (glibc's malloc fails at vm.max_map_count with RAM free) */
+        static _Atomic long last;
+        long now = (long)time(NULL), was = atomic_load(&last);
+        if (now - was >= 60 && atomic_compare_exchange_strong(&last, &was, now)) {
+            int e = errno;
+            long maps = 0, max = -1;
+            FILE *fm = fopen("/proc/self/maps", "r");
+            if (fm) { int c; while ((c = fgetc(fm)) != EOF) if (c == '\n') maps++; fclose(fm); }
+            FILE *fx = fopen("/proc/sys/vm/max_map_count", "r");
+            if (fx) { if (fscanf(fx, "%ld", &max) != 1) max = -1; fclose(fx); }
+            fprintf(stderr, "rocepool server: cannot allocate a %zu-byte reply (%s): %ld memory mappings, "
+                    "vm.max_map_count %ld\n", total, strerror(e), maps, max);
+        }
+        return NULL;
+    }
     memcpy(b, "RCP1", 4);
     b[4] = op; b[5] = b[6] = b[7] = 0;
     wr_u64le(b + 8, req->req_id);
