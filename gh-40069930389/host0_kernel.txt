@@ -1,0 +1,220 @@
+[Sat Oct 24 06:22:59 2026] ima: No architecture policies found
+[Sat Oct 24 06:22:59 2026] evm: Initialising EVM extended attributes:
+[Sat Oct 24 06:22:59 2026] evm: security.selinux
+[Sat Oct 24 06:22:59 2026] evm: security.SMACK64
+[Sat Oct 24 06:22:59 2026] evm: security.SMACK64EXEC
+[Sat Oct 24 06:22:59 2026] evm: security.SMACK64TRANSMUTE
+[Sat Oct 24 06:22:59 2026] evm: security.SMACK64MMAP
+[Sat Oct 24 06:22:59 2026] evm: security.apparmor
+[Sat Oct 24 06:22:59 2026] evm: security.ima
+[Sat Oct 24 06:22:59 2026] evm: security.capability
+[Sat Oct 24 06:22:59 2026] evm: HMAC attrs: 0x1
+[Sat Oct 24 06:22:59 2026] PM:   Magic number: 14:286:368
+[Sat Oct 24 06:22:59 2026] machinecheck machinecheck20: hash matches
+[Sat Oct 24 06:22:59 2026] memory memory656: hash matches
+[Sat Oct 24 06:22:59 2026] RAS: Correctable Errors collector initialized.
+[Sat Oct 24 06:22:59 2026] clk: Disabling unused clocks
+[Sat Oct 24 06:22:59 2026] PM: genpd: Disabling unused power domains
+[Sat Oct 24 06:23:00 2026] input: AT Translated Set 2 keyboard as /devices/platform/i8042/serio0/input/input2
+[Sat Oct 24 06:23:00 2026] md: Waiting for all devices to be available before autodetect
+[Sat Oct 24 06:23:00 2026] md: If you don't use raid, use raid=noautodetect
+[Sat Oct 24 06:23:00 2026] md: Autodetecting RAID arrays.
+[Sat Oct 24 06:23:00 2026] md: autorun ...
+[Sat Oct 24 06:23:00 2026] md: ... autorun DONE.
+[Sat Oct 24 06:23:00 2026] EXT4-fs (nvme0n1p1): mounted filesystem 3b08287d-b7c2-4dc1-9b52-f6e1c684411f ro with ordered data mode. Quota mode: none.
+[Sat Oct 24 06:23:00 2026] VFS: Mounted root (ext4 filesystem) readonly on device 259:1.
+[Sat Oct 24 06:23:00 2026] devtmpfs: mounted
+[Sat Oct 24 06:23:00 2026] VFS: Pivoted into new rootfs
+[Sat Oct 24 06:23:00 2026] Freeing unused decrypted memory: 2028K
+[Sat Oct 24 06:23:00 2026] Freeing unused kernel image (initmem) memory: 5420K
+[Sat Oct 24 06:23:00 2026] Write protecting the kernel read-only data: 43008k
+[Sat Oct 24 06:23:00 2026] Freeing unused kernel image (text/rodata gap) memory: 1412K
+[Sat Oct 24 06:23:00 2026] Freeing unused kernel image (rodata/data gap) memory: 2024K
+[Sat Oct 24 06:23:00 2026] x86/mm: Checked W+X mappings: passed, no W+X pages found.
+[Sat Oct 24 06:23:00 2026] x86/mm: Checking user space page tables
+[Sat Oct 24 06:23:00 2026] x86/mm: Checked W+X mappings: passed, no W+X pages found.
+[Sat Oct 24 06:23:00 2026] Run /sbin/init as init process
+[Sat Oct 24 06:23:00 2026]   with arguments:
+[Sat Oct 24 06:23:00 2026]     /sbin/init
+[Sat Oct 24 06:23:00 2026]   with environment:
+[Sat Oct 24 06:23:00 2026]     HOME=/
+[Sat Oct 24 06:23:00 2026]     TERM=linux
+[Sat Oct 24 06:23:00 2026] systemd[1]: Inserted module 'autofs4'
+[Sat Oct 24 06:23:00 2026] systemd[1]: systemd 255.4-1ubuntu8.18 running in system mode (+PAM +AUDIT +SELINUX +APPARMOR +IMA +SMACK +SECCOMP +GCRYPT -GNUTLS +OPENSSL +ACL +BLKID +CURL +ELFUTILS +FIDO2 +IDN2 -IDN +IPTC +KMOD +LIBCRYPTSETUP +LIBFDISK +PCRE2 -PWQUALITY +P11KIT +QRENCODE +TPM2 +BZIP2 +LZ4 +XZ +ZLIB +ZSTD -BPF_FRAMEWORK -XKBCOMMON +UTMP +SYSVINIT default-hierarchy=unified)
+[Sat Oct 24 06:23:00 2026] systemd[1]: Detected virtualization amazon.
+[Sat Oct 24 06:23:00 2026] systemd[1]: Detected architecture x86-64.
+[Sat Oct 24 06:23:00 2026] systemd[1]: Hostname set to <ubuntu>.
+[Sat Oct 24 06:23:00 2026] systemd[1]: Initializing machine ID from VM UUID.
+[Sat Oct 24 06:23:00 2026] systemd[1]: Installed transient /etc/machine-id file.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Queued start job for default target graphical.target.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Created slice system-modprobe.slice - Slice /system/modprobe.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Created slice system-serial\x2dgetty.slice - Slice /system/serial-getty.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Created slice system-systemd\x2dfsck.slice - Slice /system/systemd-fsck.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Created slice user.slice - User and Session Slice.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Started systemd-ask-password-wall.path - Forward Password Requests to Wall Directory Watch.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Set up automount proc-sys-fs-binfmt_misc.automount - Arbitrary Executable File Formats File System Automount Point.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Expecting device dev-disk-by\x2dlabel-BOOT.device - /dev/disk/by-label/BOOT...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Expecting device dev-disk-by\x2dlabel-UEFI.device - /dev/disk/by-label/UEFI...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Expecting device dev-ttyS0.device - /dev/ttyS0...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Reached target integritysetup.target - Local Integrity Protected Volumes.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Reached target slices.target - Slice Units.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Reached target snapd.mounts-pre.target - Mounting snaps.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Reached target swap.target - Swaps.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Reached target time-set.target - System Time Set.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Reached target veritysetup.target - Local Verity Protected Volumes.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Listening on dm-event.socket - Device-mapper event daemon FIFOs.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Listening on lvm2-lvmpolld.socket - LVM2 poll daemon socket.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Listening on multipathd.socket - multipathd control socket.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Listening on syslog.socket - Syslog Socket.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Listening on systemd-fsckd.socket - fsck to fsckd communication Socket.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Listening on systemd-initctl.socket - initctl Compatibility Named Pipe.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Listening on systemd-journald-dev-log.socket - Journal Socket (/dev/log).
+[Sat Oct 24 06:23:01 2026] systemd[1]: Listening on systemd-journald.socket - Journal Socket.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Listening on systemd-networkd.socket - Network Service Netlink Socket.
+[Sat Oct 24 06:23:01 2026] systemd[1]: systemd-pcrextend.socket - TPM2 PCR Extension (Varlink) was skipped because of an unmet condition check (ConditionSecurity=measured-uki).
+[Sat Oct 24 06:23:01 2026] systemd[1]: Listening on systemd-udevd-control.socket - udev Control Socket.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Listening on systemd-udevd-kernel.socket - udev Kernel Socket.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Mounting dev-hugepages.mount - Huge Pages File System...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Mounting dev-mqueue.mount - POSIX Message Queue File System...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Mounting sys-kernel-debug.mount - Kernel Debug File System...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Mounting sys-kernel-tracing.mount - Kernel Trace File System...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Starting systemd-journald.service - Journal Service...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Starting keyboard-setup.service - Set the console keyboard layout...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Starting kmod-static-nodes.service - Create List of Static Device Nodes...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Starting lvm2-monitor.service - Monitoring of LVM2 mirrors, snapshots etc. using dmeventd or progress polling...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Starting modprobe@configfs.service - Load Kernel Module configfs...
+[Sat Oct 24 06:23:01 2026] systemd-journald[366]: Collecting audit messages is disabled.
+[Sat Oct 24 06:23:01 2026] systemd[1]: Starting modprobe@dm_mod.service - Load Kernel Module dm_mod...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Starting modprobe@drm.service - Load Kernel Module drm...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Starting modprobe@efi_pstore.service - Load Kernel Module efi_pstore...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Starting modprobe@fuse.service - Load Kernel Module fuse...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Starting modprobe@loop.service - Load Kernel Module loop...
+[Sat Oct 24 06:23:01 2026] systemd[1]: netplan-ovs-cleanup.service - OpenVSwitch configuration for cleanup was skipped because of an unmet condition check (ConditionFileIsExecutable=/usr/bin/ovs-vsctl).
+[Sat Oct 24 06:23:01 2026] systemd[1]: Starting systemd-fsck-root.service - File System Check on Root Device...
+[Sat Oct 24 06:23:01 2026] pstore: Using crash dump compression: deflate
+[Sat Oct 24 06:23:01 2026] pstore: Registered efi_pstore as persistent store backend
+[Sat Oct 24 06:23:01 2026] systemd[1]: Starting systemd-modules-load.service - Load Kernel Modules...
+[Sat Oct 24 06:23:01 2026] systemd[1]: systemd-pcrmachine.service - TPM2 PCR Machine ID Measurement was skipped because of an unmet condition check (ConditionSecurity=measured-uki).
+[Sat Oct 24 06:23:01 2026] systemd[1]: systemd-tpm2-setup-early.service - TPM2 SRK Setup (Early) was skipped because of an unmet condition check (ConditionSecurity=measured-uki).
+[Sat Oct 24 06:23:01 2026] systemd[1]: Starting systemd-udev-trigger.service - Coldplug All udev Devices...
+[Sat Oct 24 06:23:01 2026] systemd[1]: Started systemd-journald.service - Journal Service.
+[Sat Oct 24 06:23:01 2026] EXT4-fs (nvme0n1p1): re-mounted 3b08287d-b7c2-4dc1-9b52-f6e1c684411f r/w.
+[Sat Oct 24 06:23:01 2026] systemd-journald[366]: Received client request to flush runtime journal.
+[Sat Oct 24 06:23:01 2026] loop0: detected capacity change from 0 to 58160
+[Sat Oct 24 06:23:01 2026] loop1: detected capacity change from 0 to 151600
+[Sat Oct 24 06:23:01 2026] loop2: detected capacity change from 0 to 91568
+[Sat Oct 24 06:23:01 2026] vmclock AMZNC10C:00: vmclock0: registered miscdev
+[Sat Oct 24 06:23:01 2026] parport_pc 00:03: reported by Plug and Play ACPI
+[Sat Oct 24 06:23:01 2026] piix4_smbus 0000:00:01.3: SMBus base address uninitialized - upgrade BIOS or use force_addr=0xaddr
+[Sat Oct 24 06:23:01 2026] ena 0000:00:05.0: ENA device version: 0.10
+[Sat Oct 24 06:23:01 2026] ena 0000:00:05.0: ENA controller version: 0.0.1 implementation version 1
+[Sat Oct 24 06:23:01 2026] nvme nvme0: using unchecked data buffer
+[Sat Oct 24 06:23:01 2026] ena 0000:00:05.0: Elastic Network Adapter (ENA) found at mem c0804000, mac addr 02:ff:fd:b4:69:bf
+[Sat Oct 24 06:23:01 2026] ena 0000:00:05.0 ens5: renamed from eth0
+[Sat Oct 24 06:23:01 2026] RAPL PMU: API unit is 2^-32 Joules, 0 fixed counters, 10737418240 ms ovfl timer
+[Sat Oct 24 06:23:01 2026] ppdev: user-space parallel port driver
+[Sat Oct 24 06:23:01 2026] intel_powerclamp: No package C-state available
+[Sat Oct 24 06:23:01 2026] efa 0000:00:1f.0: Setup irq:60 name:efa-mgmnt@pci:0000:00:1f.0
+[Sat Oct 24 06:23:01 2026] efa 0000:00:1f.0 efa_0: IB device registered
+[Sat Oct 24 06:23:02 2026] input: ImPS/2 Generic Wheel Mouse as /devices/platform/i8042/serio1/input/input4
+[Sat Oct 24 06:23:02 2026] EXT4-fs (nvme0n1p16): mounted filesystem eb8c7f0d-7144-4e82-8353-69773056e1cd r/w with ordered data mode. Quota mode: none.
+[Sat Oct 24 06:23:02 2026] audit: type=1400 audit(1792822981.144:2): apparmor="STATUS" operation="profile_load" profile="unconfined" name="brave" pid=654 comm="apparmor_parser"
+[Sat Oct 24 06:23:02 2026] audit: type=1400 audit(1792822981.144:3): apparmor="STATUS" operation="profile_load" profile="unconfined" name="goldendict" pid=671 comm="apparmor_parser"
+[Sat Oct 24 06:23:02 2026] audit: type=1400 audit(1792822981.144:4): apparmor="STATUS" operation="profile_load" profile="unconfined" name="cam" pid=656 comm="apparmor_parser"
+[Sat Oct 24 06:23:02 2026] audit: type=1400 audit(1792822981.144:5): apparmor="STATUS" operation="profile_load" profile="unconfined" name="lxc-stop" pid=684 comm="apparmor_parser"
+[Sat Oct 24 06:23:02 2026] audit: type=1400 audit(1792822981.144:6): apparmor="STATUS" operation="profile_load" profile="unconfined" name="lxc-destroy" pid=682 comm="apparmor_parser"
+[Sat Oct 24 06:23:02 2026] audit: type=1400 audit(1792822981.144:7): apparmor="STATUS" operation="profile_load" profile="unconfined" name="ch-run" pid=658 comm="apparmor_parser"
+[Sat Oct 24 06:23:02 2026] audit: type=1400 audit(1792822981.144:8): apparmor="STATUS" operation="profile_load" profile="unconfined" name="kchmviewer" pid=673 comm="apparmor_parser"
+[Sat Oct 24 06:23:02 2026] audit: type=1400 audit(1792822981.144:9): apparmor="STATUS" operation="profile_load" profile="unconfined" name="loupe" pid=678 comm="apparmor_parser"
+[Sat Oct 24 06:23:02 2026] audit: type=1400 audit(1792822981.144:10): apparmor="STATUS" operation="profile_load" profile="unconfined" name="evolution" pid=665 comm="apparmor_parser"
+[Sat Oct 24 06:23:03 2026] 8021q: 802.1Q VLAN Support v1.8
+[Sat Oct 24 06:23:03 2026] cfg80211: Loading compiled-in X.509 certificates for regulatory database
+[Sat Oct 24 06:23:03 2026] Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+[Sat Oct 24 06:23:03 2026] Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+[Sat Oct 24 06:23:03 2026] faux_driver regulatory: Direct firmware load for regulatory.db failed with error -2
+[Sat Oct 24 06:23:03 2026] cfg80211: failed to load regulatory.db
+[Sat Oct 24 06:23:08 2026] EXT4-fs (nvme0n1p1): resizing filesystem from 1834747 to 52166395 blocks
+[Sat Oct 24 06:23:10 2026] EXT4-fs (nvme0n1p1): resized filesystem to 52166395
+[Sat Oct 24 06:23:12 2026] kauditd_printk_skb: 113 callbacks suppressed
+[Sat Oct 24 06:23:12 2026] audit: type=1400 audit(1792822990.875:124): apparmor="STATUS" operation="profile_replace" info="same as current profile, skipping" profile="unconfined" name="rsyslogd" pid=1018 comm="apparmor_parser"
+[Sat Oct 24 06:23:12 2026] hrtimer: interrupt took 6149586 ns
+[Sat Oct 24 06:23:12 2026] NET: Registered PF_QIPCRTR protocol family
+[Sat Oct 24 06:23:12 2026] loop3: detected capacity change from 0 to 8
+[Sat Oct 24 06:23:12 2026] audit: type=1400 audit(1792822991.287:125): apparmor="STATUS" operation="profile_replace" profile="unconfined" name="/usr/lib/snapd/snap-confine" pid=1311 comm="apparmor_parser"
+[Sat Oct 24 06:23:54 2026] Loading iSCSI transport class v2.0-870.
+[Sat Oct 24 06:23:55 2026] iscsi: registered transport (iser)
+[Sat Oct 24 06:23:55 2026] RPC: Registered named UNIX socket transport module.
+[Sat Oct 24 06:23:55 2026] RPC: Registered udp transport module.
+[Sat Oct 24 06:23:55 2026] RPC: Registered tcp transport module.
+[Sat Oct 24 06:23:55 2026] RPC: Registered tcp-with-tls transport module.
+[Sat Oct 24 06:23:55 2026] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[Sat Oct 24 06:23:55 2026] RPC: Registered rdma transport module.
+[Sat Oct 24 06:23:55 2026] RPC: Registered rdma backchannel transport module.
+[Sat Oct 24 06:24:12 2026] efa 0000:00:1f.0 efa_0: Unregister ib device
+[Sat Oct 24 06:25:38 2026] efa: loading out-of-tree module taints kernel.
+[Sat Oct 24 06:25:38 2026] efa: module verification failed: signature and/or required key missing - tainting kernel
+[Sat Oct 24 06:25:38 2026] Elastic Fabric Adapter (EFA) v3.3.1g
+[Sat Oct 24 06:25:38 2026] efa 0000:00:1f.0: Setup irq:60 name:efa-mgmnt@pci:0000:00:1f.0
+[Sat Oct 24 06:25:38 2026] efa 0000:00:1f.0 efa_0: IB device registered
+[Sat Oct 24 06:30:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-246) [-22]
+[Sat Oct 24 06:30:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-250) [-22]
+[Sat Oct 24 06:30:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-253) [-22]
+[Sat Oct 24 06:30:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-239) [-22]
+[Sat Oct 24 06:30:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-241) [-22]
+[Sat Oct 24 06:30:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-251) [-22]
+[Sat Oct 24 06:30:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-245) [-22]
+[Sat Oct 24 06:30:11 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:11 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-247) [-22]
+[Sat Oct 24 06:30:11 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:11 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-255) [-22]
+[Sat Oct 24 06:30:11 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:11 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-256) [-22]
+[Sat Oct 24 06:30:15 2026] efa_com_cmd_exec: 24 callbacks suppressed
+[Sat Oct 24 06:30:15 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:15 2026] efa_com_dereg_mr: 24 callbacks suppressed
+[Sat Oct 24 06:30:15 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-271) [-22]
+[Sat Oct 24 06:30:15 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:15 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-270) [-22]
+[Sat Oct 24 06:30:15 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:15 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-268) [-22]
+[Sat Oct 24 06:30:15 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:15 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-212) [-22]
+[Sat Oct 24 06:30:15 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:15 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-203) [-22]
+[Sat Oct 24 06:30:15 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:15 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-176) [-22]
+[Sat Oct 24 06:30:15 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:15 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-137) [-22]
+[Sat Oct 24 06:30:16 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:16 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-110) [-22]
+[Sat Oct 24 06:30:16 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:16 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-109) [-22]
+[Sat Oct 24 06:30:16 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 06:30:16 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-108) [-22]
+
+               total        used        free      shared  buff/cache   available
+Mem:           94491        9389       83158           2        2809       85102
+Swap:              0           0           0
+
+    PID   RSS    VSZ STAT     ELAPSED COMMAND
+   1000 43580 3110928 Ssl       07:38 snapd
+    430 27300 288968 SLsl       07:49 multipathd
+   1103 23128 110024 Ssl        07:38 unattended-upgr
+   1381 21804 2424216 Ssl       07:37 amazon-ssm-agen
+    993 20732  32444 Ss         07:38 networkd-dispat
+    366 14732  50448 S<s        07:49 systemd-journal
+   1008 13968 469004 Ssl        07:38 udisksd
+      1 13872  22700 Ss         07:51 systemd
+    715 12952  21480 Ss         07:48 systemd-resolve
+   1202 12884 318164 Ssl        07:38 ModemManager
+  35648 11620  20280 Ss         05:06 systemd
+  37926 10884  15012 Ss         00:00 sshd
+    994 10168 383684 Ssl        07:38 polkitd
+    867 10144  22432 Ss         07:45 systemd-network

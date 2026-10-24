@@ -1,0 +1,11 @@
+[aws 06:22:40] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 06:22:41] 1 x c5n.9xlarge: 36 vCPU, 96 GiB, 50 Gigabit, NVMe 0 GB, EFA yes
+[aws 06:22:42] vCPU quota 96 >= 36 needed (instances already running count against it too)
+[aws 06:22:54] launched i-0e7055077b84d0e7f
+[aws 06:23:11] running: 3.15.31.31 (172.31.7.198)
+[aws 06:25:43] 3.15.31.31: ready (efa)
+[aws 06:25:51] command started on 3.15.31.31 (1 hosts); following its progress
+[aws 06:30:53] reports in aws_runs/gh-40069930389/: aws_run.out, host0_kernel.txt
+[aws 06:30:53] run.sh exit code 0
+[aws 06:30:54] terminating i-0e7055077b84d0e7f
+[aws 06:31:28] all resources released
