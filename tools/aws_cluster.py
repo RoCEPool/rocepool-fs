@@ -254,7 +254,8 @@ class Run:
                                  "--placement", json.dumps(placement),
                                  "--instance-initiated-shutdown-behavior", "terminate",
                                  "--block-device-mappings", json.dumps([{"DeviceName": "/dev/sda1", "Ebs": {
-                                     "VolumeSize": a.disk_gib, "VolumeType": "gp3", "DeleteOnTermination": True}}]),
+                                     "VolumeSize": a.disk_gib, "VolumeType": "gp3", "DeleteOnTermination": True,
+                                     "Throughput": a.disk_mbps, "Iops": a.disk_iops}}]),
                                  "--tag-specifications", json.dumps([{"ResourceType": "instance", "Tags": [
                                      {"Key": "Name", "Value": name}, {"Key": "rocepool-run", "Value": name}]}]),
                                  "--user-data", user_data)
@@ -485,6 +486,11 @@ def main() -> int:
                                      "run.sh -- for diagnosis; its output comes back as aws_run.out")
     r.add_argument("--max-hours", type=float, default=6.0, help="instances power off (terminate) after this")
     r.add_argument("--disk-gib", type=int, default=200)
+    # the OSTs' capacity tier lives on the system disk when the type has no
+    # local NVMe: gp3's default 125 MB/s bounded IO500's bandwidth at ~0.25
+    # GiB/s on 2 x c5n.9xlarge (2026-10-24); its maximum costs cents an hour
+    r.add_argument("--disk-mbps", type=int, default=1000, help="gp3 throughput, MB/s (125..1000)")
+    r.add_argument("--disk-iops", type=int, default=16000, help="gp3 IOPS (3000..16000)")
     r.add_argument("--az", help="availability zone (default: the first that offers the type)")
     r.add_argument("--ssh-cidr", help="allow SSH from this CIDR (default: this machine's public IP /32)")
     d = sub.add_parser("down", help="release everything a run created")
