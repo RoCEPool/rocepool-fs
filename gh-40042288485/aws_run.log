@@ -1,0 +1,13 @@
+[aws 23:55:46] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 23:55:47] 1 x c5n.9xlarge: 36 vCPU, 96 GiB, 50 Gigabit, NVMe 0 GB, EFA yes
+[aws 23:55:47] vCPU quota 96 >= 36 needed (instances already running count against it too)
+[aws 23:56:01] launched i-039b294989e4af596
+[aws 23:56:18] running: 3.142.251.3 (172.31.10.33)
+[aws 23:58:36] 3.142.251.3: ready (efa)
+[aws 23:58:41] command started on 3.142.251.3 (1 hosts); following its progress
+  | [build] transport backend: ofi
+  | [build] using libfabric at /opt/amazon/efa
+[aws 00:06:20] reports in aws_runs/gh-40042288485/: aws_run.out
+[aws 00:06:20] run.sh exit code 0
+[aws 00:06:21] terminating i-039b294989e4af596
+[aws 00:06:56] all resources released

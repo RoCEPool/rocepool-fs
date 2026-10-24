@@ -1,0 +1,38 @@
+build=0
+[build] transport backend: ofi
+[build] using libfabric at /opt/amazon/efa
+rank 0: created 424547, errors 0 []
+rank 1: created 412999, errors 0 []
+rank 2: created 497343, errors 0 []
+rank 3: created 458631, errors 0 []
+rank 4: created 451606, errors 0 []
+rank 5: created 492835, errors 0 []
+rank 6: created 414520, errors 0 []
+rank 7: created 498172, errors 0 []
+rank 8: created 443907, errors 0 []
+rank 9: created 447693, errors 0 []
+rank 10: created 460698, errors 0 []
+rank 11: created 412459, errors 0 []
+rank 12: created 416781, errors 0 []
+rank 13: created 459298, errors 0 []
+rank 14: created 492962, errors 0 []
+rank 15: created 445018, errors 0 []
+rank 16: created 457869, errors 0 []
+rank 17: created 417004, errors 0 []
+rank 18: created 414608, errors 0 []
+rank 19: created 414149, errors 0 []
+rank 20: created 493894, errors 0 []
+rank 21: created 448974, errors 0 []
+rank 22: created 409841, errors 0 []
+rank 23: created 444149, errors 0 []
+rank 24: created 421316, errors 0 []
+rank 25: created 414184, errors 0 []
+rank 26: created 421935, errors 0 []
+rank 27: created 407325, errors 0 []
+rank 28: created 460384, errors 0 []
+rank 29: created 494715, errors 0 []
+rank 30: created 413477, errors 0 []
+rank 31: created 444671, errors 0 []
+TOTAL created 14207964, errors 0, wall 424s
+servers' stderr (last 3000 chars):
+
