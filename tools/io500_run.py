@@ -282,7 +282,8 @@ def load_rates(path: str | None) -> dict:
     try:
         with open(path) as f:
             ph = json.load(f).get("phases", {})
-        return {k: ph[k]["value"] for k in ("ior-easy-write", "ior-hard-write") if ph.get(k, {}).get("value")}
+        return {k: ph[k]["value"] for k in ("ior-easy-write", "ior-hard-write", "mdtest-hard-write")
+                if ph.get(k, {}).get("value")}
     except (OSError, ValueError, KeyError, TypeError):
         return {}
 
@@ -299,7 +300,9 @@ def split_budget(budget: float, stonewall: int, rates: dict, margin: float = 1.1
         return 0.75 * budget, 0.2 * budget, "no measured speeds: 75% ior-easy, 20% ior-hard"
     need_e, need_h = e * stonewall * margin, h * stonewall * margin
     hard = min(need_h, 0.5 * budget)
-    easy = 0.95 * budget - hard
+    # ior-easy: what it needs, not all the rest -- the rest is the room the
+    # later phases' data takes (mdtest-hard's files beyond the MDTs' inline budget)
+    easy = min(0.95 * budget - hard, max(need_e, 0.5 * budget))
     why = (f"measured ior-easy-write {e:.2f} GiB/s, ior-hard-write {h:.3f} GiB/s: ior-hard {hard:.0f} GiB, "
            f"ior-easy {easy:.0f} GiB (needs {need_e:.0f} GiB for {stonewall} s)")
     if easy < e * stonewall * 1.02:  # the margin is a wish; this is the limit
@@ -311,13 +314,15 @@ def split_budget(budget: float, stonewall: int, rates: dict, margin: float = 1.1
 def capacity_budget(servers: list[dict], facts: list[dict], ram_mib: float, osts_per_node: int):
     """(GiB IOR may write in total, the OST that bounds it as (GiB, addr,
     kind)): striping spreads data evenly, so the smallest OST times their
-    number, with 10% headroom. An OST with a tier holds its size plus its RAM
-    cache; one without, its share of 40% of its host's RAM."""
+    number, with 10% headroom. An OST with a tier holds the tier's size (its
+    RAM cache holds copies, not more data: the EFA run's tiers filled at
+    94 of 94 GiB with 18.5 GiB cached); one without, its share of 40% of its
+    host's RAM."""
     caps = []
     for s in (x for x in servers if x["kind"] == "ost"):
         m = re.search(r":(\d+)$", s.get("tier") or "")
         if m:
-            caps.append((int(m.group(1)) + ram_mib / 1024, s["addr"], "tier"))
+            caps.append((float(int(m.group(1))), s["addr"], "tier"))
         else:
             caps.append((0.4 * facts[s["node"]]["mem_gib"] / osts_per_node, s["addr"], "RAM only"))
     low = min(caps)
@@ -623,7 +628,22 @@ def main() -> int:
         # with the OST that bounds it, rather than discovered at the end.
         if cluster.real and facts and args.mem_budget_gib is None:
             budget, low = capacity_budget(servers, facts, ram_mib, args.osts_per_node)
-            easy_gib, hard_gib, why = split_budget(budget, stonewall, load_rates(args.rates_from))
+            # mdtest-hard's 3901-byte files beyond the MDTs' inline budget go
+            # to the OSTs (a 4 KiB block each): room for them comes off the
+            # IOR budget -- the first EFA run filled every tier with IOR data
+            # and mdtest-hard's spilled files then failed ("close failed",
+            # tiers at 93.8 of 94 GiB)
+            rates = load_rates(args.rates_from)
+            hard_kiops = rates.get("mdtest-hard-write") or 150.0
+            files = min(hard_kiops * 1000 * stonewall * 1.3, md_hard_n * ranks)
+            inline_gib = min(f["mem_gib"] for f in facts) * 0.15 * n  # the MDTs' inline budgets, all hosts
+            reserve = max(0.0, files * 4096 / 2**30 - inline_gib) * 1.25
+            reserve = min(reserve, 0.5 * budget)
+            budget -= reserve
+            report["mdtest_hard_reserve_gib"] = round(reserve, 1)
+            print(f"== OST room kept for mdtest-hard's files beyond the MDTs' inline budget: {reserve:.0f} GiB "
+                  f"(~{files / 1e6:.1f} M files at {hard_kiops:.0f} kIOPS)", flush=True)
+            easy_gib, hard_gib, why = split_budget(budget, stonewall, rates)
             easy_block = max(16, int(easy_gib * 1024 / ranks) // 2 * 2)
             hard_segs = max(100, int(hard_gib * 2**30 / (ranks * 47008)))
             report["capacity"] = {"budget_gib": round(budget, 1), "bounded_by": {"ost": low[1], "kind": low[2],

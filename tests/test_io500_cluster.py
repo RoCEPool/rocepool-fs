@@ -112,6 +112,10 @@ class ValidityTests(unittest.TestCase):
         easy, hard, why = split_budget(500, 300, {"ior-easy-write": 2.632, "ior-hard-write": 0.2109})
         self.assertIn("NOT enough", why)
         self.assertEqual(split_budget(1000, 300, {})[:2], (750, 200))
+        # plenty of room: ior-easy gets what it needs (or half), the rest stays free
+        easy, hard, _ = split_budget(1000, 300, {"ior-easy-write": 0.25, "ior-hard-write": 0.27})
+        self.assertAlmostEqual(hard, 0.27 * 300 * 1.15)
+        self.assertAlmostEqual(easy, 500)
 
     def test_probe_block_is_a_multiple_of_the_transfer(self):
         """the site's probes: the run's 12360 MiB / 8 = 1545 MiB, not a
@@ -146,7 +150,8 @@ class CapacityBudgetTests(unittest.TestCase):
         servers[2]["tier"] = servers[4]["tier"] = "file:/rocepool_tier/rocepool_ost_{n}.tier:500"
         budget, low = capacity_budget(servers, facts, 30013, 2)
         self.assertEqual((low[1], low[2]), ("a:19951", "tier"))
-        self.assertAlmostEqual(budget, 0.9 * 4 * (406 + 30013 / 1024))
+        # the tier's size alone: the RAM cache holds copies, not more data
+        self.assertAlmostEqual(budget, 0.9 * 4 * 406)
 
 
 class ClusterDownTests(unittest.TestCase):
