@@ -1,0 +1,220 @@
+[Sat Oct 24 09:01:47 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:01:47 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-10486001) [-22]
+[Sat Oct 24 09:01:48 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:01:48 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-10486004) [-22]
+[Sat Oct 24 09:01:53 2026] efa_com_cmd_exec: 8 callbacks suppressed
+[Sat Oct 24 09:01:53 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:01:53 2026] efa_com_dereg_mr: 8 callbacks suppressed
+[Sat Oct 24 09:01:53 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-13631591) [-22]
+[Sat Oct 24 09:01:53 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:01:53 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-10485910) [-22]
+[Sat Oct 24 09:01:54 2026] ena 0000:00:05.0: Type was not set for devlink port.
+[Sat Oct 24 09:26:58 2026] rt-ofi invoked oom-killer: gfp_mask=0x440dc0(GFP_KERNEL_ACCOUNT|__GFP_ZERO|__GFP_COMP), order=0, oom_score_adj=0
+[Sat Oct 24 09:26:58 2026] CPU: 4 UID: 0 PID: 274686 Comm: rt-ofi Tainted: G           OE       7.0.0-1014-aws #14~24.04.1-Ubuntu PREEMPTLAZY 
+[Sat Oct 24 09:26:58 2026] Tainted: [O]=OOT_MODULE, [E]=UNSIGNED_MODULE
+[Sat Oct 24 09:26:58 2026] Hardware name: Amazon EC2 c5n.9xlarge/, BIOS 1.0 10/16/2017
+[Sat Oct 24 09:26:58 2026] Call Trace:
+[Sat Oct 24 09:26:58 2026]  <TASK>
+[Sat Oct 24 09:26:58 2026]  dump_stack_lvl+0x76/0xa0
+[Sat Oct 24 09:26:58 2026]  dump_stack+0x10/0x20
+[Sat Oct 24 09:26:58 2026]  dump_header+0x48/0x220
+[Sat Oct 24 09:26:58 2026]  oom_kill_process+0xd7/0x250
+[Sat Oct 24 09:26:58 2026]  ? oom_evaluate_task+0x105/0x200
+[Sat Oct 24 09:26:58 2026]  out_of_memory+0x101/0x350
+[Sat Oct 24 09:26:58 2026]  __alloc_pages_may_oom+0x109/0x1d0
+[Sat Oct 24 09:26:58 2026]  __alloc_pages_slowpath.constprop.0+0x42d/0x9f0
+[Sat Oct 24 09:26:58 2026]  __alloc_frozen_pages_noprof+0x329/0x350
+[Sat Oct 24 09:26:58 2026]  alloc_pages_mpol+0x7e/0x1a0
+[Sat Oct 24 09:26:58 2026]  alloc_pages_noprof+0x5c/0xd0
+[Sat Oct 24 09:26:58 2026]  pte_alloc_one+0x1b/0x70
+[Sat Oct 24 09:26:58 2026]  __pte_alloc+0x29/0xe0
+[Sat Oct 24 09:26:58 2026]  do_anonymous_page+0x22f/0x4a0
+[Sat Oct 24 09:26:58 2026]  handle_pte_fault+0x1c4/0x1f0
+[Sat Oct 24 09:26:58 2026]  __handle_mm_fault+0x56a/0x760
+[Sat Oct 24 09:26:58 2026]  handle_mm_fault+0x13d/0x3b0
+[Sat Oct 24 09:26:58 2026]  do_user_addr_fault+0x1d2/0x8c0
+[Sat Oct 24 09:26:58 2026]  exc_page_fault+0x81/0x1c0
+[Sat Oct 24 09:26:58 2026]  asm_exc_page_fault+0x27/0x30
+[Sat Oct 24 09:26:58 2026] RIP: 0033:0x764517119fe8
+[Sat Oct 24 09:26:58 2026] Code: 49 8d 14 df 48 8b 42 68 48 85 c0 74 45 48 8b 4a 30 48 83 e8 01 48 89 42 68 48 8b 1c c1 4c 89 ff e8 6d 7d ff ff b8 01 00 00 00 <48> 87 03 4c 89 63 08 48 8d 43 20 48 89 6b 10 4d 89 75 00 48 83 c4
+[Sat Oct 24 09:26:58 2026] RSP: 002b:00007644f48d85d0 EFLAGS: 00010246
+[Sat Oct 24 09:26:58 2026] RAX: 0000000000000001 RBX: 00007636fe802000 RCX: 0000000002804000
+[Sat Oct 24 09:26:58 2026] RDX: 0000000000000000 RSI: 0000000000000000 RDI: 00000000366594d8
+[Sat Oct 24 09:26:58 2026] RBP: 0000000000000000 R08: 0000763b136f39d0 R09: 0000000000000000
+[Sat Oct 24 09:26:58 2026] R10: 0000000000000001 R11: 0000763b57920940 R12: 12ecf7669c65e744
+[Sat Oct 24 09:26:58 2026] R13: 00007644f48d8630 R14: 0000000000001000 R15: 00000000366594d8
+[Sat Oct 24 09:26:58 2026]  </TASK>
+[Sat Oct 24 09:26:58 2026] Mem-Info:
+[Sat Oct 24 09:26:58 2026] active_anon:21642371 inactive_anon:83728 isolated_anon:0
+                            active_file:652 inactive_file:13092 isolated_file:0
+                            unevictable:10885 dirty:1036 writeback:273
+                            slab_reclaimable:40018 slab_unreclaimable:50947
+                            mapped:56325 shmem:733 pagetables:53922
+                            sec_pagetables:0 bounce:0
+                            kernel_misc_reclaimable:0
+                            free:150406 free_pcp:3179 free_cma:40469
+[Sat Oct 24 09:26:58 2026] Node 0 active_anon:86569484kB inactive_anon:334912kB active_file:2608kB inactive_file:52368kB unevictable:43540kB isolated(anon):0kB isolated(file):0kB mapped:225300kB dirty:4144kB writeback:1092kB shmem:2932kB shmem_thp:0kB shmem_pmdmapped:0kB anon_thp:0kB kernel_stack:11120kB pagetables:215688kB sec_pagetables:0kB all_unreclaimable? yes Balloon:0kB gpu_active:0kB gpu_reclaim:0kB
+[Sat Oct 24 09:26:58 2026] Node 0 DMA free:11264kB boost:0kB min:8kB low:20kB high:32kB reserved_highatomic:0KB free_highatomic:0KB active_anon:0kB inactive_anon:0kB active_file:0kB inactive_file:0kB unevictable:0kB writepending:0kB zspages:0kB present:15996kB managed:15360kB mlocked:0kB bounce:0kB free_pcp:0kB local_pcp:0kB free_cma:0kB
+[Sat Oct 24 09:26:58 2026] lowmem_reserve[]: 0 2988 94476 94476 94476
+[Sat Oct 24 09:26:58 2026] Node 0 DMA32 free:369200kB boost:0kB min:2164kB low:5044kB high:7924kB reserved_highatomic:0KB free_highatomic:0KB active_anon:2494960kB inactive_anon:115940kB active_file:1468kB inactive_file:51896kB unevictable:0kB writepending:3076kB zspages:0kB present:3125680kB managed:3059992kB mlocked:0kB bounce:0kB free_pcp:4172kB local_pcp:0kB free_cma:161792kB
+[Sat Oct 24 09:26:58 2026] lowmem_reserve[]: 0 0 91488 91488 91488
+[Sat Oct 24 09:26:58 2026] Node 0 Normal free:221160kB boost:157696kB min:223100kB low:310088kB high:397076kB reserved_highatomic:0KB free_highatomic:0KB active_anon:84075188kB inactive_anon:218972kB active_file:1432kB inactive_file:552kB unevictable:43540kB writepending:3276kB zspages:0kB present:95387648kB managed:93684444kB mlocked:26908kB bounce:0kB free_pcp:8992kB local_pcp:0kB free_cma:84kB
+[Sat Oct 24 09:26:58 2026] lowmem_reserve[]: 0 0 0 0 0
+[Sat Oct 24 09:26:58 2026] Node 0 DMA: 0*4kB 0*8kB 0*16kB 0*32kB 0*64kB 0*128kB 0*256kB 0*512kB 1*1024kB (U) 1*2048kB (M) 2*4096kB (M) = 11264kB
+[Sat Oct 24 09:26:58 2026] Node 0 DMA32: 204*4kB (UE) 200*8kB (UME) 427*16kB (UE) 312*32kB (UE) 271*64kB (UME) 153*128kB (UE) 89*256kB (UME) 38*512kB (UME) 16*1024kB (UME) 5*2048kB (UMEC) 59*4096kB (UMEC) = 366688kB
+[Sat Oct 24 09:26:58 2026] Node 0 Normal: 7524*4kB (UMEC) 2351*8kB (UME) 2426*16kB (UME) 1432*32kB (UME) 591*64kB (UME) 177*128kB (UME) 20*256kB (UME) 40*512kB (UME) 0*1024kB 0*2048kB 0*4096kB = 219624kB
+[Sat Oct 24 09:26:58 2026] Node 0 hugepages_total=0 hugepages_free=0 hugepages_surp=0 hugepages_size=1048576kB
+[Sat Oct 24 09:26:58 2026] Node 0 hugepages_total=3961 hugepages_free=1 hugepages_surp=0 hugepages_size=2048kB
+[Sat Oct 24 09:26:58 2026] 20446 total pagecache pages
+[Sat Oct 24 09:26:58 2026] 0 pages in swap cache
+[Sat Oct 24 09:26:58 2026] Free swap  = 0kB
+[Sat Oct 24 09:26:58 2026] Total swap = 0kB
+[Sat Oct 24 09:26:58 2026] 24632331 pages RAM
+[Sat Oct 24 09:26:58 2026] 0 pages HighMem/MovableOnly
+[Sat Oct 24 09:26:58 2026] 442382 pages reserved
+[Sat Oct 24 09:26:58 2026] 0 pages cma reserved
+[Sat Oct 24 09:26:58 2026] 0 pages hwpoisoned
+[Sat Oct 24 09:26:58 2026] Memory cgroup min protection 0kB -- low protection 0kB
+[Sat Oct 24 09:26:58 2026] Tasks state (memory values in pages):
+[Sat Oct 24 09:26:58 2026] [  pid  ]   uid  tgid total_vm      rss rss_anon rss_file rss_shmem pgtables_bytes swapents oom_score_adj name
+[Sat Oct 24 09:26:58 2026] [    366]     0   366    12627     1097      300      795         2   106496        0          -250 systemd-journal
+[Sat Oct 24 09:26:58 2026] [    430]     0   430    72242     6733     4633     2100         0   106496        0         -1000 multipathd
+[Sat Oct 24 09:26:58 2026] [    443]     0   443     7341     1471      839      632         0    81920        0         -1000 systemd-udevd
+[Sat Oct 24 09:26:58 2026] [    735]   991   735     5386     1303      571      732         0    81920        0             0 systemd-resolve
+[Sat Oct 24 09:26:58 2026] [    863]   998   863     5608     1042      309      733         0    90112        0             0 systemd-network
+[Sat Oct 24 09:26:58 2026] [    992]     0   992      683      492       36      456         0    49152        0             0 acpid
+[Sat Oct 24 09:26:58 2026] [    996]     0   996     1809      601       65      536         0    53248        0             0 cron
+[Sat Oct 24 09:26:58 2026] [    997]   101   997     2453     1115      218      897         0    65536        0          -900 dbus-daemon
+[Sat Oct 24 09:26:58 2026] [   1002]     0  1002    20772      946      124      822         0    65536        0             0 irqbalance
+[Sat Oct 24 09:26:58 2026] [   1005]     0  1005     8111     3383     2557      826         0   102400        0             0 networkd-dispat
+[Sat Oct 24 09:26:58 2026] [   1007]   989  1007    95921     1528      631      897         0   110592        0             0 polkitd
+[Sat Oct 24 09:26:58 2026] [   1012]     0  1012   796101     4314     3876      438         0   442368        0          -900 snapd
+[Sat Oct 24 09:26:58 2026] [   1015]     0  1015     4547     1071      281      790         0    77824        0             0 systemd-logind
+[Sat Oct 24 09:26:58 2026] [   1020]     0  1020   117251     1426      549      877         0   135168        0             0 udisksd
+[Sat Oct 24 09:26:58 2026] [   1065]     0  1065     1540      477       36      441         0    57344        0             0 agetty
+[Sat Oct 24 09:26:58 2026] [   1105]     0  1105     1529      460       35      425         0    49152        0             0 agetty
+[Sat Oct 24 09:26:58 2026] [   1132]     0  1132    27506     3222     2363      859         0   114688        0             0 unattended-upgr
+[Sat Oct 24 09:26:58 2026] [   1142]   102  1142    55631     1160      300      860         0    81920        0             0 rsyslogd
+[Sat Oct 24 09:26:58 2026] [   1146]   110  1146     4854      813      189      624         0    61440        0             0 chronyd
+[Sat Oct 24 09:26:58 2026] [   1163]   110  1163     2772      521      151      370         0    61440        0             0 chronyd
+[Sat Oct 24 09:26:58 2026] [   1212]     0  1212    79541     1264      462      802         0   122880        0             0 ModemManager
+[Sat Oct 24 09:26:58 2026] [   1389]     0  1389   606054     2480     2478        2         0   286720        0             0 amazon-ssm-agen
+[Sat Oct 24 09:26:58 2026] [   1484]     0  1484     3009      871      287      584         0    65536        0         -1000 sshd
+[Sat Oct 24 09:26:58 2026] [  35614]     0 35614     1602      703       63      640         0    61440        0             0 rdma-ndd
+[Sat Oct 24 09:26:58 2026] [  35637]     0 35637     5069     1243      517      726         0    81920        0           100 systemd
+[Sat Oct 24 09:26:58 2026] [  35638]     0 35638     5297      677      429      248         0    77824        0           100 (sd-pam)
+[Sat Oct 24 09:26:58 2026] [  35903]     0 35903     1938      518       63      455         0    57344        0             0 bash
+[Sat Oct 24 09:26:58 2026] [  35904]     0 35904     1968      534       79      455         0    53248        0             0 bash
+[Sat Oct 24 09:26:58 2026] [  35906]     0 35906     1533      403       29      374         0    53248        0             0 tee
+[Sat Oct 24 09:26:58 2026] [  36112]     0 36112    45450     5500     4859      641         0   126976        0             0 python3
+[Sat Oct 24 09:26:58 2026] [ 274638]     0 274638   169419    38205    35700     2505         0   409600        0             0 python3
+[Sat Oct 24 09:26:58 2026] [ 274668]     0 274668  9333365  8943230  8936681     6549         0 71847936        0             0 python3
+[Sat Oct 24 09:26:58 2026] [ 274669]     0 274669     3754      895      327      568         0    77824        0             0 ssh
+[Sat Oct 24 09:26:58 2026] [ 274670]     0 274670 14690959  9775755  9769224     6531         0 115273728        0             0 python3
+[Sat Oct 24 09:26:58 2026] [ 274671]     0 274671     3754      896      328      568         0    65536        0             0 ssh
+[Sat Oct 24 09:26:58 2026] [ 274809]     0 274809     1131      656       57      599         0    57344        0             0 mpiexec
+[Sat Oct 24 09:26:58 2026] [ 274810]     0 274810     1159      637       88      549         0    49152        0             0 hydra_pmi_proxy
+[Sat Oct 24 09:26:58 2026] [ 274811]     0 274811     3754      896      328      568         0    69632        0             0 ssh
+[Sat Oct 24 09:26:58 2026] [ 274812]     0 274812   217831   103805   101742     2063         0   937984        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274813]     0 274813   217092    85404    83353     2051         0   790528        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274814]     0 274814   217876    85419    83354     2065         0   798720        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274815]     0 274815   217092    85412    83351     2061         0   802816        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274816]     0 274816   218081    85621    83559     2062         0   790528        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274817]     0 274817   217876    85402    83354     2048         0   790528        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274818]     0 274818   217623   103588   101536     2052         0   937984        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274819]     0 274819   217623   103602   101537     2065         0   942080        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274820]     0 274820   217297    85621    83556     2065         0   790528        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274821]     0 274821   217876    85420    83355     2065         0   794624        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274822]     0 274822   217092    85399    83351     2048         0   790528        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274823]     0 274823   217498   112681   110625     2056         0  1019904        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274824]     0 274824   217044   103790   101734     2056         0   946176        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274825]     0 274825   216839   103577   101531     2046         0   937984        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274826]     0 274826   217498   112690   110625     2065         0  1024000        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274827]     0 274827   217498   112676   110623     2053         0  1011712        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274828]     0 274828   218080    85625    83560     2065         0   794624        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274829]     0 274829   217876    85420    83355     2065         0   794624        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274830]     0 274830   217092    85416    83351     2065         0   790528        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274831]     0 274831   216714   112675   110620     2055         0  1011712        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274832]     0 274832   218080    85626    83561     2065         0   802816        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274833]     0 274833   217876    85421    83356     2065         0   802816        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274834]     0 274834   217876    85421    83356     2065         0   794624        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274835]     0 274835   217876    85405    83353     2052         0   794624        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274836]     0 274836   217827   103791   101740     2051         0   937984        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274837]     0 274837   217623   103587   101537     2050         0   942080        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274838]     0 274838   217876    85402    83352     2050         0   798720        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274839]     0 274839   217876    85411    83355     2056         0   802816        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274840]     0 274840   217297    85600    83556     2044         0   790528        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274841]     0 274841   217623   103590   101534     2056         0   933888        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274842]     0 274842   217623   103601   101536     2065         0   942080        0             0 io500
+[Sat Oct 24 09:26:58 2026] [ 274843]     0 274843   217623   103588   101535     2053         0   946176        0             0 io500
+[Sat Oct 24 09:26:58 2026] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=/,mems_allowed=0,global_oom,task_memcg=/user.slice/user-0.slice/session-9.scope,task=python3,pid=274670,uid=0
+[Sat Oct 24 09:26:58 2026] Out of memory: Killed process 274670 (python3) total-vm:58763836kB, anon-rss:39076896kB, file-rss:26124kB, shmem-rss:0kB, UID:0 pgtables:112572kB oom_score_adj:0
+[Sat Oct 24 09:27:00 2026] oom_reaper: reaped process 274670 (python3), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB
+[Sat Oct 24 09:27:01 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:01 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-1049359) [-22]
+[Sat Oct 24 09:27:01 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:01 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-1049342) [-22]
+[Sat Oct 24 09:27:01 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:01 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-1049314) [-22]
+[Sat Oct 24 09:27:01 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:01 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-1049325) [-22]
+[Sat Oct 24 09:27:01 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:01 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-1049361) [-22]
+[Sat Oct 24 09:27:01 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:01 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-10486121) [-22]
+[Sat Oct 24 09:27:02 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:02 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-1049316) [-22]
+[Sat Oct 24 09:27:02 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:02 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-1049341) [-22]
+[Sat Oct 24 09:27:02 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:02 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-1049333) [-22]
+[Sat Oct 24 09:27:02 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:02 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-1049315) [-22]
+[Sat Oct 24 09:27:06 2026] efa_com_cmd_exec: 40 callbacks suppressed
+[Sat Oct 24 09:27:06 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:06 2026] efa_com_dereg_mr: 40 callbacks suppressed
+[Sat Oct 24 09:27:06 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-3146225) [-22]
+[Sat Oct 24 09:27:06 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:06 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-3146194) [-22]
+[Sat Oct 24 09:27:06 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:06 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-11534570) [-22]
+[Sat Oct 24 09:27:06 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:06 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-9437731) [-22]
+[Sat Oct 24 09:27:06 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:06 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-3146215) [-22]
+[Sat Oct 24 09:27:06 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:06 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-3146213) [-22]
+[Sat Oct 24 09:27:07 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:07 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-11534618) [-22]
+[Sat Oct 24 09:27:07 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:07 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-3146242) [-22]
+[Sat Oct 24 09:27:07 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:07 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-9437490) [-22]
+[Sat Oct 24 09:27:07 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:07 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-3146195) [-22]
+[Sat Oct 24 09:27:13 2026] efa_com_cmd_exec: 22 callbacks suppressed
+[Sat Oct 24 09:27:13 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:13 2026] efa_com_dereg_mr: 22 callbacks suppressed
+[Sat Oct 24 09:27:13 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-10485846) [-22]
+[Sat Oct 24 09:27:13 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Oct 24 09:27:13 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-2097287) [-22]
+
+               total        used        free      shared  buff/cache   available
+Mem:           94491        9265       85763           2         178       85226
+Swap:              0           0           0
+
+    PID   RSS    VSZ STAT     ELAPSED COMMAND
+    430 26932 288968 SLsl    01:27:30 multipathd
+   1012 20784 3184404 Ssl    01:27:19 snapd
+   1005 13532  32444 Ss      01:27:19 networkd-dispat
+   1132 12888 110024 Ssl     01:27:19 unattended-upgr
+    366 11828  50508 S<s     01:27:30 systemd-journal
+      1 10596  22720 Ss      01:27:32 systemd
+ 280739 10500  15020 Ss         00:00 sshd
+   1389  9920 2424216 Ssl    01:27:18 amazon-ssm-agen
+   1007  7896 383684 Ssl     01:27:19 polkitd
+   1020  7556 469004 Ssl     01:27:19 udisksd
+   1212  6996 318164 Ssl     01:27:19 ModemManager
+   1015  6884  18188 Ss      01:27:19 systemd-logind
+    443  5884  29364 Ss      01:27:30 systemd-udevd
+   1142  5232 222524 Ssl     01:27:19 rsyslogd
