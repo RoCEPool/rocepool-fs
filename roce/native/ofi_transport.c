@@ -696,8 +696,8 @@ static void dispatch(struct ofi_ep *e, const struct fi_cq_data_entry *ent) {
     if (!o) return;
     o->len = ent->len;
     o->err = 0;
-    if (o->kind == OP_SLOT) o->seq = ++e->arrivals;
-    o->done = 1;
+    if (o->kind == OP_SLOT) o->seq = __atomic_add_fetch(&e->arrivals, 1, __ATOMIC_RELAXED);
+    __atomic_store_n(&o->done, 1, __ATOMIC_RELEASE);  /* several threads may drain one CQ */
 }
 
 /* Read and dispatch completions. Returns the number handled, or -1 on a
@@ -714,8 +714,8 @@ static int ep_drain(struct ofi_ep *e) {
                 struct op *o = err.op_context;
                 o->err = err.err ? err.err : FI_EIO;
                 o->len = err.len;
-                o->done = 1;
-                if (o->kind == OP_SLOT) o->seq = ++e->arrivals;
+                if (o->kind == OP_SLOT) o->seq = __atomic_add_fetch(&e->arrivals, 1, __ATOMIC_RELAXED);
+                __atomic_store_n(&o->done, 1, __ATOMIC_RELEASE);
                 /* a receive we cancelled ourselves: keep the error that made us cancel it */
                 if (o->err != FI_ECANCELED)
                     set_error("completion error: %s (prov %d%s%s)", fi_strerror(o->err), err.prov_errno,
@@ -1404,12 +1404,24 @@ struct name_ent { uint8_t name[256]; size_t len; fi_addr_t addr; int refs; int v
 struct aent { uint32_t epoch; int live; int busy; int owed; };
 struct sconn { int sock; fi_addr_t *addrs; int naddrs; int w; };
 
+/* One per server endpoint; served by `nthreads` threads (ROCE_OFI_SERVER_
+ * THREADS): an endpoint is a queue pair, of which EFA has few per host, so
+ * concurrency comes from threads sharing one -- with one thread per
+ * endpoint the first EFA IO500 ran at most 9 requests at a time per server
+ * on 36 cores (inflight_max 9), its hosts half idle in the metadata phases.
+ * A thread claims an arrived request under `pick` and replies from its own
+ * registered buffer (tl_small). */
 struct worker {
     struct roce_server *s;
     struct ofi_ep *e;
-    pthread_t thread;
+    pthread_t *threads;
+    int nthreads;
+    pthread_mutex_t pick;
+    uint8_t *claimed;
     struct bufpool *pool;
 };
+static __thread uint8_t *tl_small;
+static __thread void *tl_small_desc;
 
 struct roce_server {
     roce_request_handler handler;
@@ -1467,8 +1479,8 @@ static int send_reply(struct worker *w, fi_addr_t to, uint64_t tag, uint32_t sta
         start = resp - REP_HDR;
         desc = pb->desc;
     } else if (rlen + REP_HDR <= SMALL_FRAME) {
-        start = e->small;
-        desc = e->small_desc;
+        start = tl_small ? tl_small : e->small;
+        desc = tl_small ? tl_small_desc : e->small_desc;
         if (rlen) memcpy(start + REP_HDR, resp, rlen);
     } else {
         own = pool_get(w->pool, 30000);
@@ -1595,18 +1607,38 @@ static void *worker_main(void *arg) {
     pthread_setname_np(pthread_self(), "rt-ofi");
     pin_to_next_core();
     struct ofi_ep *e = w->e;
+    /* this thread's registered reply buffer */
+    struct fid_mr *smr = NULL;
+    uint64_t key;
+    tl_small = aligned_alloc(4096, SMALL_FRAME);
+    if (!tl_small || mr_reg(w->s->d, tl_small, SMALL_FRAME, &smr, &tl_small_desc, &key)) {
+        fprintf(stderr, "ofi_transport: worker reply buffer: %s\n", roce_last_error());
+        free(tl_small);
+        tl_small = NULL;  /* falls back to the endpoint's (only safe alone) */
+    }
     while (!atomic_load(&w->s->stopping)) {
-        /* the oldest arrived request first */
+        /* the oldest arrived request nobody has claimed */
         int best = -1;
+        pthread_mutex_lock(&w->pick);
         for (int i = 0; i < e->nslots; i++)
-            if (e->slots[i].done && (best < 0 || e->slots[i].seq < e->slots[best].seq)) best = i;
+            if (!w->claimed[i] && __atomic_load_n(&e->slots[i].done, __ATOMIC_ACQUIRE) &&
+                (best < 0 || e->slots[i].seq < e->slots[best].seq)) best = i;
+        if (best >= 0) w->claimed[best] = 1;
+        pthread_mutex_unlock(&w->pick);
         if (best < 0) { ep_wait(e, 50, -1); continue; }
         handle_slot(w, best);
-        if (slot_post(e, best)) {
+        int bad = slot_post(e, best);
+        pthread_mutex_lock(&w->pick);
+        w->claimed[best] = 0;
+        pthread_mutex_unlock(&w->pick);
+        if (bad) {
             fprintf(stderr, "ofi_transport: cannot repost a receive: %s\n", roce_last_error());
             break;
         }
     }
+    if (smr) fi_close(&smr->fid);
+    free(tl_small);
+    tl_small = NULL;
     return NULL;
 }
 
@@ -1889,9 +1921,13 @@ roce_server_t *roce_server_start(const char *bind_address, roce_request_handler 
      * (several servers + every client rank), so one per core ran out */
     uint32_t k = env_u32("ROCE_OFI_SERVER_EPS", ncpu < 8 ? 2 : (ncpu > 64 ? 16 : (uint32_t)(ncpu / 4)));
     uint32_t depth = env_u32("ROCE_OFI_RX_DEPTH", RX_DEPTH_DEFAULT);
+    /* threads per endpoint: one per core over all endpoints, 1..8 */
+    uint32_t per = (uint32_t)ncpu / (k ? k : 1);
+    per = env_u32("ROCE_OFI_SERVER_THREADS", per < 1 ? 1 : (per > 8 ? 8 : per));
+    if (per < 1) per = 1;
     s->w = calloc(k, sizeof(*s->w));
     if (!s->w) goto fail;
-    struct bufpool *pool = pool_for(s->d, max_frame_bytes + 4096, POOL_SERVER, 2 * k + 8);
+    struct bufpool *pool = pool_for(s->d, max_frame_bytes + 4096, POOL_SERVER, 2 * k * per + 8);
     if (!pool) goto fail;
     for (uint32_t i = 0; i < k; i++) {
         struct worker *w = &s->w[i];
@@ -1910,6 +1946,11 @@ roce_server_t *roce_server_start(const char *bind_address, roce_request_handler 
         }
         s->nw++;
         struct ofi_ep *e = w->e;
+        pthread_mutex_init(&w->pick, NULL);
+        w->nthreads = (int)per;
+        w->threads = calloc(per, sizeof(*w->threads));
+        w->claimed = calloc(depth, 1);
+        if (!w->threads || !w->claimed) { set_error("out of memory"); goto fail; }
         e->nslots = (int)depth;
         e->slots = calloc(depth, sizeof(*e->slots));
         e->slab = mmap(NULL, (size_t)depth * SMALL_FRAME, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -1920,12 +1961,17 @@ roce_server_t *roce_server_start(const char *bind_address, roce_request_handler 
             if (slot_post(e, j)) goto fail;
     }
     for (int i = 0; i < s->nw; i++)
-        if (pthread_create(&s->w[i].thread, NULL, worker_main, &s->w[i])) { set_error("pthread_create failed"); goto fail_threads; }
+        for (int t = 0; t < s->w[i].nthreads; t++)
+            if (pthread_create(&s->w[i].threads[t], NULL, worker_main, &s->w[i])) {
+                set_error("pthread_create failed");
+                goto fail_threads;
+            }
     if (pthread_create(&s->boot, NULL, boot_main, s)) { set_error("pthread_create failed"); goto fail_threads; }
     return s;
 fail_threads:
     atomic_store(&s->stopping, 1);
-    for (int i = 0; i < s->nw; i++) if (s->w[i].thread) pthread_join(s->w[i].thread, NULL);
+    for (int i = 0; i < s->nw; i++)
+        for (int t = 0; t < s->w[i].nthreads; t++) if (s->w[i].threads[t]) pthread_join(s->w[i].threads[t], NULL);
 fail:
     if (s->lsock >= 0) close(s->lsock);
     for (int i = 0; i < s->nw; i++) ep_destroy(s->w[i].e);
@@ -1953,7 +1999,8 @@ void roce_server_stop(roce_server_t *s) {
     atomic_store(&s->stopping, 1);
     /* workers finish the request at hand (each wait is bounded) */
     pthread_join(s->boot, NULL);
-    for (int i = 0; i < s->nw; i++) pthread_join(s->w[i].thread, NULL);
+    for (int i = 0; i < s->nw; i++)
+        for (int t = 0; t < s->w[i].nthreads; t++) pthread_join(s->w[i].threads[t], NULL);
     close(s->lsock);
     s->lsock = -1;
     for (int i = s->nconns - 1; i >= 0; i--) drop_conn(s, i);
