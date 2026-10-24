@@ -1,0 +1,470 @@
+{
+  "mode": "real",
+  "topology": "172.31.9.199 (this host) <==RoCE==> 172.31.1.255 (root@172.31.1.255)",
+  "rdma_provider": "real kernel verbs (/root/rocepool/roce/native/libroce_transport.so)",
+  "smoke": {
+    "ok": true,
+    "client_output": [
+      "[client] sending a larger (1MB) payload ...",
+      "[client] large payload roundtrip OK",
+      "[client] ALL CHECKS PASSED"
+    ],
+    "seconds": 15.86
+  },
+  "pool": {
+    "ok": true,
+    "nodes": [
+      "172.31.9.199:19201",
+      "172.31.1.255:19201",
+      "172.31.1.255:19202"
+    ],
+    "workloads": [
+      {
+        "role": "pool-workload",
+        "me": "172.31.9.199:19201",
+        "objects": 120,
+        "bytes": 12059008,
+        "owners": {
+          "172.31.1.255:19201": 37,
+          "172.31.1.255:19202": 37,
+          "172.31.9.199:19201": 46
+        },
+        "remote_owned": 74,
+        "get_mismatches": [],
+        "cas_ok": true,
+        "list_prefix_count": 121,
+        "delete_ok": true,
+        "put_s": 0.377,
+        "get_s": 0.036
+      },
+      {
+        "role": "pool-workload",
+        "me": "172.31.1.255:19201",
+        "objects": 120,
+        "bytes": 12059008,
+        "owners": {
+          "172.31.1.255:19201": 45,
+          "172.31.9.199:19201": 39,
+          "172.31.1.255:19202": 36
+        },
+        "remote_owned": 75,
+        "get_mismatches": [],
+        "cas_ok": true,
+        "list_prefix_count": 121,
+        "delete_ok": true,
+        "put_s": 0.374,
+        "get_s": 0.033
+      }
+    ],
+    "seconds": 4.25
+  },
+  "mpi": {
+    "ok": true,
+    "ranks": [
+      "172.31.9.199:19301",
+      "172.31.1.255:19301",
+      "172.31.9.199:19302",
+      "172.31.1.255:19302"
+    ],
+    "results": [
+      {
+        "role": "mpi",
+        "rank": 0,
+        "addr": "172.31.9.199:19301",
+        "bcast": "hello-from-root",
+        "gather": [
+          "r0",
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "allgather": [
+          "r0@172.31.9.199:19301",
+          "r1@172.31.1.255:19301",
+          "r2@172.31.9.199:19302",
+          "r3@172.31.1.255:19302"
+        ],
+        "allreduce_sum": 10,
+        "ring_recv": "token-from-3"
+      },
+      {
+        "role": "mpi",
+        "rank": 1,
+        "addr": "172.31.1.255:19301",
+        "bcast": "hello-from-root",
+        "gather": null,
+        "allgather": [
+          "r0@172.31.9.199:19301",
+          "r1@172.31.1.255:19301",
+          "r2@172.31.9.199:19302",
+          "r3@172.31.1.255:19302"
+        ],
+        "allreduce_sum": 10,
+        "ring_recv": "token-from-0"
+      },
+      {
+        "role": "mpi",
+        "rank": 2,
+        "addr": "172.31.9.199:19302",
+        "bcast": "hello-from-root",
+        "gather": null,
+        "allgather": [
+          "r0@172.31.9.199:19301",
+          "r1@172.31.1.255:19301",
+          "r2@172.31.9.199:19302",
+          "r3@172.31.1.255:19302"
+        ],
+        "allreduce_sum": 10,
+        "ring_recv": "token-from-1"
+      },
+      {
+        "role": "mpi",
+        "rank": 3,
+        "addr": "172.31.1.255:19302",
+        "bcast": "hello-from-root",
+        "gather": null,
+        "allgather": [
+          "r0@172.31.9.199:19301",
+          "r1@172.31.1.255:19301",
+          "r2@172.31.9.199:19302",
+          "r3@172.31.1.255:19302"
+        ],
+        "allreduce_sum": 10,
+        "ring_recv": "token-from-2"
+      }
+    ],
+    "seconds": 2.99
+  },
+  "hpc": {
+    "ok": true,
+    "osts": [
+      "172.31.9.199:19501",
+      "172.31.1.255:19501",
+      "172.31.9.199:19502",
+      "172.31.1.255:19502"
+    ],
+    "ranks": [
+      "172.31.9.199:19601",
+      "172.31.1.255:19601",
+      "172.31.9.199:19602",
+      "172.31.1.255:19602"
+    ],
+    "rank_exit_codes": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "checks": {
+      "L1 getstripe seen by every client": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "L1 stripe placement round-robin OST0..3": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "L1 cross-node read coherence (sha)": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "L2 bytes land on OSTs on BOTH nodes, 256KiB each": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "L3 only OST1,OST2 used": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "L3 unused OSTs hold nothing for the file": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "L3 content": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "L4 read_range of patched span": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "L4 whole file after patch": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "L5 size after append seen by all": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "L5 content after append": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "L6 sparse file size": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "L6 hole reads as zeros": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "L7 8MiB integrity on every client": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "L8 unlink: gone for all clients, objects freed on OSTs": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "M1 N-1 segmented write_at_all/read_at_all": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "M2 get_size_all after collective write": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "M3 N-1 strided (4 ranks share every stripe)": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "M4 N-N file per process, read by everyone": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "P3 bcast 4MiB from root 3 (nodeB)": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "P4 allreduce_sum": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "P4 allgather": {
+        "ok": true,
+        "ranks": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "failed_detail": {}
+      },
+      "P1 point-to-point ordering, 100 msgs nodeA->nodeB": {
+        "ok": true,
+        "ranks": [
+          1
+        ],
+        "failed_detail": {}
+      },
+      "P4 reduce_sum to root 1 (negatives, >32-bit)": {
+        "ok": true,
+        "ranks": [
+          1
+        ],
+        "failed_detail": {}
+      },
+      "P2 tag matching (receive out of send order)": {
+        "ok": true,
+        "ranks": [
+          2
+        ],
+        "failed_detail": {}
+      },
+      "P4 gather variable sizes": {
+        "ok": true,
+        "ranks": [
+          2
+        ],
+        "failed_detail": {}
+      }
+    },
+    "seconds": 9.18
+  },
+  "stream": {
+    "ok": true,
+    "result": {
+      "role": "stream",
+      "peer": "172.31.1.255:19401",
+      "checks": 8,
+      "all_ok": true,
+      "detail": [
+        {
+          "size": 0,
+          "expect": "PUT_OK",
+          "got": "PUT_OK",
+          "ok": true
+        },
+        {
+          "size": 0,
+          "expect": "GET_OK",
+          "got": "GET_OK",
+          "ok": true
+        },
+        {
+          "size": 1,
+          "expect": "PUT_OK",
+          "got": "PUT_OK",
+          "ok": true
+        },
+        {
+          "size": 1,
+          "expect": "GET_OK",
+          "got": "GET_OK",
+          "ok": true
+        },
+        {
+          "size": 4096,
+          "expect": "PUT_OK",
+          "got": "PUT_OK",
+          "ok": true
+        },
+        {
+          "size": 4096,
+          "expect": "GET_OK",
+          "got": "GET_OK",
+          "ok": true
+        },
+        {
+          "size": 300000,
+          "expect": "PUT_OK",
+          "got": "PUT_OK",
+          "ok": true
+        },
+        {
+          "size": 300000,
+          "expect": "GET_OK",
+          "got": "GET_OK",
+          "ok": true
+        }
+      ]
+    },
+    "seconds": 2.2
+  }
+}
