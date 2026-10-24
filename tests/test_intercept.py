@@ -64,6 +64,34 @@ class _Cluster(unittest.TestCase):
 
 
 @unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class InlineBudgetTests(_Cluster):
+    """An MDT holds inline file bytes up to its budget
+    (ROCEPOOL_MDT_INLINE_BUDGET_MIB); beyond it new small files are striped
+    over the OSTs, and every byte still reads back. The first EFA IO500
+    failed in mdtest-hard because its millions of 3901-byte files grew the
+    MDTs without bound."""
+    port = 23420
+    server_env = {"ROCEPOOL_MDT_INLINE_BUDGET_MIB": "1"}  # per MDT; 2 MDTs
+
+    def test_small_files_beyond_the_budget_go_to_the_osts(self):
+        out = self.py(f"""
+import hashlib, os
+P = {self.prefix!r}
+os.mkdir(P + "/hard")
+for i in range(1500):  # 1500 x 3901 B = 5.6 MiB > 2 x 1 MiB
+    with open(f"{{P}}/hard/f{{i}}", "wb") as f: f.write(hashlib.sha256(str(i).encode()).digest() * 121 + b"x" * 29)
+bad = [i for i in range(1500)
+       if open(f"{{P}}/hard/f{{i}}", "rb").read() != hashlib.sha256(str(i).encode()).digest() * 121 + b"x" * 29]
+print(len(bad))
+""", timeout=600)
+        self.assertEqual(out.strip(), "0")
+        inline = sum(self.dfs("attr", f"hard/f{i}")["inline"] for i in (0, 1, 2, 1497, 1498, 1499))
+        self.assertGreater(inline, 0)      # the first ones fit
+        self.assertLess(inline, 6)         # the last ones did not
+        self.assertEqual(self.dfs("attr", "hard/f1499")["size"], 3901)
+
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
 class BigDirectoryTests(_Cluster):
     port = 23390
     server_env = {"ROCE_MAX_FRAME_BYTES": str(256 << 10)}

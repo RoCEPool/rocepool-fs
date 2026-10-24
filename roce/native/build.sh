@@ -21,7 +21,7 @@
 #   ofi    ofi_transport.c: libfabric reliable datagrams -- AWS EFA (SRD);
 #          libfabric from ROCE_LIBFABRIC, the EFA installer's /opt/amazon/efa,
 #          the distro (libfabric-dev) or built from source
-#   auto   ofi when an EFA device exists (/sys/class/infiniband/efa*),
+#   auto   ofi when an EFA device exists (/sys/class/infiniband/*: PCI driver efa),
 #          else verbs
 # Same output names either way.
 #
@@ -53,7 +53,14 @@ no_download() {  # ROCEPOOL_OFFLINE=1: say what is missing instead of trying the
 }
 BACKEND="${ROCE_BACKEND:-auto}"
 if [ "$BACKEND" = auto ]; then
-  if ls -d /sys/class/infiniband/efa* >/dev/null 2>&1; then BACKEND=ofi; else BACKEND=verbs; fi
+  # an EFA device: named efa* on older kernels, rdmap<bus>s<slot> on newer
+  # ones -- its PCI driver is efa either way
+  BACKEND=verbs
+  for d in /sys/class/infiniband/*; do
+    [ -e "$d" ] || continue
+    case "$(basename "$d")" in efa*) BACKEND=ofi;; esac
+    [ "$(basename "$(readlink -f "$d/device/driver" 2>/dev/null)")" = efa ] && BACKEND=ofi
+  done
 fi
 case "$BACKEND" in verbs|ofi) ;; *) echo "ERROR: ROCE_BACKEND=$BACKEND (auto, verbs or ofi)" >&2; exit 1;; esac
 echo "[build] transport backend: $BACKEND"

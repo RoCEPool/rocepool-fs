@@ -564,6 +564,17 @@ def main() -> int:
     ap.add_argument("--configfs-root", default="/sys/kernel/config", help=argparse.SUPPRESS)
     ap.add_argument("--peer-build", default="bash roce/native/build.sh", help=argparse.SUPPRESS)
     args = ap.parse_args()
+    # the servers, clients and test scenarios hold a socket per connection
+    # and libfabric/verbs descriptors: a 1024-file soft limit (ssh's
+    # default) ran out on site; raise it to the hard limit for us and our
+    # children
+    try:
+        import resource
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if soft != resource.RLIM_INFINITY and (hard == resource.RLIM_INFINITY or soft < hard):
+            resource.setrlimit(resource.RLIMIT_NOFILE, (min(hard, 1 << 20) if hard != resource.RLIM_INFINITY else 1 << 20, hard))
+    except (ValueError, OSError):
+        pass
     if args.peers and not args.peer:
         try:
             args.peer, args.peer_ip = parse_peers(args.peers)[0]

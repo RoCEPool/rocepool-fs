@@ -375,10 +375,15 @@ class Run:
         peers = ",".join(f"root@{h['private']}={h['private']}" for h in st["hosts"][1:])
         flags = (["--peers", peers] if peers else []) + (["--quick"] if a.quick else []) + \
             ([] if a.self_test else ["--skip-tests"]) + ["--ip", st["hosts"][0]["private"]]
-        cmd = "cd /root/rocepool && nohup ./run.sh " + " ".join(shlex.quote(f) for f in flags) + \
-            " > aws_run.out 2>&1; echo $? > aws_run.rc"
+        if a.command:  # a diagnostic command instead of run.sh: HEAD_IP / PEER_IPS tell it the hosts
+            ips = " ".join(h["private"] for h in st["hosts"][1:])
+            cmd = (f"cd /root/rocepool && export HEAD_IP={st['hosts'][0]['private']} PEER_IPS={shlex.quote(ips)}; "
+                   f"( {a.command} ) > aws_run.out 2>&1; echo $? > aws_run.rc")
+        else:
+            cmd = "cd /root/rocepool && nohup ./run.sh " + " ".join(shlex.quote(f) for f in flags) + \
+                " > aws_run.out 2>&1; echo $? > aws_run.rc"
         self.ssh(head, f"setsid bash -c {shlex.quote(cmd)} >/dev/null 2>&1 < /dev/null &")
-        log(f"run.sh started on {head} ({len(st['hosts'])} hosts); following its progress")
+        log(f"{'command' if a.command else 'run.sh'} started on {head} ({len(st['hosts'])} hosts); following its progress")
         seen, end = 0, time.monotonic() + a.max_hours * 3600
         rc = None
         while time.monotonic() < end:
@@ -411,6 +416,27 @@ class Run:
                 got.append(f)
             except RuntimeError:
                 pass
+        # every host's kernel log tail (OOM kills, NIC errors) and memory
+        for i, h in enumerate(self.state.get("hosts", [])):
+            try:
+                r = self.ssh(h["public"], "dmesg -T 2>/dev/null | tail -200; echo; free -m; echo; "
+                                          "ps -eo pid,rss,vsz,stat,etime,comm --sort=-rss | head -15",
+                             check=False, timeout=120)
+                with open(os.path.join(self.dir, f"host{i}_kernel.txt"), "w") as f:
+                    f.write(r.stdout)
+                got.append(f"host{i}_kernel.txt")
+            except (RuntimeError, OSError, subprocess.SubprocessError):
+                pass
+        # the servers' and clients' logs of the last IO500 (the head's, and the
+        # peers' copied there), for diagnosis: the reports name them
+        try:
+            self.ssh(head, "cd /root/rocepool/.bench_cache/io500_run 2>/dev/null && "
+                           "find . -maxdepth 2 \\( -name '*.log' -o -name '*.out' -o -name '*.err' \\) -size -50M -print0 | "
+                           "tar czf /root/rocepool/io500_logs.tar.gz --null -T - 2>/dev/null; true", check=False)
+            self.scp(f"root@{head}:/root/rocepool/io500_logs.tar.gz", os.path.join(self.dir, "io500_logs.tar.gz"))
+            got.append("io500_logs.tar.gz")
+        except RuntimeError:
+            pass
         log(f"reports in {os.path.relpath(self.dir, ROOT)}/: {', '.join(got) or 'none'}")
         valid = os.path.join(self.dir, "onsite_io500_valid.json")
         if os.path.exists(valid):
@@ -455,6 +481,8 @@ def main() -> int:
     r.add_argument("--quick", action="store_true", help="30 s IO500 instead of the 300 s valid run")
     r.add_argument("--self-test", action="store_true", help="also run the unit suite on the head node (~3 min)")
     r.add_argument("--keep", action="store_true", help="leave the cluster up afterwards (`down` releases it)")
+    r.add_argument("--command", help="run this shell command on the head (in the tree; HEAD_IP, PEER_IPS set) instead of "
+                                     "run.sh -- for diagnosis; its output comes back as aws_run.out")
     r.add_argument("--max-hours", type=float, default=6.0, help="instances power off (terminate) after this")
     r.add_argument("--disk-gib", type=int, default=200)
     r.add_argument("--az", help="availability zone (default: the first that offers the type)")

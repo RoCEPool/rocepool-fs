@@ -90,7 +90,24 @@ static uint8_t *frame_alloc(uint8_t op, const frame_t *req, size_t val_len, uint
     /* a large reply (a GET's stripe) is built in a registered buffer the
      * transport RDMA WRITEs to the client as is -- no copy on the way out */
     uint8_t *b = roce_reply_alloc(total);
-    if (!b) return NULL;
+    if (!b) {
+        /* every request of this server then fails ("could not handle the
+         * request"): say why, once a minute, with the process's mapping
+         * count (glibc's malloc fails at vm.max_map_count with RAM free) */
+        static _Atomic long last;
+        long now = (long)time(NULL), was = atomic_load(&last);
+        if (now - was >= 60 && atomic_compare_exchange_strong(&last, &was, now)) {
+            int e = errno;
+            long maps = 0, max = -1;
+            FILE *fm = fopen("/proc/self/maps", "r");
+            if (fm) { int c; while ((c = fgetc(fm)) != EOF) if (c == '\n') maps++; fclose(fm); }
+            FILE *fx = fopen("/proc/sys/vm/max_map_count", "r");
+            if (fx) { if (fscanf(fx, "%ld", &max) != 1) max = -1; fclose(fx); }
+            fprintf(stderr, "rocepool server: cannot allocate a %zu-byte reply (%s): %ld memory mappings, "
+                    "vm.max_map_count %ld\n", total, strerror(e), maps, max);
+        }
+        return NULL;
+    }
     memcpy(b, "RCP1", 4);
     b[4] = op; b[5] = b[6] = b[7] = 0;
     wr_u64le(b + 8, req->req_id);
@@ -158,7 +175,9 @@ static int buf_put(buf_t *b, const void *d, size_t n) {
 }
 static int buf_printf(buf_t *b, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 static int buf_printf(buf_t *b, const char *fmt, ...) {
-    char tmp[256];
+    /* 256 bytes truncated the MDT's stats line once its counters grew
+     * (after ~16 M creates): STATS then failed ("could not handle") */
+    char tmp[2048];
     va_list ap;
     va_start(ap, fmt);
     int n = vsnprintf(tmp, sizeof(tmp), fmt, ap);
@@ -204,7 +223,10 @@ typedef struct { atomic_ullong seq; uint64_t keyhash; uint64_t size; uint64_t pa
 #define OBJ_TAIL 8
 #define ARENA_CHUNK (64u << 20)
 #define ARENA_CLASSES 7
-static const size_t ARENA_DATA[ARENA_CLASSES] = {4u << 10, 16u << 10, 64u << 10, 256u << 10, 1u << 20, 4u << 20, 16u << 20};
+/* class 0 is one page with its header and tail (4096 bytes of data needed
+ * two pages: 3901-byte mdtest-hard files took 8 KiB each) */
+static const size_t ARENA_DATA[ARENA_CLASSES] = {4096 - OBJ_HDR - OBJ_TAIL, 16u << 10, 64u << 10, 256u << 10, 1u << 20,
+                                                 4u << 20, 16u << 20};
 
 typedef struct arena_chunk {
     struct arena_chunk *next;
@@ -235,6 +257,10 @@ static uint32_t arena_class(size_t size) {
 static inline obj_hdr_t *obj_hdr(const uint8_t *data) { return (obj_hdr_t *)(data - OBJ_HDR); }
 static inline uint64_t *obj_tail(uint8_t *data, size_t size) { return (uint64_t *)(data + size); }
 
+/* the memory a RAM copy of capacity cap really holds (its whole slab):
+ * what the RAM cache's budget counts */
+static size_t cap_mem(size_t cap) { uint32_t c = arena_class(cap); return c == UINT32_MAX ? cap : arena_slab_bytes(c); }
+
 static void arena_init(obj_arena_t *a) { memset(a, 0, sizeof(*a)); pthread_mutex_init(&a->lock, NULL); }
 
 /* caller holds a->lock */
@@ -261,6 +287,34 @@ static uint8_t *arena_alloc(obj_arena_t *a, size_t size, uint64_t keyhash, size_
     size_t slab = arena_slab_bytes(cls);
     uint8_t *p = NULL;
     pthread_mutex_lock(&a->lock);
+    if (!a->nfree[cls]) {
+        /* none free in this class: carve a free slab of a larger class
+         * (IOR's evicted 1 MiB copies) into this class's slabs before growing
+         * the arena -- free slabs never moved between classes, and an OST
+         * whose cache turned from large objects to small ones grew past
+         * its budget until the kernel killed it (EFA run, 2026-10-24).
+         * Every piece's header is marked free (odd seq, no keyhash): a stale
+         * lease on the old object reads its old header, now a free piece's */
+        for (uint32_t big = cls + 1; big < ARENA_CLASSES && !a->nfree[cls]; big++) {
+            if (!a->nfree[big]) continue;
+            uint8_t *b = a->free[big][--a->nfree[big]];
+            size_t n = arena_slab_bytes(big) / slab;
+            if (a->cfree[cls] < a->nfree[cls] + n) {
+                size_t nc = a->cfree[cls] ? a->cfree[cls] : 256;
+                while (nc < a->nfree[cls] + n) nc *= 2;
+                uint8_t **nf = realloc(a->free[cls], nc * sizeof(*nf));
+                if (!nf) { a->free[big][a->nfree[big]++] = b; break; }
+                a->free[cls] = nf;
+                a->cfree[cls] = nc;
+            }
+            for (size_t i = n; i-- > 0;) {
+                obj_hdr_t *ph = (obj_hdr_t *)(b + i * slab);
+                atomic_store(&ph->seq, 1);
+                ph->keyhash = 0;
+                a->free[cls][a->nfree[cls]++] = (uint8_t *)ph;
+            }
+        }
+    }
     if (a->nfree[cls]) p = a->free[cls][--a->nfree[cls]];
     else {
         if (!a->chunks || a->chunks->used + slab > a->chunks->len) {
@@ -430,13 +484,19 @@ static void lru_drop(ost_store *s, kv_entry *e) {
  * always clean. */
 static void ost_evict(ost_store *s) {
     if (!s->tier) return;
-    int attempts = 64;
-    while (atomic_load(&s->ram_bytes) > s->ram_budget && attempts-- > 0) {
+    /* until within budget: only busy entries count against the attempts --
+     * a fixed 64 evictions per call fell behind when 4 KiB copies (mdtest-
+     * hard's files) made way for 1 MiB ones (ior-easy-read): ~250 to free
+     * per read, the cache grew to 28 of 19 GiB and the host ran out
+     * (EFA run, 2026-10-24) */
+    int attempts = 256;
+    while (atomic_load(&s->ram_bytes) > s->ram_budget && attempts > 0) {
         pthread_mutex_lock(&s->lru_lock);
         kv_entry *e = s->lru_tail;
         if (!e) { pthread_mutex_unlock(&s->lru_lock); return; }
         kv_stripe *st = ost_stripe(s, e->hash);
         if (pthread_mutex_trylock(&st->lock)) {
+            attempts--;
             /* busy: rotate it to the head so the next candidate differs */
             lru_unlink(s, e);
             e->lru_next = s->lru_head;
@@ -449,7 +509,7 @@ static void ost_evict(ost_store *s) {
         lru_unlink(s, e);
         pthread_mutex_unlock(&s->lru_lock);
         if (e->data && e->on_tier) {
-            atomic_fetch_sub(&s->ram_bytes, e->data_cap);
+            atomic_fetch_sub(&s->ram_bytes, cap_mem(e->data_cap));
             ent_free_data(s, e->data, e->data_cap);
             e->data = NULL;
             e->data_cap = 0;
@@ -473,7 +533,7 @@ static int ent_resident(ost_store *s, kv_entry *e) {
     obj_publish(&s->arena, d, e->size);
     e->data = d;
     e->data_cap = cap;
-    atomic_fetch_add(&s->ram_bytes, cap);
+    atomic_fetch_add(&s->ram_bytes, cap_mem(cap));
     lru_touch(s, e);
     return 0;
 }
@@ -515,7 +575,7 @@ static void ent_destroy(ost_store *s, kv_entry *e) {  /* unlinked from its strip
     if (s->tier) {
         lru_drop(s, e);
         if (e->on_tier) ost_tier_free(s->tier, &e->ext);
-        if (e->data) atomic_fetch_sub(&s->ram_bytes, e->data_cap);
+        if (e->data) atomic_fetch_sub(&s->ram_bytes, cap_mem(e->data_cap));
     }
     ent_free_data(s, e->data, e->data_cap);
     free(e->key);
@@ -631,8 +691,8 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
                                  : ost_tier_write(s->tier, &e->ext, 0, data, dlen);
             if (!rc && moved) ost_tier_free(s->tier, &oldext);
             if (!rc && direct) atomic_fetch_add(&s->direct_writes, 1);
-            if (old) atomic_fetch_sub(&s->ram_bytes, old_cap);
-            if (data) { atomic_fetch_add(&s->ram_bytes, cap); lru_touch(s, e); } else lru_drop(s, e);
+            if (old) atomic_fetch_sub(&s->ram_bytes, cap_mem(old_cap));
+            if (data) { atomic_fetch_add(&s->ram_bytes, cap_mem(cap)); lru_touch(s, e); } else lru_drop(s, e);
         }
         uint64_t version = e->version;
         pthread_mutex_unlock(&st->lock);
@@ -781,11 +841,11 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
                 if (!nd) rc = -ENOMEM;
                 else {
                     if (e->data) memcpy(nd, e->data, old_size);
-                    if (s->tier && e->data) atomic_fetch_sub(&s->ram_bytes, e->data_cap);
+                    if (s->tier && e->data) atomic_fetch_sub(&s->ram_bytes, cap_mem(e->data_cap));
                     ent_free_data(s, e->data, e->data_cap);
                     e->data = nd; e->data_cap = cap;
                     fresh = 1;
-                    if (s->tier) atomic_fetch_add(&s->ram_bytes, cap);
+                    if (s->tier) atomic_fetch_add(&s->ram_bytes, cap_mem(cap));
                 }
             }
             if (!rc) {
@@ -1255,10 +1315,38 @@ static uint64_t inline_limit(const md_entry *e) {
     return e->has_layout && e->ss && e->ss < l ? e->ss : l;
 }
 
-/* resize the inline buffer to n bytes (zero-filling growth); 0 or -1 */
+/* All inline file bytes this MDT process holds, against a budget:
+ * ROCEPOOL_MDT_INLINE_BUDGET_MIB, default a fifth of the host's memory.
+ * Without one, IO500's mdtest-hard (3901-byte files, millions of them)
+ * grew an MDT past 50 GiB on a 92 GiB host (EFA run, 2026-10-24) and the
+ * run failed there. Beyond the budget new files start striped and an
+ * inline file that would grow answers INLINE_FULL -- the client then
+ * spills it to the OSTs, the path every file above the inline limit takes. */
+static _Atomic uint64_t g_inline_bytes;
+static uint64_t inline_budget(void) {
+    static uint64_t b = UINT64_MAX;
+    if (b == UINT64_MAX) {
+        const char *v = getenv("ROCEPOOL_MDT_INLINE_BUDGET_MIB");
+        const char *vb = getenv("ROCEPOOL_MDT_INLINE_BUDGET_BYTES");  /* tests */
+        if (vb && *vb) b = (uint64_t)atoll(vb);
+        else if (v && *v) b = (uint64_t)atoll(v) << 20;
+        else {
+            long pages = sysconf(_SC_PHYS_PAGES), psz = sysconf(_SC_PAGESIZE);
+            b = pages > 0 && psz > 0 ? (uint64_t)pages * (uint64_t)psz / 5 : (uint64_t)8 << 30;
+        }
+    }
+    return b;
+}
+static int inline_room(uint64_t more) { return atomic_load(&g_inline_bytes) + more <= inline_budget(); }
+
+/* resize the inline buffer to n bytes (zero-filling growth); 0 or -1
+ * (-2: over the MDT's inline budget) */
 static int inline_resize(md_entry *e, uint64_t n) {
+    if (n > e->size && !inline_room(n - e->size)) return -2;
     uint8_t *d = realloc(e->idata, n ? n : 1);
     if (!d) return -1;
+    if (n >= e->size) atomic_fetch_add(&g_inline_bytes, n - e->size);
+    else atomic_fetch_sub(&g_inline_bytes, e->size - n);
     if (n > e->size) memset(d + e->size, 0, n - e->size);
     e->idata = d;
     e->size = n;
@@ -1344,7 +1432,7 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         e->is_dir = is_dir ? 1 : 0;
         e->has_layout = has_layout ? 1 : 0;
         if (has_layout) { e->sc = rd_u32le(f->val + 4); e->ss = rd_u64le(f->val + 8); e->so = rd_u32le(f->val + 16); }
-        e->inl = !is_dir && inline_ok && inline_limit(e) > 0;
+        e->inl = !is_dir && inline_ok && inline_limit(e) > 0 && inline_room(inline_limit(e));
         e->mtime = e->ctime = now_s();
         e->next = *pp;
         *pp = e;
@@ -1365,7 +1453,9 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
              * attributes were stale -- tell it to redo the write inline */
             if (f->val[1] == 0) { out = frame_error(f, "INLINE", path, out_len); break; }
             if (want > inline_limit(e)) { out = frame_error(f, "INLINE_FULL", path, out_len); break; }
-            if (inline_resize(e, want)) { out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
+            int rr = inline_resize(e, want);
+            if (rr == -2) { out = frame_error(f, "INLINE_FULL", path, out_len); break; }
+            if (rr) { out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
             e->iver++;
         }
         e->size = want;
@@ -1382,6 +1472,7 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         *pp = e->next;
         bk->count--;
         out = entry_frame(f, e, out_len);
+        if (e->inl && e->idata) atomic_fetch_sub(&g_inline_bytes, e->size);
         free(e->idata);
         free(e->name);
         free(e);
@@ -1493,7 +1584,10 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
             out = inline_frame(f, e, 0, UINT64_MAX, out_len);
         } else if (op == 10) {
             if (e->inl && !e->frozen) { out = frame_error(f, "NOT_FROZEN", path, out_len); break; }
-            if (e->inl) { e->inl = 0; e->frozen = 0; free(e->idata); e->idata = NULL; }
+            if (e->inl) {
+                if (e->idata) atomic_fetch_sub(&g_inline_bytes, e->size);
+                e->inl = 0; e->frozen = 0; free(e->idata); e->idata = NULL;
+            }
             out = entry_frame(f, e, out_len);  /* idempotent: every helper may commit */
         } else {
             if (f->val_len < 9) { out = frame_error(f, "MDT_INTERNAL", "short write_inline", out_len); break; }
@@ -1501,7 +1595,9 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
             if (e->frozen) { out = frame_error(f, "FROZEN", path, out_len); break; }
             uint64_t off = rd_u64le(f->val + 1), n = f->val_len - 9, end = off + n;
             if (end > inline_limit(e) || end < off) { out = frame_error(f, "INLINE_FULL", path, out_len); break; }
-            if (end > e->size && inline_resize(e, end)) { out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
+            int rr = end > e->size ? inline_resize(e, end) : 0;
+            if (rr == -2) { out = frame_error(f, "INLINE_FULL", path, out_len); break; }
+            if (rr) { out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
             if (n) memcpy(e->idata + off, f->val + 9, n);
             e->iver++;
             e->mtime = now_s();
@@ -1600,13 +1696,14 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
     if (!rc && n->kind == ROCEPOOL_NATIVE_MDT) {
         rc = buf_printf(&b, ", \"lock_wait_ns\": %llu, \"lock_hold_ns\": %llu, \"lock_stripes\": %d, "
                         "\"table_slots\": %llu, \"table_registered\": %s, \"table_used\": %llu, \"slots_published\": %llu, "
-                        "\"slots_unpublished\": %llu, \"by_op\": {",
+                        "\"slots_unpublished\": %llu, \"inline_bytes\": %llu, \"inline_budget\": %llu, \"by_op\": {",
                         (unsigned long long)atomic_load(&n->mdt->lock_wait_ns),
                         (unsigned long long)atomic_load(&n->mdt->lock_hold_ns), MD_BUCKETS,
                         (unsigned long long)n->mdt->tab.nslots, n->mdt->tab.rkey_ok ? "true" : "false",
                         (unsigned long long)atomic_load(&n->mdt->tab.used),
                         (unsigned long long)atomic_load(&n->mdt->tab.published),
-                        (unsigned long long)atomic_load(&n->mdt->tab.unpublished));
+                        (unsigned long long)atomic_load(&n->mdt->tab.unpublished),
+                        (unsigned long long)atomic_load(&g_inline_bytes), (unsigned long long)inline_budget());
         int first = 1;
         for (int i = 0; i < 16 && !rc; i++) {
             unsigned long long c = atomic_load(&n->mdt->by_op[i]);

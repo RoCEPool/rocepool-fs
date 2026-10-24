@@ -71,6 +71,7 @@
 #include <string.h>
 #include <poll.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -1785,6 +1786,13 @@ static void *accept_loop(void *arg) {
 
 roce_server_t *roce_server_start(const char *bind_address, roce_request_handler handler,
                                   void *user_data, size_t max_frame_bytes) {
+    {   /* a descriptor per connection: soft open-file limit up to the hard one */
+        struct rlimit rl;
+        if (getrlimit(RLIMIT_NOFILE, &rl) == 0 && rl.rlim_cur < rl.rlim_max) {
+            rl.rlim_cur = rl.rlim_max == RLIM_INFINITY ? 1048576 : rl.rlim_max;
+            setrlimit(RLIMIT_NOFILE, &rl);
+        }
+    }
     struct roce_server *server = calloc(1, sizeof(*server));
     if (!server) { set_error("out of memory"); return NULL; }
     server->handler = handler;

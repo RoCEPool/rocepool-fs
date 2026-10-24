@@ -14,9 +14,9 @@
  * Shape (why it differs from the RC transport):
  *  - RDM endpoints are connectionless and EFA has few queue pairs per
  *    device, so endpoints are pooled, not per connection: a server owns K
- *    endpoints (ROCE_OFI_SERVER_EPS, default one per core up to 32), each
+ *    endpoints (ROCE_OFI_SERVER_EPS, default one per 4 cores, 2..16), each
  *    served by one pinned worker thread -- thread-per-core; a client
- *    process owns E endpoints per domain (ROCE_OFI_CLIENT_EPS, default 4)
+ *    process owns E endpoints per domain (ROCE_OFI_CLIENT_EPS, default 2)
  *    that its threads check out per request. A "connection" is a TCP
  *    socket to the server's port (the bootstrap: endpoint names are
  *    exchanged on it, and its EOF is the liveness signal rdma_cm events
@@ -62,6 +62,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
@@ -142,6 +143,7 @@ struct ofi_dom {
     int virt;                     /* FI_MR_VIRT_ADDR: remote addresses are virtual, else offsets */
     struct ofi_ep *ceps[MAX_CEPS];
     int nceps;
+    int ceps_cap;                 /* endpoint creation failed at this count (device out of QPs); 0 = none yet */
     struct ofi_ep *cfree;
     atomic_ullong gen;
 };
@@ -156,7 +158,20 @@ static const char *ofi_provider(void) {
     int efa = 0;
     if (d) {
         struct dirent *e;
-        while ((e = readdir(d))) if (!strncmp(e->d_name, "efa", 3)) efa = 1;
+        /* named efa* on older kernels, rdmap<bus>s<slot> on newer ones: the
+         * PCI driver tells */
+        while ((e = readdir(d))) {
+            if (!strncmp(e->d_name, "efa", 3)) efa = 1;
+            if (e->d_name[0] == '.') continue;
+            char path[512], tgt[512];
+            snprintf(path, sizeof(path), "/sys/class/infiniband/%s/device/driver", e->d_name);
+            ssize_t n = readlink(path, tgt, sizeof(tgt) - 1);
+            if (n > 0) {
+                tgt[n] = 0;
+                const char *b = strrchr(tgt, '/');
+                if (!strcmp(b ? b + 1 : tgt, "efa")) efa = 1;
+            }
+        }
         closedir(d);
     }
     return efa ? "efa" : "tcp";
@@ -182,6 +197,12 @@ static int local_ip_for(const char *host, char *out, size_t n) {
 /* the domain for local address `src_ip` (NULL: the provider's first) */
 static struct ofi_dom *dom_get(const char *src_ip) {
     const char *prov = ofi_provider();
+    /* EFA hands same-host peers to libfabric's shm provider, whose large
+     * messages and RMA reads stalled with our MR mode on c5n (2026-10-23:
+     * "unidentified operation type", requests timing out at 1 MiB). The
+     * EFA device serves same-host peers itself: use it unless asked not to.
+     * Read by libfabric when it first initialises the providers. */
+    if (!strcmp(prov, "efa")) setenv("FI_EFA_ENABLE_SHM_TRANSFER", "0", 0);
     struct fi_info *hints = fi_allocinfo();
     if (!hints) { set_error("fi_allocinfo failed"); return NULL; }
     hints->ep_attr->type = FI_EP_RDM;
@@ -695,7 +716,11 @@ static int ep_drain(struct ofi_ep *e) {
                 o->len = err.len;
                 o->done = 1;
                 if (o->kind == OP_SLOT) o->seq = ++e->arrivals;
-                set_error("completion error: %s (prov %d)", fi_strerror(o->err), err.prov_errno);
+                /* a receive we cancelled ourselves: keep the error that made us cancel it */
+                if (o->err != FI_ECANCELED)
+                    set_error("completion error: %s (prov %d%s%s)", fi_strerror(o->err), err.prov_errno,
+                              err.err_data_size ? ": " : "",
+                              err.err_data_size ? fi_cq_strerror(e->cq, err.prov_errno, err.err_data, NULL, 0) : "");
                 handled++;
             }
             continue;
@@ -708,14 +733,29 @@ static int ep_drain(struct ofi_ep *e) {
 /* Wait up to ms for completions on e (progressing it), watching `sock`
  * for EOF (the peer gone). 1 = something completed, 0 = timeout, -1 =
  * failure, -2 = the peer's socket closed. */
+/* why sock_dead() said so, for the error message */
+static __thread char tl_dead_why[96];
 static int sock_dead(int sock) {
     if (sock < 0) return 0;
     struct pollfd p = {.fd = sock, .events = POLLIN};
     if (poll(&p, 1, 0) <= 0) return 0;
-    if (p.revents & (POLLHUP | POLLERR | POLLNVAL)) return 1;
+    int soerr = 0;
+    socklen_t sl = sizeof(soerr);
+    if (p.revents & (POLLHUP | POLLERR | POLLNVAL)) {
+        getsockopt(sock, SOL_SOCKET, SO_ERROR, &soerr, &sl);
+        snprintf(tl_dead_why, sizeof(tl_dead_why), "socket %s%s%s%s%s", p.revents & POLLHUP ? "hangup" : "",
+                 p.revents & POLLERR ? " error" : "", p.revents & POLLNVAL ? " invalid" : "",
+                 soerr ? ": " : "", soerr ? strerror(soerr) : "");
+        return 1;
+    }
     char c;
     ssize_t r = recv(sock, &c, 1, MSG_PEEK | MSG_DONTWAIT);
-    return r == 0 || (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK);
+    if (r == 0) { snprintf(tl_dead_why, sizeof(tl_dead_why), "EOF from the server"); return 1; }
+    if (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+        snprintf(tl_dead_why, sizeof(tl_dead_why), "recv: %s", strerror(errno));
+        return 1;
+    }
+    return 0;
 }
 static int ep_wait(struct ofi_ep *e, int ms, int sock) {
     int h = ep_drain(e);
@@ -761,7 +801,7 @@ static int ep_wait_ops(struct ofi_ep *e, struct op **ops, int n, int timeout_ms,
         if (end >= 0 && left <= 0) { set_error("timed out waiting for completion"); return -3; }
         int w = ep_wait(e, (int)(left > 1000 ? 1000 : left), sock);
         if (w == -1) return -1;
-        if (w == -2) { set_error("peer closed the connection"); return -2; }
+        if (w == -2) { set_error("peer closed the connection (%s)", tl_dead_why); return -2; }
     }
 }
 
@@ -881,7 +921,7 @@ struct roce_conn {
 };
 
 static uint32_t client_eps(void) {
-    uint32_t n = env_u32("ROCE_OFI_CLIENT_EPS", 4);
+    uint32_t n = env_u32("ROCE_OFI_CLIENT_EPS", 2);
     return n > MAX_CEPS ? MAX_CEPS : n;
 }
 
@@ -895,12 +935,20 @@ static struct ofi_ep *ep_checkout(struct ofi_dom *d) {
             pthread_mutex_unlock(&d->lk);
             return e;
         }
-        if (d->nceps < (int)client_eps()) {
+        if (d->nceps < (int)client_eps() && (!d->ceps_cap || d->nceps < d->ceps_cap)) {
             int idx = d->nceps++;
             pthread_mutex_unlock(&d->lk);
             struct ofi_ep *e = ep_create(d, d->av);
             pthread_mutex_lock(&d->lk);
-            if (!e) { d->nceps--; pthread_mutex_unlock(&d->lk); return NULL; }
+            if (!e) {
+                d->nceps--;
+                /* the device has no queue pair left (EFA: a few hundred per
+                 * device, shared by every process on the host): wait for one
+                 * of the endpoints this process already has */
+                if (d->nceps > 0) { d->ceps_cap = d->nceps; pthread_cond_wait(&d->cv, &d->lk); continue; }
+                pthread_mutex_unlock(&d->lk);
+                return NULL;
+            }
             e->index = idx;
             e->gen = atomic_fetch_add(&d->gen, 1) + 1;
             d->ceps[idx] = e;
@@ -1138,7 +1186,7 @@ static void release_bulk(struct roce_conn *c, struct rbuf *b) {
 /* shared-pool request */
 static int shared_request(struct roce_conn *c, const void *head, size_t head_len, const roce_seg_t *segs, int nsegs,
                           roce_reply_t *reply, int timeout_ms) {
-    if (sock_dead(c->sock)) { set_error("peer closed the connection"); return ROCE_ERR_NOT_DELIVERED; }
+    if (sock_dead(c->sock)) { set_error("peer closed the connection (%s)", tl_dead_why); return ROCE_ERR_NOT_DELIVERED; }
     struct ofi_ep *e = ep_checkout(c->d);
     if (!e) return ROCE_ERR_NOT_DELIVERED;
     uint64_t rt;
@@ -1304,7 +1352,7 @@ int roce_client_stream_recv(roce_conn_t *c, uint8_t **data_out, size_t *len_out,
 /* one-sided reads: issued concurrently (RDM does not order them) */
 int roce_client_rdma_read(roce_conn_t *c, const roce_read_t *reads, int n, int timeout_ms) {
     if (n < 1 || n > 3) { set_error("roce_client_rdma_read: 1..3 ranges"); return -1; }
-    if (sock_dead(c->sock)) { set_error("peer closed the connection"); return ROCE_ERR_NOT_DELIVERED; }
+    if (sock_dead(c->sock)) { set_error("peer closed the connection (%s)", tl_dead_why); return ROCE_ERR_NOT_DELIVERED; }
     struct ofi_ep *e = c->dedicated ? c->own : ep_checkout(c->d);
     if (!e) return ROCE_ERR_NOT_DELIVERED;
     struct op ops[3];
@@ -1334,7 +1382,19 @@ int roce_client_rdma_read(roce_conn_t *c, const roce_read_t *reads, int n, int t
 }
 
 /* ------------------------------------------------------- server side */
-struct name_ent { uint8_t name[256]; size_t len; fi_addr_t addr; int refs; };
+/* A client endpoint's AV entry is kept after its last connection closes
+ * (refs 0, dormant) and revived when the same endpoint connects again:
+ * EFA keeps per-peer message ordering state, and removing a live client
+ * endpoint and re-inserting it reset the server's side only -- the next
+ * packet aborted the process ("EFA internal error: Packet already
+ * processed", 2026-10-23, both OSTs in the first IO500 on EFA). A new
+ * client endpoint has a new name (EFA names carry a per-QP qkey). */
+struct name_ent { uint8_t name[256]; size_t len; fi_addr_t addr; int refs; int valid; long dormant_since; };
+/* Dormant entries are evicted oldest first -- by then their client process
+ * has normally exited -- when there are more than ROCE_OFI_DORMANT_MAX
+ * (default 4096) or the AV refuses an insert. Kept forever they filled
+ * the AV within an IO500 run (every rank of every phase has new endpoints)
+ * and new clients were refused: "peer closed the connection", 2026-10-23. */
 /* Per server-AV index: a client endpoint that went away must not be
  * replied to or read from by a worker still holding one of its requests,
  * and its index, once removed, may be handed to a new client. So: the
@@ -1362,6 +1422,7 @@ struct roce_server {
     size_t nae;
     struct name_ent *names;
     int nnames, cnames;
+    int ndormant;
     struct worker *w;
     int nw;
     int lsock;
@@ -1572,17 +1633,52 @@ static int bind_listen(const char *bind_address, char *bound, size_t bn) {
     return s;
 }
 
+/* remove the longest-dormant client endpoint from the AV (once no worker
+ * holds one of its requests); 0 = one evicted */
+static int evict_oldest_dormant(struct roce_server *s) {
+    int v = -1;
+    for (int i = 0; i < s->nnames; i++)
+        if (s->names[i].valid && s->names[i].refs == 0 &&
+            (v < 0 || s->names[i].dormant_since < s->names[v].dormant_since)) v = i;
+    if (v < 0) return -1;
+    fi_addr_t a = s->names[v].addr;
+    pthread_mutex_lock(&s->av_lk);
+    struct aent *x = &s->ae[a];
+    x->live = 0;
+    x->owed++;
+    if (!x->busy) for (; x->owed; x->owed--) fi_av_remove(s->av, &a, 1, 0);
+    pthread_mutex_unlock(&s->av_lk);
+    s->names[v].valid = 0;
+    s->ndormant--;
+    return 0;
+}
+
 /* insert (or reference) a client endpoint name in the server AV */
 static int name_ref(struct roce_server *s, const uint8_t *name, size_t len, fi_addr_t *out) {
     for (int i = 0; i < s->nnames; i++)
-        if (s->names[i].refs > 0 && s->names[i].len == len && !memcmp(s->names[i].name, name, len)) {
-            s->names[i].refs++;
+        if (s->names[i].valid && s->names[i].len == len && !memcmp(s->names[i].name, name, len)) {
+            if (s->names[i].refs++ == 0) {  /* dormant: live again, in a new epoch */
+                s->ndormant--;
+                pthread_mutex_lock(&s->av_lk);
+                s->ae[s->names[i].addr].epoch++;
+                s->ae[s->names[i].addr].live = 1;
+                pthread_mutex_unlock(&s->av_lk);
+            }
             *out = s->names[i].addr;
             return 0;
         }
+    static int dormant_max = -1;
+    if (dormant_max < 0) dormant_max = (int)env_u32("ROCE_OFI_DORMANT_MAX", 4096);
+    while (s->ndormant > dormant_max && evict_oldest_dormant(s) == 0) {}
     fi_addr_t a;
     pthread_mutex_lock(&s->av_lk);
     int rc = fi_av_insert(s->av, name, 1, &a, 0, NULL);
+    for (int tries = 0; rc != 1 && tries < 64 && s->ndormant > 0; tries++) {  /* AV full: make room */
+        pthread_mutex_unlock(&s->av_lk);
+        if (evict_oldest_dormant(s)) { pthread_mutex_lock(&s->av_lk); break; }
+        pthread_mutex_lock(&s->av_lk);
+        rc = fi_av_insert(s->av, name, 1, &a, 0, NULL);
+    }
     if (rc == 1 && a >= s->nae) {
         size_t nn = s->nae ? s->nae : 256;
         while (nn <= a) nn *= 2;
@@ -1596,7 +1692,7 @@ static int name_ref(struct roce_server *s, const uint8_t *name, size_t len, fi_a
     pthread_mutex_unlock(&s->av_lk);
     if (rc != 1) { set_error("fi_av_insert(client): %d", rc); return -1; }
     int slot = -1;
-    for (int i = 0; i < s->nnames; i++) if (s->names[i].refs == 0) { slot = i; break; }
+    for (int i = 0; i < s->nnames; i++) if (!s->names[i].valid) { slot = i; break; }
     if (slot < 0) {
         if (s->nnames == s->cnames) {
             int nc = s->cnames ? s->cnames * 2 : 64;
@@ -1611,18 +1707,20 @@ static int name_ref(struct roce_server *s, const uint8_t *name, size_t len, fi_a
     s->names[slot].len = len;
     s->names[slot].addr = a;
     s->names[slot].refs = 1;
+    s->names[slot].valid = 1;
     *out = a;
     return 0;
 }
 static void name_unref(struct roce_server *s, fi_addr_t a) {
     for (int i = 0; i < s->nnames; i++)
-        if (s->names[i].refs > 0 && s->names[i].addr == a) {
+        if (s->names[i].valid && s->names[i].refs > 0 && s->names[i].addr == a) {
             if (--s->names[i].refs == 0) {
+                /* dormant: no more requests admitted, the AV entry (and EFA's
+                 * per-peer state) kept for the endpoint's next connection */
+                s->names[i].dormant_since = now_ms();
+                s->ndormant++;
                 pthread_mutex_lock(&s->av_lk);
-                struct aent *x = &s->ae[a];
-                x->live = 0;
-                x->owed++;
-                if (!x->busy) for (; x->owed; x->owed--) fi_av_remove(s->av, &a, 1, 0);
+                s->ae[a].live = 0;
                 pthread_mutex_unlock(&s->av_lk);
             }
             return;
@@ -1675,12 +1773,29 @@ static void drop_conn(struct roce_server *s, int i) {
 static void *boot_main(void *arg) {
     struct roce_server *s = arg;
     pthread_setname_np(pthread_self(), "rt-ofi-boot");
-    uint32_t max_conns = env_u32("ROCE_SERVER_MAX_CONNS", 4096);
+    /* every bootstrap connection is a descriptor: as many as the process
+     * may open (raised to its hard limit), less a margin for the rest */
+    struct rlimit rl;
+    uint32_t fds = 4096;
+    if (getrlimit(RLIMIT_NOFILE, &rl) == 0 && rl.rlim_cur != RLIM_INFINITY)
+        fds = rl.rlim_cur > 1024 + 256 ? (uint32_t)(rl.rlim_cur - 256) : 768;
+    uint32_t max_conns = env_u32("ROCE_SERVER_MAX_CONNS", fds > 65536 ? 65536 : fds);
+    int full_said = 0;
     while (!atomic_load(&s->stopping)) {
         int n = s->nconns;
         struct pollfd *pf = calloc((size_t)n + 1, sizeof(*pf));
         if (!pf) break;
-        pf[0].fd = s->lsock;
+        /* at the limit, stop accepting: new clients wait in the listen
+         * backlog (as with the RC transport's gate) instead of being closed
+         * -- closing them failed IO500's mdtest-hard with "peer closed the
+         * connection" on EFA, 2026-10-23 */
+        int full = (uint32_t)n >= max_conns;
+        if (full && !full_said) {
+            fprintf(stderr, "ofi_transport: %s: %u bootstrap connections (ROCE_SERVER_MAX_CONNS): new clients wait\n",
+                    s->bound, max_conns);
+            full_said = 1;
+        }
+        pf[0].fd = full ? -1 : s->lsock;
         pf[0].events = POLLIN;
         for (int i = 0; i < n; i++) { pf[i + 1].fd = s->conns[i].sock; pf[i + 1].events = POLLIN; }
         int pr = poll(pf, (nfds_t)n + 1, 100);
@@ -1689,15 +1804,36 @@ static void *boot_main(void *arg) {
                 if (!pf[i + 1].revents) continue;
                 char c;
                 ssize_t r = recv(s->conns[i].sock, &c, 1, MSG_PEEK | MSG_DONTWAIT);
-                if (r <= 0 || boot_message(s, &s->conns[i])) drop_conn(s, i);
+                /* EOF or a real error: the client is gone; a spurious wake-up
+                 * (EAGAIN) is not a reason to drop a live client */
+                if (r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) continue;
+                if (r < 0 || (pf[i + 1].revents & (POLLERR | POLLNVAL))) {
+                    static atomic_int said_err;
+                    if (atomic_fetch_add(&said_err, 1) < 20)
+                        fprintf(stderr, "ofi_transport: %s: client connection dropped: %s (revents 0x%x)\n", s->bound,
+                                r < 0 ? strerror(errno) : "socket error", pf[i + 1].revents);
+                }
+                if (r <= 0) { drop_conn(s, i); continue; }
+                if (boot_message(s, &s->conns[i])) {
+                    static atomic_int said;
+                    if (atomic_fetch_add(&said, 1) < 20)
+                        fprintf(stderr, "ofi_transport: %s: bootstrap from a client failed (%s): its connection is "
+                                "closed\n", s->bound, roce_last_error());
+                    drop_conn(s, i);
+                }
             }
             if (pf[0].revents & POLLIN) {
                 int cs = accept4(s->lsock, NULL, NULL, SOCK_CLOEXEC);
+                if (cs < 0 && (errno == EMFILE || errno == ENFILE)) {
+                    static int said;
+                    if (!said++) fprintf(stderr, "ofi_transport: %s: accept: %s (open-file limit): clients wait\n",
+                                         s->bound, strerror(errno));
+                    usleep(10000);
+                }
                 if (cs >= 0) {
                     int one = 1;
                     setsockopt(cs, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
-                    if ((uint32_t)s->nconns >= max_conns) { close(cs); }
-                    else {
+                    {
                         if (s->nconns == s->cconns) {
                             int nc = s->cconns ? s->cconns * 2 : 64;
                             struct sconn *ncs = realloc(s->conns, (size_t)nc * sizeof(*ncs));
@@ -1714,8 +1850,19 @@ static void *boot_main(void *arg) {
     return NULL;
 }
 
+/* a server holds a descriptor per client connection: the soft open-file
+ * limit (1024 under ssh) is raised to the hard one */
+static void raise_nofile(void) {
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_NOFILE, &rl) == 0 && rl.rlim_cur < rl.rlim_max) {
+        rl.rlim_cur = rl.rlim_max == RLIM_INFINITY ? 1048576 : rl.rlim_max;
+        setrlimit(RLIMIT_NOFILE, &rl);
+    }
+}
+
 roce_server_t *roce_server_start(const char *bind_address, roce_request_handler handler, void *user_data,
                                  size_t max_frame_bytes) {
+    raise_nofile();
     struct roce_server *s = calloc(1, sizeof(*s));
     if (!s) { set_error("out of memory"); return NULL; }
     s->handler = handler;
@@ -1729,7 +1876,7 @@ roce_server_t *roce_server_start(const char *bind_address, roce_request_handler 
     const char *src_ip = strcmp(host, "0.0.0.0") ? host : (local_ip_for("8.8.8.8", src, sizeof(src)) ? NULL : src);
     s->d = dom_get(src_ip);
     if (!s->d) goto fail;
-    struct fi_av_attr av_attr = {.type = FI_AV_TABLE};
+    struct fi_av_attr av_attr = {.type = FI_AV_TABLE, .count = env_u32("ROCE_OFI_AV_SIZE", 16384)};
     int rc = fi_av_open(s->d->domain, &av_attr, &s->av, NULL);
     if (rc) { set_fi_error("fi_av_open", rc); goto fail; }
     s->lsock = bind_listen(bind_address, s->bound, sizeof(s->bound));
@@ -1737,7 +1884,10 @@ roce_server_t *roce_server_start(const char *bind_address, roce_request_handler 
     long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
     cpu_set_t allowed;
     if (sched_getaffinity(0, sizeof(allowed), &allowed) == 0) ncpu = CPU_COUNT(&allowed);
-    uint32_t k = env_u32("ROCE_OFI_SERVER_EPS", ncpu < 2 ? 2 : (ncpu > 32 ? 32 : (uint32_t)ncpu));
+    /* one endpoint (= one queue pair, one worker thread) per 4 cores, 2..16:
+     * EFA has a few hundred QPs per device for ALL processes on the host
+     * (several servers + every client rank), so one per core ran out */
+    uint32_t k = env_u32("ROCE_OFI_SERVER_EPS", ncpu < 8 ? 2 : (ncpu > 64 ? 16 : (uint32_t)(ncpu / 4)));
     uint32_t depth = env_u32("ROCE_OFI_RX_DEPTH", RX_DEPTH_DEFAULT);
     s->w = calloc(k, sizeof(*s->w));
     if (!s->w) goto fail;
@@ -1748,7 +1898,16 @@ roce_server_t *roce_server_start(const char *bind_address, roce_request_handler 
         w->s = s;
         w->pool = pool;
         w->e = ep_create(s->d, s->av);
-        if (!w->e) goto fail;
+        if (!w->e) {
+            /* out of queue pairs (EFA: shared by every process on the host):
+             * serve with the endpoints we have rather than not at all */
+            if (s->nw > 0) {
+                fprintf(stderr, "ofi_transport: %s: %u of %u endpoints (%s): serving with those\n", bind_address,
+                        s->nw, k, roce_last_error());
+                break;
+            }
+            goto fail;
+        }
         s->nw++;
         struct ofi_ep *e = w->e;
         e->nslots = (int)depth;

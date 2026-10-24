@@ -35,8 +35,14 @@ on:
       budget_usd:
         description: refuse to start if nodes x price x max_hours exceeds this
         default: "30"
+      disk_gib:
+        description: "system disk per instance (GiB): the OSTs' capacity tier lives on it"
+        default: "400"
       terminate_ids:
         description: "instances to terminate in the region, e.g. ones started by hand: IDs or name:<Name tag>, space separated; empty = none"
+        default: ""
+      command:
+        description: "diagnosis: a shell command run on the head (in the tree; HEAD_IP, PEER_IPS set) instead of run.sh"
         default: ""
       request_vcpus:
         description: "ask AWS to raise the on-demand standard vCPU quota (L-1216C47A) in the region to this; empty = don't"
@@ -84,7 +90,7 @@ jobs:
                   price = float(next(iter(next(iter(p["terms"]["OnDemand"].values()))["priceDimensions"].values()))["pricePerUnit"]["USD"])
               except Exception:
                   print(f"::error title=unknown price::no price for {t}: add it to the table in aws-test.yml"); sys.exit(1)
-          worst = n * price * h + n * 200 * 0.08 / 730 * h
+          worst = n * price * h + n * float("${{ inputs.disk_gib }}") * 0.08 / 730 * h
           print(f"{n} x {t} at ${price}/h: ceiling ${worst:.2f} for {h} h (budget ${budget})")
           if worst > budget:
               print(f"::error title=over budget::{n} x {t} for {h} h may cost ${worst:.2f} > ${budget}"); sys.exit(1)
@@ -153,12 +159,15 @@ jobs:
           else echo "::error title=quota request failed::$(echo "$out" | tr '\n' ' ' | cut -c1-500)"; exit 1; fi
       - name: run on AWS
         if: ${{ !inputs.probe_only }}
+        env:
+          CMD: ${{ inputs.command }}
         run: |
           set -o pipefail
           rc=0
           python3 -u tools/aws_cluster.py run --run-id "$RUN_ID" --region "${{ inputs.region }}" \
             --mode "${{ inputs.mode }}" --type "${{ inputs.type }}" --nodes "${{ inputs.nodes }}" \
-            --max-hours "${{ inputs.max_hours }}" ${{ inputs.quick && '--quick' || '' }} 2>&1 | tee aws_run.log || rc=$?
+            --max-hours "${{ inputs.max_hours }}" --disk-gib "${{ inputs.disk_gib }}" ${{ inputs.quick && '--quick' || '' }} \
+            ${CMD:+--command "$CMD"} 2>&1 | tee aws_run.log || rc=$?
           # the progress lines and the outcome, as annotations (readable without the raw log)
           echo "::notice title=aws::$(grep -E '^\[aws ' aws_run.log | tail -25 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
           if [ $rc -ne 0 ]; then

@@ -44,6 +44,7 @@
 #include <limits.h>
 #include <pthread.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -429,6 +430,12 @@ int close(int fd) {
         free(f);
     }
     real_close(fd);
+    if (rc < 0) {  /* a program sees only "close failed": say why, a few times per process */
+        static _Atomic int said;
+        if (atomic_fetch_add(&said, 1) < 5)
+            fprintf(stderr, "rocepool_intercept[%d]: close(%d): flushing the file failed: %s (%d)\n", (int)getpid(), fd,
+                    rc <= -4096 ? "client error" : strerror(-rc), rc);
+    }
     return seterr(rc);
 }
 
