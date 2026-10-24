@@ -63,6 +63,8 @@ class AwsClusterTests(unittest.TestCase):
         self.assertEqual(run[run.index("--instance-initiated-shutdown-behavior") + 1], "terminate")
         self.assertIn("shutdown -h +360", run[run.index("--user-data") + 1])
         self.assertEqual(json.loads(run[run.index("--placement") + 1])["GroupName"], "rp-test")
+        ebs = json.loads(run[run.index("--block-device-mappings") + 1])[0]["Ebs"]
+        self.assertEqual((ebs["VolumeType"], ebs["Throughput"], ebs["Iops"]), ("gp3", 1000, 16000))
         # security group: all traffic among members, SSH only from here
         ing = self.aws_calls("ec2", "authorize-security-group-ingress")
         self.assertEqual(json.loads(ing[0][ing[0].index("--ip-permissions") + 1])[0]["UserIdGroupPairs"],
