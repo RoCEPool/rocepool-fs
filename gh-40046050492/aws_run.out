@@ -1,0 +1,45 @@
+build=0
+[build] transport backend: ofi
+[build] using libfabric at /opt/amazon/efa
+peer-build=0
+[build] transport backend: ofi
+rank 0: created 557162, errors 0 []
+rank 1: created 556348, errors 0 []
+rank 2: created 564907, errors 0 []
+rank 3: created 562993, errors 0 []
+rank 4: created 554163, errors 0 []
+rank 5: created 564857, errors 0 []
+rank 6: created 566785, errors 0 []
+rank 7: created 550393, errors 0 []
+rank 8: created 562053, errors 0 []
+rank 9: created 564374, errors 0 []
+rank 10: created 557211, errors 0 []
+rank 11: created 563904, errors 0 []
+rank 12: created 566662, errors 0 []
+rank 13: created 565617, errors 0 []
+rank 14: created 562604, errors 0 []
+(no result, exit 255)
+    kex_exchange_identification: read: Connection reset by peer
+rank 16: created 564369, errors 0 []
+(no result, exit 255)
+    kex_exchange_identification: read: Connection reset by peer
+(no result, exit 255)
+    kex_exchange_identification: read: Connection reset by peer
+rank 19: created 557724, errors 0 []
+rank 20: created 564622, errors 0 []
+(no result, exit 255)
+    kex_exchange_identification: read: Connection reset by peer
+rank 22: created 558315, errors 0 []
+rank 23: created 565505, errors 0 []
+rank 24: created 558316, errors 0 []
+rank 25: created 558369, errors 0 []
+rank 26: created 556993, errors 0 []
+rank 27: created 565203, errors 0 []
+rank 28: created 563901, errors 0 []
+rank 29: created 559360, errors 0 []
+(no result, exit 255)
+    kex_exchange_identification: read: Connection reset by peer
+rank 31: created 561569, errors 0 []
+TOTAL created 15154279, errors 0, wall 423s
+servers' stderr (last 3000 chars):
+

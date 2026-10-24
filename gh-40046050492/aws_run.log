@@ -1,0 +1,20 @@
+[aws 00:40:00] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 00:40:00] 2 x c5n.9xlarge: 36 vCPU, 96 GiB, 50 Gigabit, NVMe 0 GB, EFA yes
+[aws 00:40:01] vCPU quota 96 >= 72 needed (instances already running count against it too)
+[aws 00:40:11] launched i-07d7a6444aacfef42, i-0c530f42553733587
+[aws 00:40:28] running: 77.114.30.45 (172.31.5.10), 3.145.178.199 (172.31.0.235)
+[aws 00:42:51] 77.114.30.45: ready (efa)
+[aws 00:43:00] 3.145.178.199: ready (efa)
+[aws 00:43:07] command started on 77.114.30.45 (2 hosts); following its progress
+  | [build] transport backend: ofi
+  | [build] using libfabric at /opt/amazon/efa
+  | [build] transport backend: ofi
+  |     kex_exchange_identification: read: Connection reset by peer
+  |     kex_exchange_identification: read: Connection reset by peer
+  |     kex_exchange_identification: read: Connection reset by peer
+  |     kex_exchange_identification: read: Connection reset by peer
+  |     kex_exchange_identification: read: Connection reset by peer
+[aws 00:51:13] reports in aws_runs/gh-40046050492/: aws_run.out
+[aws 00:51:13] run.sh exit code 0
+[aws 00:51:15] terminating i-07d7a6444aacfef42, i-0c530f42553733587
+[aws 00:51:49] all resources released
