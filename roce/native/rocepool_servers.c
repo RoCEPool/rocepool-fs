@@ -175,7 +175,9 @@ static int buf_put(buf_t *b, const void *d, size_t n) {
 }
 static int buf_printf(buf_t *b, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 static int buf_printf(buf_t *b, const char *fmt, ...) {
-    char tmp[256];
+    /* 256 bytes truncated the MDT's stats line once its counters grew
+     * (after ~16 M creates): STATS then failed ("could not handle") */
+    char tmp[2048];
     va_list ap;
     va_start(ap, fmt);
     int n = vsnprintf(tmp, sizeof(tmp), fmt, ap);
@@ -1284,7 +1286,9 @@ static uint64_t inline_budget(void) {
     static uint64_t b = UINT64_MAX;
     if (b == UINT64_MAX) {
         const char *v = getenv("ROCEPOOL_MDT_INLINE_BUDGET_MIB");
-        if (v && *v) b = (uint64_t)atoll(v) << 20;
+        const char *vb = getenv("ROCEPOOL_MDT_INLINE_BUDGET_BYTES");  /* tests */
+        if (vb && *vb) b = (uint64_t)atoll(vb);
+        else if (v && *v) b = (uint64_t)atoll(v) << 20;
         else {
             long pages = sysconf(_SC_PHYS_PAGES), psz = sysconf(_SC_PAGESIZE);
             b = pages > 0 && psz > 0 ? (uint64_t)pages * (uint64_t)psz / 5 : (uint64_t)8 << 30;

@@ -149,6 +149,10 @@ static int mdt_errno(const char *code) {
     if (!strcmp(code, "INLINE_FULL")) return E_INLINE_FULL;
     if (!strcmp(code, "FROZEN")) return E_FROZEN;
     if (!strcmp(code, "INLINE")) return E_INLINE;
+    {   /* anything else is an I/O error to the program: say which, a few times */
+        static _Atomic int said;
+        if (atomic_fetch_add(&said, 1) < 5) fprintf(stderr, "rocepool: MDT error %s\n", code);
+    }
     return -EIO;
 }
 
