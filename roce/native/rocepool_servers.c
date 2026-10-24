@@ -223,7 +223,10 @@ typedef struct { atomic_ullong seq; uint64_t keyhash; uint64_t size; uint64_t pa
 #define OBJ_TAIL 8
 #define ARENA_CHUNK (64u << 20)
 #define ARENA_CLASSES 7
-static const size_t ARENA_DATA[ARENA_CLASSES] = {4u << 10, 16u << 10, 64u << 10, 256u << 10, 1u << 20, 4u << 20, 16u << 20};
+/* class 0 is one page with its header and tail (4096 bytes of data needed
+ * two pages: 3901-byte mdtest-hard files took 8 KiB each) */
+static const size_t ARENA_DATA[ARENA_CLASSES] = {4096 - OBJ_HDR - OBJ_TAIL, 16u << 10, 64u << 10, 256u << 10, 1u << 20,
+                                                 4u << 20, 16u << 20};
 
 typedef struct arena_chunk {
     struct arena_chunk *next;
@@ -254,6 +257,10 @@ static uint32_t arena_class(size_t size) {
 static inline obj_hdr_t *obj_hdr(const uint8_t *data) { return (obj_hdr_t *)(data - OBJ_HDR); }
 static inline uint64_t *obj_tail(uint8_t *data, size_t size) { return (uint64_t *)(data + size); }
 
+/* the memory a RAM copy of capacity cap really holds (its whole slab):
+ * what the RAM cache's budget counts */
+static size_t cap_mem(size_t cap) { uint32_t c = arena_class(cap); return c == UINT32_MAX ? cap : arena_slab_bytes(c); }
+
 static void arena_init(obj_arena_t *a) { memset(a, 0, sizeof(*a)); pthread_mutex_init(&a->lock, NULL); }
 
 /* caller holds a->lock */
@@ -280,6 +287,34 @@ static uint8_t *arena_alloc(obj_arena_t *a, size_t size, uint64_t keyhash, size_
     size_t slab = arena_slab_bytes(cls);
     uint8_t *p = NULL;
     pthread_mutex_lock(&a->lock);
+    if (!a->nfree[cls]) {
+        /* none free in this class: carve a free slab of a larger class
+         * (IOR's evicted 1 MiB copies) into this class's slabs before growing
+         * the arena -- free slabs never moved between classes, and an OST
+         * whose cache turned from large objects to small ones grew past
+         * its budget until the kernel killed it (EFA run, 2026-10-24).
+         * Every piece's header is marked free (odd seq, no keyhash): a stale
+         * lease on the old object reads its old header, now a free piece's */
+        for (uint32_t big = cls + 1; big < ARENA_CLASSES && !a->nfree[cls]; big++) {
+            if (!a->nfree[big]) continue;
+            uint8_t *b = a->free[big][--a->nfree[big]];
+            size_t n = arena_slab_bytes(big) / slab;
+            if (a->cfree[cls] < a->nfree[cls] + n) {
+                size_t nc = a->cfree[cls] ? a->cfree[cls] : 256;
+                while (nc < a->nfree[cls] + n) nc *= 2;
+                uint8_t **nf = realloc(a->free[cls], nc * sizeof(*nf));
+                if (!nf) { a->free[big][a->nfree[big]++] = b; break; }
+                a->free[cls] = nf;
+                a->cfree[cls] = nc;
+            }
+            for (size_t i = n; i-- > 0;) {
+                obj_hdr_t *ph = (obj_hdr_t *)(b + i * slab);
+                atomic_store(&ph->seq, 1);
+                ph->keyhash = 0;
+                a->free[cls][a->nfree[cls]++] = (uint8_t *)ph;
+            }
+        }
+    }
     if (a->nfree[cls]) p = a->free[cls][--a->nfree[cls]];
     else {
         if (!a->chunks || a->chunks->used + slab > a->chunks->len) {
@@ -468,7 +503,7 @@ static void ost_evict(ost_store *s) {
         lru_unlink(s, e);
         pthread_mutex_unlock(&s->lru_lock);
         if (e->data && e->on_tier) {
-            atomic_fetch_sub(&s->ram_bytes, e->data_cap);
+            atomic_fetch_sub(&s->ram_bytes, cap_mem(e->data_cap));
             ent_free_data(s, e->data, e->data_cap);
             e->data = NULL;
             e->data_cap = 0;
@@ -492,7 +527,7 @@ static int ent_resident(ost_store *s, kv_entry *e) {
     obj_publish(&s->arena, d, e->size);
     e->data = d;
     e->data_cap = cap;
-    atomic_fetch_add(&s->ram_bytes, cap);
+    atomic_fetch_add(&s->ram_bytes, cap_mem(cap));
     lru_touch(s, e);
     return 0;
 }
@@ -534,7 +569,7 @@ static void ent_destroy(ost_store *s, kv_entry *e) {  /* unlinked from its strip
     if (s->tier) {
         lru_drop(s, e);
         if (e->on_tier) ost_tier_free(s->tier, &e->ext);
-        if (e->data) atomic_fetch_sub(&s->ram_bytes, e->data_cap);
+        if (e->data) atomic_fetch_sub(&s->ram_bytes, cap_mem(e->data_cap));
     }
     ent_free_data(s, e->data, e->data_cap);
     free(e->key);
@@ -650,8 +685,8 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
                                  : ost_tier_write(s->tier, &e->ext, 0, data, dlen);
             if (!rc && moved) ost_tier_free(s->tier, &oldext);
             if (!rc && direct) atomic_fetch_add(&s->direct_writes, 1);
-            if (old) atomic_fetch_sub(&s->ram_bytes, old_cap);
-            if (data) { atomic_fetch_add(&s->ram_bytes, cap); lru_touch(s, e); } else lru_drop(s, e);
+            if (old) atomic_fetch_sub(&s->ram_bytes, cap_mem(old_cap));
+            if (data) { atomic_fetch_add(&s->ram_bytes, cap_mem(cap)); lru_touch(s, e); } else lru_drop(s, e);
         }
         uint64_t version = e->version;
         pthread_mutex_unlock(&st->lock);
@@ -800,11 +835,11 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
                 if (!nd) rc = -ENOMEM;
                 else {
                     if (e->data) memcpy(nd, e->data, old_size);
-                    if (s->tier && e->data) atomic_fetch_sub(&s->ram_bytes, e->data_cap);
+                    if (s->tier && e->data) atomic_fetch_sub(&s->ram_bytes, cap_mem(e->data_cap));
                     ent_free_data(s, e->data, e->data_cap);
                     e->data = nd; e->data_cap = cap;
                     fresh = 1;
-                    if (s->tier) atomic_fetch_add(&s->ram_bytes, cap);
+                    if (s->tier) atomic_fetch_add(&s->ram_bytes, cap_mem(cap));
                 }
             }
             if (!rc) {

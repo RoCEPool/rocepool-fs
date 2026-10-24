@@ -37,9 +37,10 @@ class _Cluster(unittest.TestCase):
         cls.lib = ensure_softverbs_lib()
         cls.icp = ensure_intercept_lib()
         cls.tmp = tempfile.mkdtemp()
-        # a tier with a 2 MiB RAM cache per OST: objects get evicted
+        # a tier with a 3 MiB RAM cache per OST (two 1 MiB stripes and their
+        # slab headers fit; more get evicted)
         cls.env = dict(os.environ, ROCE_TRANSPORT_LIB=cls.lib, PYTHONPATH=ROOT,
-                       ROCEPOOL_OST_TIER=f"file:{cls.tmp}/tier{{n}}:1", ROCEPOOL_OST_RAM_CACHE_MIB="2",
+                       ROCEPOOL_OST_TIER=f"file:{cls.tmp}/tier{{n}}:1", ROCEPOOL_OST_RAM_CACHE_MIB="3",
                        **cls.extra_env)
         cls.srv = subprocess.Popen([sys.executable, "-u", os.path.join(ROOT, "tests", "fakes", "native_cluster.py"),
                                     ROOT, str(cls.port), "1", "2"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
