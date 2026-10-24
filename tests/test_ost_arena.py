@@ -27,7 +27,11 @@ for i in range(60): e.put(f"big{i}", bytes([i]) * (1 << 20))
 a = st()
 for i in range(20000): e.put(f"small{i}", bytes([i % 251]) * 3901)
 b = st()
-ok = all(e.get(f"small{i}") == bytes([i % 251]) * 3901 for i in range(0, 20000, 997)) and e.get("big7") == bytes([7]) * (1 << 20)
+# the other way round: reads of the 1 MiB objects (now evicted) evict
+# hundreds of small copies each, all within the budget
+for i in range(60): assert e.get(f"big{i}") == bytes([i]) * (1 << 20)
+c = st()
+ok = c["ram_cache_bytes"] <= c["ram_cache_budget"] and all(e.get(f"small{i}") == bytes([i % 251]) * 3901 for i in range(0, 20000, 997)) and e.get("big7") == bytes([7]) * (1 << 20)
 print("RESULT " + json.dumps({"big": a["arena_bytes"], "small": b["arena_bytes"], "cache": b["ram_cache_bytes"], "ok": ok}))
 '''
 

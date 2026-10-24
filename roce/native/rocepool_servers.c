@@ -484,13 +484,19 @@ static void lru_drop(ost_store *s, kv_entry *e) {
  * always clean. */
 static void ost_evict(ost_store *s) {
     if (!s->tier) return;
-    int attempts = 64;
-    while (atomic_load(&s->ram_bytes) > s->ram_budget && attempts-- > 0) {
+    /* until within budget: only busy entries count against the attempts --
+     * a fixed 64 evictions per call fell behind when 4 KiB copies (mdtest-
+     * hard's files) made way for 1 MiB ones (ior-easy-read): ~250 to free
+     * per read, the cache grew to 28 of 19 GiB and the host ran out
+     * (EFA run, 2026-10-24) */
+    int attempts = 256;
+    while (atomic_load(&s->ram_bytes) > s->ram_budget && attempts > 0) {
         pthread_mutex_lock(&s->lru_lock);
         kv_entry *e = s->lru_tail;
         if (!e) { pthread_mutex_unlock(&s->lru_lock); return; }
         kv_stripe *st = ost_stripe(s, e->hash);
         if (pthread_mutex_trylock(&st->lock)) {
+            attempts--;
             /* busy: rotate it to the head so the next candidate differs */
             lru_unlink(s, e);
             e->lru_next = s->lru_head;
