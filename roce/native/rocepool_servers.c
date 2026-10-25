@@ -410,6 +410,12 @@ typedef struct {
     atomic_ullong ram_bytes, direct_writes, tier_reads, evictions;
     atomic_ullong tier_bytes_written;  /* all writes to the tier: over bytes stored = write amplification */
     atomic_ullong writebacks;          /* dirty RAM copies written to the tier on eviction */
+    /* background eviction: requests only wake it while the cache is
+     * between its budget and the hard limit above it (budget + 1/8) */
+    pthread_mutex_t ev_lk;
+    pthread_cond_t ev_cv;
+    int ev_started;
+    atomic_ullong inline_evictions;    /* requests that had to evict themselves (past the hard limit) */
     atomic_int writeback_failed;       /* a write-back failed (tier full?): WRITE_AT writes through again */
     obj_arena_t arena;              /* every RAM copy: registered, one-sided readable */
     roce_server_t *server;          /* for the arena chunks' rkeys (set once the server runs) */
@@ -420,6 +426,7 @@ typedef struct {
 
 static void arena_tier_notify(void *base, size_t len, void *user) { ost_tier_notify_chunk(user, base, len); }
 
+static void *ost_evictor(void *arg);
 static ost_store *ost_new(void) {
     ost_store *s = calloc(1, sizeof(*s));
     if (!s) return NULL;
@@ -446,6 +453,14 @@ static ost_store *ost_new(void) {
         s->ram_budget = (mib && atoll(mib) >= 0 ? (uint64_t)atoll(mib) : 1024) << 20;
         s->arena.notify = arena_tier_notify;
         s->arena.notify_user = s->tier;
+        pthread_mutex_init(&s->ev_lk, NULL);
+        pthread_cond_init(&s->ev_cv, NULL);
+        const char *bg = getenv("ROCEPOOL_OST_BG_EVICT");  /* "0": requests evict themselves, as before */
+        pthread_t evt;
+        if (s->ram_budget >= (16u << 20) && !(bg && !strcmp(bg, "0")) && !pthread_create(&evt, NULL, ost_evictor, s)) {
+            pthread_detach(evt);
+            s->ev_started = 1;
+        }
         fprintf(stderr, "rocepool OST: tier %s, %llu GiB, direct I/O %s, RAM cache %llu MiB\n", ost_tier_kind(s->tier),
                 (unsigned long long)(ost_tier_capacity(s->tier) >> 30), ost_tier_direct(s->tier) ? "on" : "off",
                 (unsigned long long)(s->ram_budget >> 20));
@@ -490,7 +505,44 @@ static void lru_drop(ost_store *s, kv_entry *e) {
  * always clean. */
 static int ent_sync(ost_store *s, kv_entry *e, uint64_t off, size_t len, size_t reserve);
 static void lru_touch(ost_store *s, kv_entry *e);
+static void ost_evict_to(ost_store *s, uint64_t target);
+static void *ost_evictor(void *arg) {
+    ost_store *s = arg;
+    pthread_setname_np(pthread_self(), "ost-evict");
+    for (;;) {
+        pthread_mutex_lock(&s->ev_lk);
+        uint64_t low = s->ram_budget - s->ram_budget / 16;
+        if (atomic_load(&s->ram_bytes) <= low) {
+            struct timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            ts.tv_nsec += 20 * 1000000L;
+            ts.tv_sec += ts.tv_nsec / 1000000000L;
+            ts.tv_nsec %= 1000000000L;
+            pthread_cond_timedwait(&s->ev_cv, &s->ev_lk, &ts);
+        }
+        pthread_mutex_unlock(&s->ev_lk);
+        if (atomic_load(&s->ram_bytes) > low) ost_evict_to(s, low);
+    }
+    return NULL;
+}
+
+/* After a request that grew the cache. Eviction -- with write-backs of
+ * dirty copies, a stripe's worth of NVMe writes each -- used to run here,
+ * inside the request: in ior-hard-write on 2 x i3en every OST did 145 k of
+ * them in its handlers. A background thread now keeps the cache a little
+ * under budget; a request evicts itself only past the hard limit. */
 static void ost_evict(ost_store *s) {
+    if (!s->tier) return;
+    uint64_t ram = atomic_load(&s->ram_bytes), hard = s->ram_budget + s->ram_budget / 8;
+    if (ram <= s->ram_budget - s->ram_budget / 16) return;
+    if (s->ev_started) pthread_cond_signal(&s->ev_cv);
+    if (ram > hard || !s->ev_started) {
+        if (s->ev_started) atomic_fetch_add(&s->inline_evictions, 1);
+        ost_evict_to(s, s->ram_budget);
+    }
+}
+
+static void ost_evict_to(ost_store *s, uint64_t target) {
     if (!s->tier) return;
     /* until within budget: only busy entries count against the attempts --
      * a fixed 64 evictions per call fell behind when 4 KiB copies (mdtest-
@@ -498,7 +550,7 @@ static void ost_evict(ost_store *s) {
      * per read, the cache grew to 28 of 19 GiB and the host ran out
      * (EFA run, 2026-10-24) */
     int attempts = 256;
-    while (atomic_load(&s->ram_bytes) > s->ram_budget && attempts > 0) {
+    while (atomic_load(&s->ram_bytes) > target && attempts > 0) {
         pthread_mutex_lock(&s->lru_lock);
         kv_entry *e = s->lru_tail;
         if (!e) { pthread_mutex_unlock(&s->lru_lock); return; }
@@ -1956,14 +2008,15 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
         if (!rc && n->ost->tier)
             rc = buf_printf(&b, ", \"tier\": \"%s\", \"tier_capacity\": %llu, \"tier_used\": %llu, \"tier_direct\": %s, "
                             "\"ram_cache_bytes\": %llu, \"ram_cache_budget\": %llu, \"direct_writes\": %llu, "
-                            "\"tier_reads\": %llu, \"evictions\": %llu, \"tier_bytes_written\": %llu, \"writebacks\": %llu",
+                            "\"tier_reads\": %llu, \"evictions\": %llu, \"tier_bytes_written\": %llu, \"writebacks\": %llu, \"inline_evictions\": %llu",
                             ost_tier_kind(n->ost->tier), (unsigned long long)ost_tier_capacity(n->ost->tier),
                             (unsigned long long)ost_tier_used(n->ost->tier), ost_tier_direct(n->ost->tier) ? "true" : "false",
                             (unsigned long long)atomic_load(&n->ost->ram_bytes), (unsigned long long)n->ost->ram_budget,
                             (unsigned long long)atomic_load(&n->ost->direct_writes),
                             (unsigned long long)atomic_load(&n->ost->tier_reads), (unsigned long long)atomic_load(&n->ost->evictions),
                             (unsigned long long)atomic_load(&n->ost->tier_bytes_written),
-                            (unsigned long long)atomic_load(&n->ost->writebacks));
+                            (unsigned long long)atomic_load(&n->ost->writebacks),
+                            (unsigned long long)atomic_load(&n->ost->inline_evictions));
         if (!rc) rc = buf_put(&b, ", \"by_op\": {", 12);
         int first = 1;
         for (int i = 0; i < 64 && !rc; i++) {

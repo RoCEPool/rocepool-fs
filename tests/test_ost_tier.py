@@ -237,5 +237,47 @@ print(got == data)
         self.assertEqual(len(e.list_prefix("s/")), 1500)
 
 
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class TierBackgroundEvictionTests(unittest.TestCase):
+    """With a cache of 16 MiB or more, a background thread evicts (and
+    writes back) so requests do not: in ior-hard-write on 2 x i3en every OST
+    ran 145 k write-backs of a stripe each inside its WRITE_AT handlers. The
+    cache stays within its hard limit (budget + 1/8) and every byte reads
+    back."""
+
+    def test_cache_bounded_and_data_intact(self):
+        from roce.native.build_lib import ensure_softverbs_lib
+        lib = ensure_softverbs_lib()
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        env = dict(os.environ, ROCE_TRANSPORT_LIB=lib, PYTHONPATH=ROOT, ROCEPOOL_OST_TIER=f"file:{tmp}/t{{n}}:1",
+                   ROCEPOOL_OST_RAM_CACHE_MIB="32")
+        srv = subprocess.Popen([sys.executable, "-u", os.path.join(ROOT, "tests", "fakes", "native_cluster.py"), ROOT,
+                                "23560", "1", "1"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
+        self.addCleanup(lambda: (srv.stdin.close(), srv.wait(timeout=20)))
+        _, _, ost = srv.stdout.readline().split()
+        os.environ["ROCE_TRANSPORT_LIB"] = lib
+        from roce.remote_engine import RemoteEngine
+        from roce.roce_transport import RoCETransport
+        t = RoCETransport()
+        e = RemoteEngine(ost, t)
+        piece = 47008
+        want = {}
+        for o in range(120):  # 120 stripe objects (1 MiB each) filled piecewise: ~124 MB, ~4x the cache
+            data = random.Random(o).randbytes(22 * piece)
+            want[f"b/{o}"] = data
+        peak = 0
+        for k in range(22):
+            for key, data in want.items():
+                e.write_at(key, k * piece, data[k * piece:(k + 1) * piece])
+            peak = max(peak, _stats(t, ost)["ram_cache_bytes"])
+        st = _stats(t, ost)
+        self.assertLessEqual(peak, (32 << 20) * 9 // 8 + (2 << 20), st)
+        self.assertGreater(st["writebacks"], 0, st)
+        for key, data in random.Random(5).sample(sorted(want.items()), 30):
+            self.assertEqual(e.get(key), data, key)
+
+
 if __name__ == "__main__":
     unittest.main()
