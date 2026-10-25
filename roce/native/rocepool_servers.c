@@ -1073,12 +1073,29 @@ typedef struct {
     size_t nslots, count;
 } md_bucket;
 
+/* A paged listing's sorted snapshot of a directory: records in wire form
+ * (u16 LE name length, name, entry) in name order. Built by a listing's
+ * first page and served to its later pages by binary search on the cursor.
+ * Before it, every page copied and sorted all entries after the cursor: a
+ * 13 M-entry mdtest-hard directory at ~150 k entries per page was ~90 full
+ * copy-and-sorts per MDT, and IO500 find took 1130 s (i3en, 2026-10-25). */
+typedef struct rd_snap {
+    uint8_t *buf;
+    size_t *off;   /* n + 1 record offsets into buf */
+    size_t n;
+    uint64_t built_ns;
+    int refs;      /* under the directory's snap_lk */
+    int attached;  /* still the directory's current snapshot */
+} rd_snap;
+
 typedef struct md_dir {
     struct md_dir *next;  /* in the directory hash chain */
     uint64_t hash;
     char *path;
     size_t path_len;
     md_bucket b[MD_BUCKETS];
+    pthread_mutex_t snap_lk;
+    rd_snap *snap;
 } md_dir;
 
 /* ---- the slot table: entries readable one-sided ----
@@ -1116,6 +1133,9 @@ typedef struct {
      * MDT's throughput on one directory */
     atomic_ullong lock_wait_ns, lock_hold_ns;
     atomic_ullong by_op[16];
+    /* readdir: entries copied out of the buckets (snapshot builds) and
+     * snapshots built; a listing of N entries costs ~N, not N x pages */
+    atomic_ullong rd_copied, rd_snaps;
 } mdt_store;
 
 static mdt_store *mdt_new(void) {
@@ -1225,6 +1245,7 @@ static md_dir *md_get_dir(mdt_store *m, const char *p, size_t pl, int create) {
     }
     memcpy(cp, p, pl); cp[pl] = 0;
     d->hash = h; d->path = cp; d->path_len = pl;
+    pthread_mutex_init(&d->snap_lk, NULL);
     pthread_rwlock_wrlock(&m->dirs_lock);
     md_dir *race = md_dir_lookup(m, p, pl, h);  /* another thread added it meanwhile? */
     if (race) {
@@ -1373,6 +1394,117 @@ static int cmp_md_name(const void *a, const void *b) {
     return c ? c : (x->name_len > y->name_len) - (x->name_len < y->name_len);
 }
 
+static void rd_snap_unref(md_dir *d, rd_snap *s) {
+    pthread_mutex_lock(&d->snap_lk);
+    int last = --s->refs == 0 && !s->attached;
+    pthread_mutex_unlock(&d->snap_lk);
+    if (last) { free(s->buf); free(s->off); free(s); }
+}
+
+/* replace the directory's snapshot with s (NULL: just drop it) */
+static void rd_snap_attach(md_dir *d, rd_snap *s) {
+    pthread_mutex_lock(&d->snap_lk);
+    rd_snap *old = d->snap;
+    d->snap = s;
+    if (s) s->attached = 1;
+    int free_old = 0;
+    if (old) { old->attached = 0; free_old = old->refs == 0; }
+    pthread_mutex_unlock(&d->snap_lk);
+    if (free_old) { free(old->buf); free(old->off); free(old); }
+}
+
+/* copy every entry of d (bucket by bucket, each under its lock) into a
+ * sorted snapshot; NULL when out of memory */
+static rd_snap *rd_snap_build(mdt_store *m, md_dir *d) {
+    size_t n = 0, cap = 1024, bytes = 0, bcap = 1 << 16;
+    md_entry *list = malloc(cap * sizeof(*list));
+    uint8_t *names = malloc(bcap);  /* names packed back to back */
+    size_t *noff = malloc(cap * sizeof(*noff));
+    int oom = !list || !names || !noff;
+    for (int bi = 0; !oom && d && bi < MD_BUCKETS; bi++) {
+        md_bucket *b = &d->b[bi];
+        uint64_t t0 = mono_ns();
+        pthread_mutex_lock(&b->lock);
+        uint64_t t1 = mono_ns();
+        for (size_t i = 0; !oom && i < b->nslots; i++)
+            for (md_entry *e = b->slots[i]; e; e = e->next) {
+                if (n == cap) {
+                    cap *= 2;
+                    md_entry *nl = realloc(list, cap * sizeof(*list));
+                    if (nl) list = nl;
+                    size_t *no = realloc(noff, cap * sizeof(*noff));
+                    if (no) noff = no;
+                    if (!nl || !no) { oom = 1; break; }
+                }
+                if (bytes + e->name_len > bcap) {
+                    while (bytes + e->name_len > bcap) bcap *= 2;
+                    uint8_t *nb = realloc(names, bcap);
+                    if (!nb) { oom = 1; break; }
+                    names = nb;
+                }
+                list[n] = *e;
+                list[n].idata = NULL;
+                list[n].next = NULL;
+                noff[n] = bytes;
+                memcpy(names + bytes, e->name, e->name_len);
+                bytes += e->name_len;
+                n++;
+            }
+        pthread_mutex_unlock(&b->lock);
+        atomic_fetch_add(&m->lock_wait_ns, t1 - t0);
+        atomic_fetch_add(&m->lock_hold_ns, mono_ns() - t1);
+    }
+    atomic_fetch_add(&m->rd_copied, n);
+    rd_snap *s = NULL;
+    md_entry **ptrs = oom ? NULL : malloc((n ? n : 1) * sizeof(*ptrs));
+    if (ptrs) {
+        for (size_t i = 0; i < n; i++) { list[i].name = (char *)(names + noff[i]); ptrs[i] = &list[i]; }
+        qsort(ptrs, n, sizeof(*ptrs), cmp_md_name);
+        size_t total = 0;
+        for (size_t i = 0; i < n; i++) total += 2 + ptrs[i]->name_len + entry_len(ptrs[i]);
+        s = calloc(1, sizeof(*s));
+        if (s) { s->buf = malloc(total ? total : 1); s->off = malloc((n + 1) * sizeof(size_t)); }
+        if (s && s->buf && s->off) {
+            uint8_t *v = s->buf;
+            for (size_t i = 0; i < n; i++) {
+                s->off[i] = (size_t)(v - s->buf);
+                v[0] = (uint8_t)(ptrs[i]->name_len & 0xff);
+                v[1] = (uint8_t)(ptrs[i]->name_len >> 8);
+                memcpy(v + 2, ptrs[i]->name, ptrs[i]->name_len);
+                v += 2 + ptrs[i]->name_len;
+                entry_write(v, ptrs[i]);
+                v += entry_len(ptrs[i]);
+            }
+            s->off[n] = total;
+            s->n = n;
+            s->built_ns = mono_ns();
+            atomic_fetch_add(&m->rd_snaps, 1);
+        } else if (s) { free(s->buf); free(s->off); free(s); s = NULL; }
+    }
+    free(ptrs);
+    free(list);
+    free(names);
+    free(noff);
+    return s;
+}
+
+/* index of the first record whose name sorts after the cursor */
+static size_t rd_snap_seek(const rd_snap *s, const uint8_t *cur, size_t clen) {
+    size_t lo = 0, hi = s->n;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        const uint8_t *r = s->buf + s->off[mid];
+        size_t nl = (size_t)r[0] | (size_t)r[1] << 8;
+        size_t k = nl < clen ? nl : clen;
+        int c = memcmp(r + 2, cur, k);
+        if (c < 0 || (c == 0 && nl <= clen)) lo = mid + 1; else hi = mid;
+    }
+    return lo;
+}
+
+/* a snapshot older than this is rebuilt rather than served to a later page */
+#define RD_SNAP_MAX_AGE_NS (60ull * 1000000000ull)
+
 static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
     if (f->op != OP_MDT) {
         char msg[48];
@@ -1501,6 +1633,48 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
             if (budget < 4096) budget = 4096;
         }
         md_dir *d = md_get_dir(m, path, pl, 0);
+        if (budget != SIZE_MAX) {  /* paged: from the listing's snapshot */
+            if (!d) {
+                uint8_t *v = frame_alloc(OP_MDT_OK, f, 4, &out, out_len);
+                if (v) wr_u32le(v, 0);
+                break;
+            }
+            rd_snap *sn = NULL;
+            if (clen) {  /* a later page: the current snapshot, if fresh */
+                pthread_mutex_lock(&d->snap_lk);
+                sn = d->snap;
+                if (sn && mono_ns() - sn->built_ns > RD_SNAP_MAX_AGE_NS) sn = NULL;
+                if (sn) sn->refs++;
+                pthread_mutex_unlock(&d->snap_lk);
+            }
+            if (!sn) {  /* a first page (or none left): a new one */
+                sn = rd_snap_build(m, d);
+                if (!sn) { out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
+                sn->refs = 1;
+                rd_snap_attach(d, sn);
+            }
+            size_t i0 = clen ? rd_snap_seek(sn, cursor, clen) : 0, i1 = i0;
+            size_t tot = 4;
+            for (; i1 < sn->n; i1++) {  /* at least one record, then the budget */
+                size_t add = sn->off[i1 + 1] - sn->off[i1];
+                if (i1 > i0 && tot + add > budget) break;
+                tot += add;
+            }
+            uint8_t *v = frame_alloc(OP_MDT_OK, f, tot, &out, out_len);
+            if (v) {
+                wr_u32le(v, (uint32_t)(i1 - i0) | (i1 < sn->n ? 0x80000000u : 0));
+                memcpy(v + 4, sn->buf + sn->off[i0], sn->off[i1] - sn->off[i0]);
+            }
+            int done = i1 >= sn->n;
+            if (done) {  /* the listing's last page: free it unless replaced */
+                pthread_mutex_lock(&d->snap_lk);
+                int mine = d->snap == sn;
+                pthread_mutex_unlock(&d->snap_lk);
+                if (mine) rd_snap_attach(d, NULL);
+            }
+            rd_snap_unref(d, sn);
+            break;
+        }
         size_t n = 0, cap = 64, total = 4;
         md_entry *list = malloc(cap * sizeof(*list));
         if (!list) { out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
@@ -1696,14 +1870,17 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
     if (!rc && n->kind == ROCEPOOL_NATIVE_MDT) {
         rc = buf_printf(&b, ", \"lock_wait_ns\": %llu, \"lock_hold_ns\": %llu, \"lock_stripes\": %d, "
                         "\"table_slots\": %llu, \"table_registered\": %s, \"table_used\": %llu, \"slots_published\": %llu, "
-                        "\"slots_unpublished\": %llu, \"inline_bytes\": %llu, \"inline_budget\": %llu, \"by_op\": {",
+                        "\"slots_unpublished\": %llu, \"inline_bytes\": %llu, \"inline_budget\": %llu, "
+                        "\"readdir_copied\": %llu, \"readdir_snapshots\": %llu, \"by_op\": {",
                         (unsigned long long)atomic_load(&n->mdt->lock_wait_ns),
                         (unsigned long long)atomic_load(&n->mdt->lock_hold_ns), MD_BUCKETS,
                         (unsigned long long)n->mdt->tab.nslots, n->mdt->tab.rkey_ok ? "true" : "false",
                         (unsigned long long)atomic_load(&n->mdt->tab.used),
                         (unsigned long long)atomic_load(&n->mdt->tab.published),
                         (unsigned long long)atomic_load(&n->mdt->tab.unpublished),
-                        (unsigned long long)atomic_load(&g_inline_bytes), (unsigned long long)inline_budget());
+                        (unsigned long long)atomic_load(&g_inline_bytes), (unsigned long long)inline_budget(),
+                        (unsigned long long)atomic_load(&n->mdt->rd_copied),
+                        (unsigned long long)atomic_load(&n->mdt->rd_snaps));
         int first = 1;
         for (int i = 0; i < 16 && !rc; i++) {
             unsigned long long c = atomic_load(&n->mdt->by_op[i]);
