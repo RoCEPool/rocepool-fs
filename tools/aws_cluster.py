@@ -328,6 +328,22 @@ class Run:
                 "ls -d /sys/class/infiniband/efa* >/dev/null 2>&1 || sudo modprobe efa",
                 "/opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM | grep -q 'provider: efa'",
             ]
+        if (self.state.get("facts") or {}).get("nvme"):
+            # instance-store NVMe (i3en, i4i, ...) comes blank: one RAID 0 of
+            # all of them, XFS, at /nvmedata -- tools/nvme_preflight.py then
+            # puts the OSTs' tier there (an NVMe-backed file system). Only the
+            # instance store, never the EBS system disk (its model differs).
+            lines += [
+                "sudo apt-get install -y -q mdadm xfsprogs >/dev/null",
+                "devs=$(for d in /dev/nvme*n1; do m=$(cat /sys/block/$(basename $d)/device/model 2>/dev/null); "
+                "case \"$m\" in *'Instance Storage'*) echo $d;; esac; done)",
+                "n=$(echo $devs | wc -w)",
+                "if [ $n -gt 0 ] && ! mountpoint -q /nvmedata; then "
+                "if [ $n -gt 1 ]; then sudo mdadm --create /dev/md0 --run --level=0 --raid-devices=$n $devs >/dev/null "
+                "&& dev=/dev/md0; else dev=$devs; fi; "
+                "sudo mkfs.xfs -f -q $dev && sudo mkdir -p /nvmedata && sudo mount -o noatime $dev /nvmedata; fi",
+                "if [ $n -gt 0 ]; then mountpoint -q /nvmedata && echo \"local NVMe: $n device(s) at /nvmedata\"; fi",
+            ]
         lines.append("echo SETUP_OK")
         return "\n".join(lines)
 

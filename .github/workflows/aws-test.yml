@@ -80,7 +80,8 @@ jobs:
           table = {"c5n.9xlarge": 1.944, "c5n.18xlarge": 3.888, "c6in.16xlarge": 3.629, "c6in.32xlarge": 7.258,
                    "c6in.4xlarge": 0.907, "c6in.8xlarge": 1.814, "c7gn.16xlarge": 3.994, "c6gn.16xlarge": 2.765,
                    "m5dn.24xlarge": 6.528, "c5n.4xlarge": 0.864, "c5.4xlarge": 0.68, "m5.4xlarge": 0.768,
-                   "m6i.4xlarge": 0.768, "c6i.4xlarge": 0.68, "r5.4xlarge": 1.008}
+                   "m6i.4xlarge": 0.768, "c6i.4xlarge": 0.68, "r5.4xlarge": 1.008,
+                   "i3en.12xlarge": 5.424, "i3en.24xlarge": 10.848, "i4i.32xlarge": 10.982}
           price = table.get(t)
           if price is None:
               try:

@@ -116,6 +116,18 @@ class AwsClusterTests(unittest.TestCase):
         start = next(c for c in self.calls(self.ssh_log) if "run.sh" in c[-1])[-1]
         self.assertNotIn("--quick", start)  # the valid 300 s run
 
+    def test_local_nvme_is_assembled_and_mounted(self):
+        r = self.run_tool("--mode", "efa", "--nodes", "2", "--quick", env_extra={"FAKE_AWS_NVME_GB": "30000"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        setup = [c for c in self.calls(self.ssh_log) if "ROCEPOOL_SETUP" in c[-1]][0][-1]
+        self.assertIn("mdadm --create /dev/md0 --run --level=0", setup)
+        self.assertIn("Instance Storage", setup)       # the instance store only, never the EBS disk
+        self.assertIn("mount -o noatime $dev /nvmedata", setup)
+        # and without local NVMe, none of it
+        r = self.run_tool("--mode", "efa", "--nodes", "2", "--quick", run_id="rp-test2")
+        setup = [c for c in self.calls(self.ssh_log) if "ROCEPOOL_SETUP" in c[-1]][-1][-1]
+        self.assertNotIn("mdadm", setup)
+
     def test_type_without_efa_is_refused_and_nothing_left_behind(self):
         r = self.run_tool("--mode", "efa", "--nodes", "2", "--type", "m5.large", env_extra={"FAKE_AWS_NO_EFA": "1"})
         self.assertNotEqual(r.returncode, 0)
