@@ -1,0 +1,220 @@
+[Sun Oct 25 01:54:19 2026] systemd[1]: systemd-pcrextend.socket - TPM2 PCR Extension (Varlink) was skipped because of an unmet condition check (ConditionSecurity=measured-uki).
+[Sun Oct 25 01:54:19 2026] systemd[1]: Listening on systemd-udevd-control.socket - udev Control Socket.
+[Sun Oct 25 01:54:19 2026] systemd[1]: Listening on systemd-udevd-kernel.socket - udev Kernel Socket.
+[Sun Oct 25 01:54:19 2026] systemd[1]: Mounting dev-hugepages.mount - Huge Pages File System...
+[Sun Oct 25 01:54:19 2026] systemd[1]: Mounting dev-mqueue.mount - POSIX Message Queue File System...
+[Sun Oct 25 01:54:19 2026] systemd[1]: Mounting sys-kernel-debug.mount - Kernel Debug File System...
+[Sun Oct 25 01:54:19 2026] systemd[1]: Mounting sys-kernel-tracing.mount - Kernel Trace File System...
+[Sun Oct 25 01:54:19 2026] systemd[1]: Starting systemd-journald.service - Journal Service...
+[Sun Oct 25 01:54:19 2026] systemd[1]: Starting keyboard-setup.service - Set the console keyboard layout...
+[Sun Oct 25 01:54:19 2026] systemd[1]: Starting kmod-static-nodes.service - Create List of Static Device Nodes...
+[Sun Oct 25 01:54:19 2026] systemd[1]: Starting lvm2-monitor.service - Monitoring of LVM2 mirrors, snapshots etc. using dmeventd or progress polling...
+[Sun Oct 25 01:54:19 2026] systemd[1]: Starting modprobe@configfs.service - Load Kernel Module configfs...
+[Sun Oct 25 01:54:19 2026] systemd[1]: Starting modprobe@dm_mod.service - Load Kernel Module dm_mod...
+[Sun Oct 25 01:54:19 2026] systemd-journald[467]: Collecting audit messages is disabled.
+[Sun Oct 25 01:54:19 2026] systemd[1]: Starting modprobe@drm.service - Load Kernel Module drm...
+[Sun Oct 25 01:54:19 2026] systemd[1]: Starting modprobe@efi_pstore.service - Load Kernel Module efi_pstore...
+[Sun Oct 25 01:54:19 2026] systemd[1]: Starting modprobe@fuse.service - Load Kernel Module fuse...
+[Sun Oct 25 01:54:19 2026] systemd[1]: Starting modprobe@loop.service - Load Kernel Module loop...
+[Sun Oct 25 01:54:19 2026] pstore: Using crash dump compression: deflate
+[Sun Oct 25 01:54:19 2026] systemd[1]: netplan-ovs-cleanup.service - OpenVSwitch configuration for cleanup was skipped because of an unmet condition check (ConditionFileIsExecutable=/usr/bin/ovs-vsctl).
+[Sun Oct 25 01:54:19 2026] pstore: Registered efi_pstore as persistent store backend
+[Sun Oct 25 01:54:19 2026] systemd[1]: Starting systemd-fsck-root.service - File System Check on Root Device...
+[Sun Oct 25 01:54:19 2026] systemd[1]: Starting systemd-modules-load.service - Load Kernel Modules...
+[Sun Oct 25 01:54:19 2026] systemd[1]: systemd-pcrmachine.service - TPM2 PCR Machine ID Measurement was skipped because of an unmet condition check (ConditionSecurity=measured-uki).
+[Sun Oct 25 01:54:19 2026] systemd[1]: systemd-tpm2-setup-early.service - TPM2 SRK Setup (Early) was skipped because of an unmet condition check (ConditionSecurity=measured-uki).
+[Sun Oct 25 01:54:19 2026] systemd[1]: Starting systemd-udev-trigger.service - Coldplug All udev Devices...
+[Sun Oct 25 01:54:19 2026] systemd[1]: Started systemd-journald.service - Journal Service.
+[Sun Oct 25 01:54:19 2026] EXT4-fs (nvme0n1p1): re-mounted 3b08287d-b7c2-4dc1-9b52-f6e1c684411f r/w.
+[Sun Oct 25 01:54:19 2026] systemd-journald[467]: Received client request to flush runtime journal.
+[Sun Oct 25 01:54:19 2026] loop0: detected capacity change from 0 to 58160
+[Sun Oct 25 01:54:19 2026] loop1: detected capacity change from 0 to 151600
+[Sun Oct 25 01:54:19 2026] loop2: detected capacity change from 0 to 91568
+[Sun Oct 25 01:54:19 2026] vmclock AMZNC10C:00: vmclock0: registered miscdev
+[Sun Oct 25 01:54:19 2026] nvme nvme2: using unchecked data buffer
+[Sun Oct 25 01:54:19 2026] ena 0000:00:05.0: ENA device version: 0.10
+[Sun Oct 25 01:54:19 2026] ena 0000:00:05.0: ENA controller version: 0.0.1 implementation version 1
+[Sun Oct 25 01:54:20 2026] piix4_smbus 0000:00:01.3: SMBus base address uninitialized - upgrade BIOS or use force_addr=0xaddr
+[Sun Oct 25 01:54:20 2026] parport_pc 00:03: reported by Plug and Play ACPI
+[Sun Oct 25 01:54:20 2026] RAPL PMU: API unit is 2^-32 Joules, 0 fixed counters, 10737418240 ms ovfl timer
+[Sun Oct 25 01:54:20 2026] intel_powerclamp: No package C-state available
+[Sun Oct 25 01:54:20 2026] ena 0000:00:05.0: Elastic Network Adapter (ENA) found at mem c0814000, mac addr 02:ff:fe:59:e9:c5
+[Sun Oct 25 01:54:20 2026] ena 0000:00:05.0 ens5: renamed from eth0
+[Sun Oct 25 01:54:20 2026] ppdev: user-space parallel port driver
+[Sun Oct 25 01:54:20 2026] efa 0000:00:1b.0: Setup irq:188 name:efa-mgmnt@pci:0000:00:1b.0
+[Sun Oct 25 01:54:20 2026] efa 0000:00:1b.0 efa_0: IB device registered
+[Sun Oct 25 01:54:20 2026] EXT4-fs (nvme0n1p16): mounted filesystem eb8c7f0d-7144-4e82-8353-69773056e1cd r/w with ordered data mode. Quota mode: none.
+[Sun Oct 25 01:54:20 2026] audit: type=1400 audit(1792893260.391:2): apparmor="STATUS" operation="profile_load" profile="unconfined" name="msedge" pid=827 comm="apparmor_parser"
+[Sun Oct 25 01:54:20 2026] audit: type=1400 audit(1792893260.391:3): apparmor="STATUS" operation="profile_load" profile="unconfined" name="lxc-create" pid=820 comm="apparmor_parser"
+[Sun Oct 25 01:54:20 2026] audit: type=1400 audit(1792893260.391:4): apparmor="STATUS" operation="profile_load" profile="unconfined" name="lxc-stop" pid=823 comm="apparmor_parser"
+[Sun Oct 25 01:54:20 2026] audit: type=1400 audit(1792893260.391:5): apparmor="STATUS" operation="profile_load" profile="unconfined" name="cam" pid=792 comm="apparmor_parser"
+[Sun Oct 25 01:54:20 2026] audit: type=1400 audit(1792893260.391:6): apparmor="STATUS" operation="profile_load" profile="unconfined" name="ipa_verify" pid=811 comm="apparmor_parser"
+[Sun Oct 25 01:54:20 2026] audit: type=1400 audit(1792893260.391:7): apparmor="STATUS" operation="profile_load" profile="unconfined" name="buildah" pid=791 comm="apparmor_parser"
+[Sun Oct 25 01:54:20 2026] audit: type=1400 audit(1792893260.391:8): apparmor="STATUS" operation="profile_load" profile="unconfined" name="flatpak" pid=805 comm="apparmor_parser"
+[Sun Oct 25 01:54:20 2026] audit: type=1400 audit(1792893260.391:9): apparmor="STATUS" operation="profile_load" profile="unconfined" name="opam" pid=832 comm="apparmor_parser"
+[Sun Oct 25 01:54:20 2026] audit: type=1400 audit(1792893260.391:10): apparmor="STATUS" operation="profile_load" profile="unconfined" name="mmdebstrap" pid=826 comm="apparmor_parser"
+[Sun Oct 25 01:54:20 2026] audit: type=1400 audit(1792893260.391:11): apparmor="STATUS" operation="profile_load" profile="unconfined" name="evolution" pid=803 comm="apparmor_parser"
+[Sun Oct 25 01:54:20 2026] input: ImPS/2 Generic Wheel Mouse as /devices/platform/i8042/serio1/input/input4
+[Sun Oct 25 01:54:21 2026] 8021q: 802.1Q VLAN Support v1.8
+[Sun Oct 25 01:54:21 2026] cfg80211: Loading compiled-in X.509 certificates for regulatory database
+[Sun Oct 25 01:54:21 2026] Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+[Sun Oct 25 01:54:21 2026] Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+[Sun Oct 25 01:54:21 2026] faux_driver regulatory: Direct firmware load for regulatory.db failed with error -2
+[Sun Oct 25 01:54:21 2026] cfg80211: failed to load regulatory.db
+[Sun Oct 25 01:54:26 2026] EXT4-fs (nvme0n1p1): resizing filesystem from 1834747 to 25951995 blocks
+[Sun Oct 25 01:54:27 2026] EXT4-fs (nvme0n1p1): resized filesystem to 25951995
+[Sun Oct 25 01:54:27 2026] kauditd_printk_skb: 112 callbacks suppressed
+[Sun Oct 25 01:54:27 2026] audit: type=1400 audit(1792893267.620:124): apparmor="STATUS" operation="profile_replace" info="same as current profile, skipping" profile="unconfined" name="rsyslogd" pid=1160 comm="apparmor_parser"
+[Sun Oct 25 01:54:28 2026] NET: Registered PF_QIPCRTR protocol family
+[Sun Oct 25 01:54:28 2026] loop3: detected capacity change from 0 to 8
+[Sun Oct 25 01:54:28 2026] audit: type=1400 audit(1792893268.067:125): apparmor="STATUS" operation="profile_replace" profile="unconfined" name="/usr/lib/snapd/snap-confine" pid=1444 comm="apparmor_parser"
+[Sun Oct 25 01:55:07 2026] Loading iSCSI transport class v2.0-870.
+[Sun Oct 25 01:55:07 2026] iscsi: registered transport (iser)
+[Sun Oct 25 01:55:07 2026] RPC: Registered named UNIX socket transport module.
+[Sun Oct 25 01:55:07 2026] RPC: Registered udp transport module.
+[Sun Oct 25 01:55:07 2026] RPC: Registered tcp transport module.
+[Sun Oct 25 01:55:07 2026] RPC: Registered tcp-with-tls transport module.
+[Sun Oct 25 01:55:07 2026] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[Sun Oct 25 01:55:07 2026] RPC: Registered rdma transport module.
+[Sun Oct 25 01:55:07 2026] RPC: Registered rdma backchannel transport module.
+[Sun Oct 25 01:55:26 2026] efa 0000:00:1b.0 efa_0: Unregister ib device
+[Sun Oct 25 01:56:24 2026] hrtimer: interrupt took 9172 ns
+[Sun Oct 25 01:56:43 2026] efa: loading out-of-tree module taints kernel.
+[Sun Oct 25 01:56:43 2026] efa: module verification failed: signature and/or required key missing - tainting kernel
+[Sun Oct 25 01:56:43 2026] Elastic Fabric Adapter (EFA) v3.3.1g
+[Sun Oct 25 01:56:43 2026] efa 0000:00:1b.0: Setup irq:188 name:efa-mgmnt@pci:0000:00:1b.0
+[Sun Oct 25 01:56:43 2026] efa 0000:00:1b.0 efa_0: IB device registered
+[Sun Oct 25 01:56:48 2026] md: async del_gendisk mode will be removed in future, please upgrade to mdadm-4.5+
+[Sun Oct 25 01:56:48 2026] md0: array will not be assembled in old kernels that lack configurable LBS support (<= 6.18)
+[Sun Oct 25 01:56:48 2026] md0: detected capacity change from 0 to 58592690176
+[Sun Oct 25 01:57:50 2026] SGI XFS with ACLs, security attributes, realtime, quota, no debug enabled
+[Sun Oct 25 01:57:50 2026] XFS (md0): Mounting V5 Filesystem e6c0d3f1-07c6-4fae-83dc-6a4feb8700a7
+[Sun Oct 25 01:57:50 2026] XFS (md0): Ending clean mount
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-292) [-22]
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-289) [-22]
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-286) [-22]
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-284) [-22]
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-282) [-22]
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-280) [-22]
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-278) [-22]
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-276) [-22]
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-274) [-22]
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-272) [-22]
+[Sun Oct 25 02:05:24 2026] efa_com_cmd_exec: 15 callbacks suppressed
+[Sun Oct 25 02:05:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:24 2026] efa_com_dereg_mr: 15 callbacks suppressed
+[Sun Oct 25 02:05:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-295) [-22]
+[Sun Oct 25 02:05:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-296) [-22]
+[Sun Oct 25 02:05:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-1048761) [-22]
+[Sun Oct 25 02:05:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-1048769) [-22]
+[Sun Oct 25 02:05:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-1048752) [-22]
+[Sun Oct 25 02:05:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-1048757) [-22]
+[Sun Oct 25 02:05:25 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:25 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-1048790) [-22]
+[Sun Oct 25 02:05:25 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:25 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-1048751) [-22]
+[Sun Oct 25 02:05:25 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:25 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-1048781) [-22]
+[Sun Oct 25 02:05:25 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:25 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-1048768) [-22]
+[Sun Oct 25 02:05:55 2026] efa_com_cmd_exec: 16 callbacks suppressed
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:55 2026] efa_com_dereg_mr: 16 callbacks suppressed
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-497) [-22]
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-488) [-22]
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-496) [-22]
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-490) [-22]
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-485) [-22]
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-482) [-22]
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-484) [-22]
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-480) [-22]
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-481) [-22]
+[Sun Oct 25 02:05:56 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:05:56 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-477) [-22]
+[Sun Oct 25 02:06:00 2026] efa_com_cmd_exec: 25 callbacks suppressed
+[Sun Oct 25 02:06:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:00 2026] efa_com_dereg_mr: 25 callbacks suppressed
+[Sun Oct 25 02:06:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097311) [-22]
+[Sun Oct 25 02:06:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097273) [-22]
+[Sun Oct 25 02:06:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097400) [-22]
+[Sun Oct 25 02:06:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097270) [-22]
+[Sun Oct 25 02:06:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097444) [-22]
+[Sun Oct 25 02:06:02 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:02 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097291) [-22]
+[Sun Oct 25 02:06:02 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:02 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097317) [-22]
+[Sun Oct 25 02:06:02 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:02 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097440) [-22]
+[Sun Oct 25 02:06:02 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:02 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097252) [-22]
+[Sun Oct 25 02:06:02 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:02 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097370) [-22]
+[Sun Oct 25 02:06:05 2026] efa_com_cmd_exec: 7 callbacks suppressed
+[Sun Oct 25 02:06:05 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:05 2026] efa_com_dereg_mr: 7 callbacks suppressed
+[Sun Oct 25 02:06:05 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3145901) [-22]
+[Sun Oct 25 02:06:05 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:05 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3145979) [-22]
+[Sun Oct 25 02:06:05 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:05 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3145984) [-22]
+[Sun Oct 25 02:06:05 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:05 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3145963) [-22]
+[Sun Oct 25 02:06:05 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:05 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3145900) [-22]
+[Sun Oct 25 02:06:06 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:06 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3145940) [-22]
+[Sun Oct 25 02:06:06 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:06 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3145910) [-22]
+[Sun Oct 25 02:06:06 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:06 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3145902) [-22]
+[Sun Oct 25 02:06:06 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:06 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3146019) [-22]
+[Sun Oct 25 02:06:06 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Oct 25 02:06:06 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3145988) [-22]
+
+               total        used        free      shared  buff/cache   available
+Mem:          382679       14297      368389           2        2817      368382
+Swap:              0           0           0
+
+    PID   RSS    VSZ STAT     ELAPSED COMMAND
+   1139 44720 3405792 Ssl       11:53 snapd
+    531 27320 288968 SLsl       12:01 multipathd
+   1261 23044 110024 Ssl        11:52 unattended-upgr
+   1522 22320 2645160 Ssl       11:51 amazon-ssm-agen
+   1134 20824  32444 Ss         11:53 networkd-dispat
+    467 14976  50516 S<s        12:01 systemd-journal
+   1146 14232 469128 Ssl        11:53 udisksd
+      1 13972  22648 Ss         12:08 systemd
+   1344 12924 318164 Ssl        11:52 ModemManager
+    839 12864  21480 Ss         12:00 systemd-resolve
+  37808 11692  20344 Ss         00:00 systemd
+  37803 10812  15016 Ss         00:00 sshd
+    999 10216  22432 Ss         11:57 systemd-network
+   1135 10128 383684 Ssl        11:53 polkitd
