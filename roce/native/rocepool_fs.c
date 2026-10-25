@@ -1021,6 +1021,93 @@ static int fs_write_segs(const char *path, uint64_t off, const wseg_t *segs, int
     return rc;
 }
 
+/* Several non-overlapping runs of one file in one go: every run's stripe
+ * writes in flight together, then one MDT size update for the furthest
+ * end. A flush of strided writes (IOR hard: 47008-byte pieces, nranks
+ * apart, so every piece is its own run) used to send them one at a time,
+ * each a WRITE_AT plus an MDT set-size round trip: 0.68 GiB/s on 2 EFA
+ * hosts whose network and NVMe did 5-8 GiB/s (2026-10-25). An inline file
+ * (or one that turns out inline / mid-spill) goes run by run as before. */
+typedef struct { uint64_t off; const wseg_t *segs; int nsegs; } wrun_t;
+#define WRUNS_INFLIGHT 256  /* stripe writes per wave */
+
+static int fs_write_runs(const char *path, const wrun_t *runs, int nruns) {
+    if (nruns <= 0) return 0;
+    if (nruns == 1) return fs_write_segs(path, runs[0].off, runs[0].segs, runs[0].nsegs);
+    attr_t a;
+    int rc = fs_getattr(path, &a);
+    if (rc == 0 && !a.is_dir && a.inl) {
+        /* a new (inline) file: the first run decides -- it stays inline, or
+         * spills to stripes and the rest go together */
+        if ((rc = fs_write_segs(path, runs[0].off, runs[0].segs, runs[0].nsegs)) != 0) return rc;
+        rc = fs_getattr(path, &a);
+        if (rc == 0 && !a.inl) return fs_write_runs(path, runs + 1, nruns - 1);
+        runs++;
+        nruns--;
+    }
+    int seq = rc != 0 || a.is_dir || a.inl || !a.has_layout || !a.sc || !a.ss;
+    for (int r = 0; !seq && r < nruns; r++)
+        for (int i = 0; i < runs[r].nsegs; i++)
+            if (runs[r].segs[i].mem && roce_mem_is_device(runs[r].segs[i].mem)) seq = 1;
+    if (seq) {
+        for (int r = 0; r < nruns; r++)
+            if ((rc = fs_write_segs(path, runs[r].off, runs[r].segs, runs[r].nsegs)) != 0) return rc;
+        return 0;
+    }
+    size_t ntask = 0;
+    uint64_t max_end = 0;
+    for (int r = 0; r < nruns; r++) {
+        size_t len = 0;
+        for (int i = 0; i < runs[r].nsegs; i++) len += runs[r].segs[i].len;
+        if (!len) continue;
+        uint64_t end = runs[r].off + len;
+        ntask += (size_t)((end - 1) / a.ss - runs[r].off / a.ss + 1);
+        if (end > max_end) max_end = end;
+    }
+    stripe_io_t *tasks = calloc(ntask ? ntask : 1, sizeof(*tasks));
+    if (!tasks) return -ENOMEM;
+    size_t k = 0;
+    for (int r = 0; r < nruns; r++) {
+        size_t len = 0;
+        for (int i = 0; i < runs[r].nsegs; i++) len += runs[r].segs[i].len;
+        if (!len) continue;
+        uint64_t off = runs[r].off, end = off + len;
+        for (uint64_t idx = off / a.ss; idx <= (end - 1) / a.ss; idx++) {
+            uint64_t s0 = idx * a.ss, lo = off > s0 ? off : s0, hi = end < s0 + a.ss ? end : s0 + a.ss;
+            tasks[k] = (stripe_io_t){.path = path, .a = &a, .idx = idx, .lo = lo - s0, .hi = hi - s0};
+            stripe_segments(&tasks[k], lo, hi, runs[r].segs, runs[r].nsegs, off);
+            k++;
+        }
+    }
+    void **args = xmalloc((ntask ? ntask : 1) * sizeof(void *));
+    size_t ran = 0;  /* tasks handed out (each frees its own gather copy) */
+    while (ran < ntask && rc == 0) {
+        int n = (int)(ntask - ran < WRUNS_INFLIGHT ? ntask - ran : WRUNS_INFLIGHT);
+        group_t g;
+        group_init(&g, n);
+        for (int i = 0; i < n; i++) { tasks[ran + i].g = &g; args[i] = &tasks[ran + i]; }
+        rc = run_all(stripe_write_task, args, n, &g);
+        ran += (size_t)n;
+    }
+    for (; ran < ntask; ran++) rp_bulk_free(tasks[ran].gathered);
+    free(args);
+    free(tasks);
+    if (rc) return rc;
+    if (max_end > a.size) {
+        attr_t na;
+        rc = mdt_set_size(path, max_end, 0, &na);
+        if (rc == E_INLINE || rc == E_FROZEN) {  /* not striped after all: as fs_write_segs does */
+            if (rc == E_FROZEN && (rc = fs_spill(path)) != 0) return rc;
+            ac_del(path);
+            for (int r = 0; r < nruns; r++)
+                if ((rc = fs_write_segs(path, runs[r].off, runs[r].segs, runs[r].nsegs)) != 0) return rc;
+            return 0;
+        }
+        if (rc == 0) ac_update_size(path, na.size, 0);
+    }
+    return rc;
+}
+
 int fs_write_range(const char *path, uint64_t off, const uint8_t *data, size_t len) {
     wseg_t seg = { data, len, NULL };
     return fs_write_segs(path, off, &seg, 1);
@@ -1664,6 +1751,34 @@ int handle_flush(handle_t *h) {
     free(tmp);
     int rc = 0;
     size_t i = 0;
+    {   /* every run clean (no overlaps): all of them at once */
+        size_t nr = 0, cap = 16;
+        wrun_t *runs = xmalloc(cap * sizeof(*runs));
+        wseg_t *segs = xmalloc(n * sizeof(*segs));
+        int clean = 1;
+        for (size_t a = 0; a < n && clean; a++) {
+            dirty_t *d = &v[order[a]];
+            segs[a] = (wseg_t){ d->data, d->len, NULL };
+            if (a && d->off < v[order[a - 1]].off + v[order[a - 1]].len) { clean = 0; break; }
+            if (a && d->off == v[order[a - 1]].off + v[order[a - 1]].len && runs[nr - 1].nsegs < 1 << 20) {
+                runs[nr - 1].nsegs++;
+                continue;
+            }
+            if (nr == cap) { cap *= 2; runs = xrealloc(runs, cap * sizeof(*runs)); }
+            runs[nr++] = (wrun_t){ d->off, &segs[a], 1 };
+        }
+        if (clean && nr > 1) {
+            rc = fs_write_runs(h->path, runs, (int)nr);
+            if (rc == 0) i = n;
+        }
+        free(runs);
+        free(segs);
+        if (clean && nr > 1 && rc) {  /* nothing known written: all of it stays buffered */
+            free(order);
+            if (h->sc) sc_clear(h->sc);
+            return rc;
+        }
+    }
     while (i < n && rc == 0) {
         uint64_t run_start = v[order[i]].off, run_end = run_start + v[order[i]].len;
         size_t j = i + 1;

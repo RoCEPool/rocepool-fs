@@ -386,6 +386,9 @@ typedef struct kv_entry {
      * RAM cache's LRU list (both only with a tier) */
     tier_ext_t ext;
     uint8_t on_tier;
+    /* the RAM copy has bytes the tier copy lacks: written back once, when
+     * evicted (WRITE_AT pieces of a stripe filled out of order) */
+    uint8_t tier_dirty;
     struct kv_entry *lru_prev, *lru_next;
 } kv_entry;
 
@@ -405,6 +408,9 @@ typedef struct {
     ost_tier_t *tier;
     uint64_t ram_budget;
     atomic_ullong ram_bytes, direct_writes, tier_reads, evictions;
+    atomic_ullong tier_bytes_written;  /* all writes to the tier: over bytes stored = write amplification */
+    atomic_ullong writebacks;          /* dirty RAM copies written to the tier on eviction */
+    atomic_int writeback_failed;       /* a write-back failed (tier full?): WRITE_AT writes through again */
     obj_arena_t arena;              /* every RAM copy: registered, one-sided readable */
     roce_server_t *server;          /* for the arena chunks' rkeys (set once the server runs) */
     atomic_ullong leases, lease_misses;
@@ -482,6 +488,8 @@ static void lru_drop(ost_store *s, kv_entry *e) {
  * trylock (the caller may hold another stripe's lock): a busy one is
  * skipped this round. Every object is written through, so a copy is
  * always clean. */
+static int ent_sync(ost_store *s, kv_entry *e, uint64_t off, size_t len, size_t reserve);
+static void lru_touch(ost_store *s, kv_entry *e);
 static void ost_evict(ost_store *s) {
     if (!s->tier) return;
     /* until within budget: only busy entries count against the attempts --
@@ -508,6 +516,18 @@ static void ost_evict(ost_store *s) {
         }
         lru_unlink(s, e);
         pthread_mutex_unlock(&s->lru_lock);
+        if (e->data && e->tier_dirty) {  /* write it back first, whole, once */
+            if (ent_sync(s, e, 0, e->size, 0)) {
+                if (!atomic_exchange(&s->writeback_failed, 1))
+                    fprintf(stderr, "rocepool OST: writing an object back to the tier failed; WRITE_AT writes through from now on\n");
+                lru_touch(s, e);  /* stays cached: its bytes exist nowhere else */
+                pthread_mutex_unlock(&st->lock);
+                attempts--;
+                continue;
+            }
+            e->tier_dirty = 0;
+            atomic_fetch_add(&s->writebacks, 1);
+        }
         if (e->data && e->on_tier) {
             atomic_fetch_sub(&s->ram_bytes, cap_mem(e->data_cap));
             ent_free_data(s, e->data, e->data_cap);
@@ -540,11 +560,13 @@ static int ent_resident(ost_store *s, kv_entry *e) {
 
 /* a slab that holds `size` bytes: keeps the current one when it fits, else
  * a new one (the caller copies the content it needs to keep) */
-static int ent_slab(ost_store *s, kv_entry *e, size_t size, tier_ext_t *old, int *moved) {
+static int ent_slab(ost_store *s, kv_entry *e, size_t size, tier_ext_t *old, int *moved, size_t reserve) {
     *moved = 0;
     if (e->on_tier && size <= ost_tier_class_bytes(e->ext.cls)) return 0;
     tier_ext_t ext;
-    int rc = ost_tier_alloc(s->tier, size, &ext);
+    /* reserve: room to take for an object expected to grow (a new slab
+     * copies the whole object) */
+    int rc = ost_tier_alloc(s->tier, size > reserve ? size : reserve, &ext);
     if (rc) return rc;
     if (e->on_tier) { *old = e->ext; *moved = 1; }
     e->ext = ext;
@@ -553,15 +575,25 @@ static int ent_slab(ost_store *s, kv_entry *e, size_t size, tier_ext_t *old, int
 }
 
 /* write the RAM copy's bytes [off, off+len) through to the tier */
-static int ent_sync(ost_store *s, kv_entry *e, uint64_t off, size_t len) {
+static int ent_sync(ost_store *s, kv_entry *e, uint64_t off, size_t len, size_t reserve) {
     tier_ext_t old;
     int moved;
-    int rc = ent_slab(s, e, e->size, &old, &moved);
+    int rc = ent_slab(s, e, e->size, &old, &moved, reserve);
     if (rc) return rc;
     if (moved) { off = 0; len = e->size; }  /* a new slab: the whole object */
     if (len) rc = ost_tier_write(s->tier, &e->ext, off, e->data + off, len);
+    if (len && !rc) atomic_fetch_add(&s->tier_bytes_written, len);
     if (moved) ost_tier_free(s->tier, &old);
     return rc;
+}
+
+/* A WRITE_AT past an object's start is a piece of a stripe being filled
+ * out of order (shared-file writes): take a slab for a whole default
+ * stripe at once. Growing 64 K -> 256 K -> 1 M rewrote the object on every
+ * step (each new slab gets the whole object). */
+#define OST_GROW_RESERVE (1u << 20)
+static size_t grow_reserve(uint64_t off, size_t new_size) {
+    return off > 0 && new_size < OST_GROW_RESERVE ? OST_GROW_RESERVE : 0;
 }
 
 /* page-aligned source, offset and length: the NIC's buffer (host memory or
@@ -686,10 +718,12 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         if (s->tier) {
             tier_ext_t oldext;
             int moved;
-            rc = ent_slab(s, e, dlen, &oldext, &moved);
+            rc = ent_slab(s, e, dlen, &oldext, &moved, 0);
             if (!rc) rc = direct ? ost_tier_write_direct(s->tier, &e->ext, 0, src, dlen)
                                  : ost_tier_write(s->tier, &e->ext, 0, data, dlen);
+            if (!rc) atomic_fetch_add(&s->tier_bytes_written, dlen);
             if (!rc && moved) ost_tier_free(s->tier, &oldext);
+            if (!rc) e->tier_dirty = 0;
             if (!rc && direct) atomic_fetch_add(&s->direct_writes, 1);
             if (old) atomic_fetch_sub(&s->ram_bytes, cap_mem(old_cap));
             if (data) { atomic_fetch_add(&s->ram_bytes, cap_mem(cap)); lru_touch(s, e); } else lru_drop(s, e);
@@ -822,7 +856,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
             (!e->on_tier || new_size <= ost_tier_class_bytes(e->ext.cls))) {
             tier_ext_t oldext;
             int moved;
-            rc = ent_slab(s, e, new_size, &oldext, &moved);  /* never moves: checked above */
+            rc = ent_slab(s, e, new_size, &oldext, &moved, grow_reserve(off, new_size));  /* never moves: checked above */
             (void)moved;
             if (!rc && off > old_size) {  /* the gap reads as zeros */
                 size_t gap = (size_t)off - old_size;
@@ -831,7 +865,21 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
                 free(z);
             }
             if (!rc) rc = ost_tier_write_direct(s->tier, &e->ext, off, src, dlen);
+            if (!rc) atomic_fetch_add(&s->tier_bytes_written, dlen);
             if (!rc) atomic_fetch_add(&s->direct_writes, 1);
+        } else if (s->tier && !e->data && e->on_tier && new_size <= ost_tier_class_bytes(e->ext.cls)) {
+            /* evicted, and the write fits its slab: write the tier in place
+             * (was: read the whole object back into RAM first -- for
+             * 47008 bytes, up to a stripe's worth of NVMe reads) */
+            if (off > old_size) {  /* the gap reads as zeros */
+                size_t gap = (size_t)off - old_size;
+                uint8_t *z = calloc(1, gap);
+                rc = z ? ost_tier_write(s->tier, &e->ext, old_size, z, gap) : -ENOMEM;
+                free(z);
+                if (!rc) atomic_fetch_add(&s->tier_bytes_written, gap);
+            }
+            if (!rc) rc = ost_tier_write(s->tier, &e->ext, off, src, dlen);
+            if (!rc) atomic_fetch_add(&s->tier_bytes_written, dlen);
         } else {
             if (s->tier) rc = ent_resident(s, e);
             int fresh = 0;
@@ -854,10 +902,21 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
                 memcpy(e->data + off, src, dlen);
                 e->size = new_size;
                 obj_publish(&s->arena, e->data, new_size);
-                if (s->tier) {
-                    /* the touched range, plus the zeroed gap when it grew */
-                    uint64_t from = off < old_size ? off : old_size;
-                    rc = ent_sync(s, e, from, new_size - (size_t)from);
+                if (s->tier && !atomic_load(&s->writeback_failed)) {
+                    /* write-back: the tier copy is brought up to date
+                     * when the object leaves RAM, one whole-object write
+                     * instead of one per piece (IOR hard: ~22 per stripe,
+                     * and the zero-filled gaps in front of them) */
+                    e->tier_dirty = 1;
+                    lru_touch(s, e);
+                } else if (s->tier) {
+                    /* the touched range, plus the zeroed gap when it grew.
+                     * (Was [min(off, old size), new size): a write into
+                     * the middle of an object rewrote everything after it
+                     * -- IOR hard's out-of-order 47008-byte pieces made
+                     * ~10x their bytes in tier writes.) */
+                    uint64_t from = off > old_size ? old_size : off;
+                    rc = ent_sync(s, e, from, (size_t)(off + dlen - from), grow_reserve(off, new_size));
                     lru_touch(s, e);
                 }
             }
@@ -1897,12 +1956,14 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
         if (!rc && n->ost->tier)
             rc = buf_printf(&b, ", \"tier\": \"%s\", \"tier_capacity\": %llu, \"tier_used\": %llu, \"tier_direct\": %s, "
                             "\"ram_cache_bytes\": %llu, \"ram_cache_budget\": %llu, \"direct_writes\": %llu, "
-                            "\"tier_reads\": %llu, \"evictions\": %llu",
+                            "\"tier_reads\": %llu, \"evictions\": %llu, \"tier_bytes_written\": %llu, \"writebacks\": %llu",
                             ost_tier_kind(n->ost->tier), (unsigned long long)ost_tier_capacity(n->ost->tier),
                             (unsigned long long)ost_tier_used(n->ost->tier), ost_tier_direct(n->ost->tier) ? "true" : "false",
                             (unsigned long long)atomic_load(&n->ost->ram_bytes), (unsigned long long)n->ost->ram_budget,
                             (unsigned long long)atomic_load(&n->ost->direct_writes),
-                            (unsigned long long)atomic_load(&n->ost->tier_reads), (unsigned long long)atomic_load(&n->ost->evictions));
+                            (unsigned long long)atomic_load(&n->ost->tier_reads), (unsigned long long)atomic_load(&n->ost->evictions),
+                            (unsigned long long)atomic_load(&n->ost->tier_bytes_written),
+                            (unsigned long long)atomic_load(&n->ost->writebacks));
         if (!rc) rc = buf_put(&b, ", \"by_op\": {", 12);
         int first = 1;
         for (int i = 0; i < 64 && !rc; i++) {

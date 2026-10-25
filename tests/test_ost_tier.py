@@ -198,6 +198,35 @@ print(got == data)
         for s in st:
             self.assertLessEqual(s["ram_cache_bytes"], s["ram_cache_budget"] + (2 << 20), s)
 
+    def test_strided_pieces_are_written_to_the_tier_about_once(self):
+        # IOR hard on site: 47008-byte pieces of a shared file, ~22 per 1 MiB
+        # stripe object, arriving out of order. Each piece used to rewrite
+        # the object from its offset to the end (and every slab growth the
+        # whole object): ~10x the bytes in tier writes, 0.68 GiB/s on NVMe
+        # that took 5.6 GiB/s of large writes. Pieces are interleaved over
+        # 24 objects (12x the RAM budget) so objects are evicted mid-fill.
+        e, addr = self.engines[0], self.osts.split(",")[0]
+        piece, nobj = 47008, 24
+        want = {f"h/{o}": bytearray() for o in range(nobj)}
+        jobs = []
+        for o in range(nobj):
+            data = random.Random(o).randbytes(22 * piece)
+            want[f"h/{o}"] = data
+            order = list(range(22))
+            random.Random(100 + o).shuffle(order)
+            jobs.append([(f"h/{o}", k * piece, data[k * piece:(k + 1) * piece]) for k in order])
+        before = _stats(self.transport, addr)["tier_bytes_written"]
+        for r in range(22):
+            for o in range(nobj):
+                e.write_at(*jobs[o][r])
+        for k, v in want.items():
+            self.assertEqual(e.get(k), v, k)
+        written = _stats(self.transport, addr)["tier_bytes_written"] - before
+        # old code: 10.5x here; now ~1.8x in this worst case (every object
+        # written back between pieces, zero gaps and all); on site, with a
+        # RAM cache far larger than the objects in flight, ~1x
+        self.assertLessEqual(written, 2.2 * nobj * 22 * piece, written)
+
     def test_many_small_objects_survive_eviction(self):
         e = self.engines[0]
         blobs = {f"s/{i}": random.Random(i).randbytes(3000 + i) for i in range(1500)}  # ~6 MiB, 3x the budget
