@@ -55,6 +55,7 @@
 #include <poll.h>
 #include <pthread.h>
 #include <sched.h>
+#include <sys/prctl.h>
 #include <stdarg.h>
 #include <stdatomic.h>
 #include <stddef.h>
@@ -666,7 +667,11 @@ static struct ofi_ep *ep_create(struct ofi_dom *d, struct fid_av *av) {
     /* a CQ we can sleep on: an fd (polled with the bootstrap socket), else
      * fi_cq_sread, else plain polling */
     static const enum fi_wait_obj objs[] = {FI_WAIT_FD, FI_WAIT_UNSPEC, FI_WAIT_NONE};
-    for (int i = 0; i < 3; i++) {
+    /* ROCE_OFI_CQ_WAIT=none: no wait object, as on EFA ("wait objects are
+     * not currently supported", fi_efa(7)) -- reproduces EFA's waiting on
+     * the tcp provider */
+    const char *cw = getenv("ROCE_OFI_CQ_WAIT");
+    for (int i = cw && !strcmp(cw, "none") ? 2 : 0; i < 3; i++) {
         struct fi_cq_attr ca = {.size = 1024, .format = FI_CQ_FORMAT_DATA, .wait_obj = objs[i]};
         if (fi_cq_open(d->domain, &ca, &e->cq, e) == 0) {
             if (objs[i] == FI_WAIT_FD && fi_control(&e->cq->fid, FI_GETWAIT, &e->waitfd) == 0) e->wait_fid = &e->cq->fid;
@@ -689,6 +694,14 @@ static struct ofi_ep *ep_create(struct ofi_dom *d, struct fid_av *av) {
 fail:
     ep_destroy(e);
     return NULL;
+}
+
+/* after the busy-poll, how long a thread with no CQ wait object (EFA)
+ * yields its core between polls before it sleeps (ROCE_POLL_YIELD_US) */
+static long yield_us(void) {
+    static long v = -1;
+    if (v < 0) { const char *s = getenv("ROCE_POLL_YIELD_US"); v = s && *s ? atol(s) : 2000; if (v < 0) v = 0; }
+    return v;
 }
 
 static int spin_us(void) {
@@ -764,10 +777,17 @@ static int sock_dead(int sock) {
     return 0;
 }
 static int ep_wait(struct ofi_ep *e, int ms, int sock) {
+    static __thread int slack_set;
+    if (!slack_set && !e->wait_fid && !e->sread) {
+        /* the sleep below is 50 us; the default 50 us timer slack made it ~100 */
+        prctl(PR_SET_TIMERSLACK, 1000UL, 0, 0, 0);
+        slack_set = 1;
+    }
     int h = ep_drain(e);
     if (h) return h > 0 ? 1 : -1;
     long until = now_us() + spin_us();
     while (now_us() < until) { h = ep_drain(e); if (h) return h > 0 ? 1 : -1; }
+    long yield_until = e->wait_fid || e->sread ? 0 : now_us() + yield_us();
     long end = now_ms() + ms;
     for (;;) {
         if (sock_dead(sock)) return -2;
@@ -784,6 +804,15 @@ static int ep_wait(struct ofi_ep *e, int ms, int sock) {
             struct fi_cq_data_entry ent;
             ssize_t n = fi_cq_sread(e->cq, &ent, 1, NULL, chunk);
             if (n == 1) { dispatch(e, &ent); return 1; }
+        } else if (now_us() < yield_until) {
+            /* No wait object (EFA): a nanosleep(50 us) is ~100 us on Linux
+             * and nothing progresses meanwhile (manual progress), so every
+             * request that reached an idle thread, and every reply a client
+             * waited for longer than the spin, paid it (calibration on
+             * i3en: p50 127 us without the spin, 35 us with). For a while
+             * after the spin, give the core away instead of sleeping:
+             * sched_yield returns at once when nobody else wants it. */
+            sched_yield();
         } else {
             struct timespec ts = {0, 50000};
             nanosleep(&ts, NULL);
