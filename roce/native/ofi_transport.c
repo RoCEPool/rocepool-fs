@@ -1921,9 +1921,12 @@ roce_server_t *roce_server_start(const char *bind_address, roce_request_handler 
      * (several servers + every client rank), so one per core ran out */
     uint32_t k = env_u32("ROCE_OFI_SERVER_EPS", ncpu < 8 ? 2 : (ncpu > 64 ? 16 : (uint32_t)(ncpu / 4)));
     uint32_t depth = env_u32("ROCE_OFI_RX_DEPTH", RX_DEPTH_DEFAULT);
-    /* threads per endpoint: one per core over all endpoints, 1..8 */
-    uint32_t per = (uint32_t)ncpu / (k ? k : 1);
-    per = env_u32("ROCE_OFI_SERVER_THREADS", per < 1 ? 1 : (per > 8 ? 8 : per));
+    /* threads per endpoint: 1 unless ROCE_OFI_SERVER_THREADS says more.
+     * Several threads sharing an EFA endpoint broke on i3en (2026-10-25):
+     * a 300 KB PUT was answered twice (ERROR, then PUT_OK) and the transport
+     * checks ran 5x slower -- correct on libfabric's tcp provider, not yet
+     * on EFA, so opt-in until it is */
+    uint32_t per = env_u32("ROCE_OFI_SERVER_THREADS", 1);
     if (per < 1) per = 1;
     s->w = calloc(k, sizeof(*s->w));
     if (!s->w) goto fail;
