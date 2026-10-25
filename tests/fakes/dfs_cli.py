@@ -7,6 +7,7 @@ argv: ROOT mdts osts cmd args...
   stripes PATH        -> number of stripe objects of PATH across all OSTs
   attr PATH           -> {"size", "inline"} from the MDT
   mdtcounts DIR       -> JSON list: entries of DIR on each MDT
+  mdtstats            -> JSON list: each MDT's STATS reply
   extend PATH SIZE    -> extends PATH with zeros to SIZE, prints null
   refreeze PATH DATA  -> remove PATH, recreate it inline holding DATA, freeze
                          it (a spill in flight), prints null
@@ -47,6 +48,10 @@ elif cmd == "refreeze":
     out = None
 elif cmd == "mdtcounts":  # entries of DIR held by each MDT (striped directories)
     out = [len(dfs.mdt._call(m, {"op": "readdir", "path": sys.argv[5]})) for m in mdts]
+elif cmd == "mdtstats":
+    from roce.protocol import Frame, Op
+    out = [json.loads(RoCETransport().send_request(m, Frame(op=Op.STATS, request_id=1, key="", value=b"")).value)
+           for m in mdts]
 elif cmd == "ostcounts":
     out = [len([m for m in e.list_prefix("") if ".stripe." in m.key]) for e in engines]
 print("RESULT " + json.dumps(out), flush=True)

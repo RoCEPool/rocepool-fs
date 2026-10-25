@@ -107,13 +107,27 @@ P = {self.prefix!r}
 os.mkdir(P + "/huge")
 for i in range(9000):
     os.close(os.open(P + "/huge/file.mdtest.%d.%d" % (i % 7, i), os.O_CREAT | os.O_WRONLY, 0o644))
-names = os.listdir(P + "/huge")
+print(len(os.listdir(P)))
+"""
+        list_code = f"""
+import os
+names = os.listdir({self.prefix!r} + "/huge")
 print(len(names), len(set(names)))
 """
+        env = dict(self.penv, ROCE_MAX_FRAME_BYTES=str(64 << 10))  # ~600 entries per page
         out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, cwd=self.tmp,
-                             env=dict(self.penv, ROCE_MAX_FRAME_BYTES=str(256 << 10)))
+                             env=env)
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
-        self.assertEqual(out.stdout.split(), ["9000", "9000"])
+        before = sum(s["readdir_copied"] for s in self.dfs("mdtstats"))
+        for _ in range(2):  # two listings: each copies the directory once per MDT
+            out = subprocess.run([sys.executable, "-c", list_code], capture_output=True, text=True, timeout=300,
+                                 cwd=self.tmp, env=env)
+            self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+            self.assertEqual(out.stdout.split(), ["9000", "9000"])
+        copied = sum(s["readdir_copied"] for s in self.dfs("mdtstats")) - before
+        # paged by copying everything after the cursor, ~8 pages per MDT
+        # cost ~4x this (IO500 find on 13 M entries per MDT: 1130 s)
+        self.assertLessEqual(copied, 2 * 9000 + 100)
 
 
 @unittest.skipUnless(shutil.which("gcc"), "needs gcc")
