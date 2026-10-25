@@ -35,7 +35,9 @@ elif cmd == ("ec2", "describe-instance-types"):
     out({"InstanceTypes": [{"ProcessorInfo": {"SupportedArchitectures": ["x86_64"]},
                             "NetworkInfo": {"EfaSupported": os.environ.get("FAKE_AWS_NO_EFA") != "1",
                                             "NetworkPerformance": "200 Gigabit"},
-                            "VCpuInfo": {"DefaultVCpus": 128}, "MemoryInfo": {"SizeInMiB": 262144}}]})
+                            "VCpuInfo": {"DefaultVCpus": 128}, "MemoryInfo": {"SizeInMiB": 262144},
+                            **({"InstanceStorageInfo": {"TotalSizeInGB": int(os.environ["FAKE_AWS_NVME_GB"])}}
+                               if os.environ.get("FAKE_AWS_NVME_GB") else {})}]})
 elif cmd == ("ssm", "get-parameters"):
     out({"Parameters": [{"Value": "ami-0123456789abcdef0"}]})
 elif cmd == ("ec2", "describe-instance-type-offerings"):
