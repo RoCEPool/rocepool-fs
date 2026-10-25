@@ -1,0 +1,414 @@
+{
+  "started": "2026-10-25 12:58:24",
+  "steps": {
+    "preflight": {
+      "status": "WARN",
+      "detail": "rdmap0s27 port None (None) ip 172.31.14.220; env: {'ROCE_BACKEND': 'ofi', 'ROCE_OFI_PROVIDER': 'efa', 'ROCE_POLL_SPIN_US': '20'}; fixes: ['disabled 48 deep idle states (exit latency > 20 us) (until reboot)']",
+      "preflight": {
+        "verdict": "WARN",
+        "ip": "172.31.14.220",
+        "device": "rdmap0s27",
+        "kind": "efa",
+        "backend": "ofi",
+        "port": null,
+        "netdev": null,
+        "checks": [
+          {
+            "check": "kernel",
+            "status": "PASS",
+            "detail": "7.0.0-1014-aws: fork() is safe with registered memory"
+          },
+          {
+            "check": "memlock",
+            "status": "PASS",
+            "detail": "locked-memory limit 47834 MiB >= 2560 MiB needed",
+            "needed_bytes": 2684354560
+          },
+          {
+            "check": "power",
+            "status": "PASS",
+            "detail": "governor n/a, no deep idle states enabled"
+          },
+          {
+            "check": "device",
+            "status": "PASS",
+            "detail": "1 AWS EFA device(s): rdmap0s27 -- the ofi (libfabric) transport backend",
+            "devices": [
+              {
+                "name": "rdmap0s27",
+                "vendor": "0x1d0f",
+                "pci_driver": "efa",
+                "fw_ver": "",
+                "broadcom": false,
+                "kind": "efa"
+              }
+            ]
+          },
+          {
+            "check": "ip",
+            "status": "PASS",
+            "detail": "172.31.14.220: the bootstrap/control address (data goes over rdmap0s27)"
+          },
+          {
+            "check": "libfabric",
+            "status": "PASS",
+            "detail": "libfabric's efa provider is up (fi_info -p efa -t FI_EP_RDM)"
+          },
+          {
+            "check": "rdma_read",
+            "status": "WARN",
+            "detail": "i3en.12xlarge: not known to do EFA RDMA read in hardware (Nitro v4+ does); libfabric emulates reads with the target's CPU -- correct, slower one-sided reads; the client probe in tools/io500_run.py decides between one-sided and RPC reads"
+          },
+          {
+            "check": "lossless",
+            "status": "PASS",
+            "detail": "EFA's SRD transport is reliable over AWS's lossy fabric: no PFC/DSCP to configure"
+          },
+          {
+            "check": "tuning",
+            "status": "PASS",
+            "detail": "48 CPUs: completion busy-poll 20 us before sleeping (ROCE_POLL_SPIN_US=20; tools/roce_onsite.py then measures the best value on this NIC)"
+          }
+        ],
+        "env": {
+          "ROCE_BACKEND": "ofi",
+          "ROCE_OFI_PROVIDER": "efa",
+          "ROCE_POLL_SPIN_US": "50"
+        },
+        "fixes_applied": [
+          "disabled 48 deep idle states (exit latency > 20 us) (until reboot)"
+        ]
+      }
+    },
+    "peers": {
+      "status": "PASS",
+      "detail": "local: ip-172-31-14-220 172.31.14.220; root@172.31.7.46: ip-172-31-7-46 172.31.7.46",
+      "peers": {
+        "local": {
+          "hostname": "ip-172-31-14-220",
+          "ip": "172.31.14.220"
+        },
+        "root@172.31.7.46": {
+          "uid": "0",
+          "hostname": "ip-172-31-7-46",
+          "addresses": [
+            "127.0.0.1",
+            "172.31.7.46",
+            "172.31.15.255"
+          ],
+          "roce_ip": "172.31.7.46"
+        }
+      }
+    },
+    "build": {
+      "status": "PASS",
+      "detail": "[build] transport backend: ofi / [build] using libfabric at /opt/amazon/efa / [build] OST tier: kernel backend only (set SPDK_DIR=<built spdk tree> for the SPDK backend) / [build] built /root/rocepool/roce/native/libroce_transport.so / [build] built /root/rocepool/roce/native/rocepool-fuse (native FUSE client) / [build] built /root/rocepool/roce/native/librocepool_kv.so (native KV client API) and rocepool-kv-bench / [build] built /root/rocepool/roce/native/librocepool_intercept.so (LD_PRELOAD interception client) / [build] built /root/rocepool/roce/native/librocepool_cufile.so and cufile/libcufile.so.0 (GPUDirect Storage, cuFile API)"
+    },
+    "transport": {
+      "status": "PASS",
+      "detail": "pooling, stale-connection recovery, drain, SRQ back-pressure, bounded registration, native OST/MDT parity + CAS atomicity over 172.31.14.220 (90.5s)"
+    },
+    "spin": {
+      "status": "PASS",
+      "detail": "ROCE_POLL_SPIN_US=50 (measured: 0 us: 1 thr 15998/s p50 62 us, 8 thr 29393/s; 20 us: 1 thr 12308/s p50 82 us, 8 thr 24118/s; 50 us: 1 thr 28522/s p50 34 us, 8 thr 39907/s; 100 us: 1 thr 28302/s p50 35 us, 8 thr 41214/s; 200 us: 1 thr 28404/s p50 35 us, 8 thr 41133/s; 400 us: 1 thr 28212/s p50 35 us, 8 thr 40878/s)",
+      "calibration": {
+        "table": {
+          "0": {
+            "1": {
+              "ops_per_s": 15997.5,
+              "p50_us": 62.1,
+              "p99_us": 68.3,
+              "rpcs": 32995
+            },
+            "8": {
+              "ops_per_s": 29393.0,
+              "p50_us": 63.9,
+              "p99_us": 6005.4,
+              "rpcs": 66786
+            }
+          },
+          "20": {
+            "1": {
+              "ops_per_s": 12308.5,
+              "p50_us": 81.6,
+              "p99_us": 87.3,
+              "rpcs": 25617
+            },
+            "8": {
+              "ops_per_s": 24118.5,
+              "p50_us": 84.0,
+              "p99_us": 120.2,
+              "rpcs": 56237
+            }
+          },
+          "50": {
+            "1": {
+              "ops_per_s": 28522.0,
+              "p50_us": 34.5,
+              "p99_us": 43.1,
+              "rpcs": 58044
+            },
+            "8": {
+              "ops_per_s": 39907.0,
+              "p50_us": 46.3,
+              "p99_us": 5432.4,
+              "rpcs": 87814
+            }
+          },
+          "100": {
+            "1": {
+              "ops_per_s": 28302.0,
+              "p50_us": 34.8,
+              "p99_us": 43.5,
+              "rpcs": 57604
+            },
+            "8": {
+              "ops_per_s": 41213.5,
+              "p50_us": 46.5,
+              "p99_us": 4822.5,
+              "rpcs": 90427
+            }
+          },
+          "200": {
+            "1": {
+              "ops_per_s": 28404.0,
+              "p50_us": 34.7,
+              "p99_us": 43.7,
+              "rpcs": 57808
+            },
+            "8": {
+              "ops_per_s": 41133.0,
+              "p50_us": 46.5,
+              "p99_us": 4762.1,
+              "rpcs": 90266
+            }
+          },
+          "400": {
+            "1": {
+              "ops_per_s": 28211.5,
+              "p50_us": 34.8,
+              "p99_us": 44.7,
+              "rpcs": 57423
+            },
+            "8": {
+              "ops_per_s": 40878.5,
+              "p50_us": 46.7,
+              "p99_us": 4993.2,
+              "rpcs": 89757
+            }
+          }
+        },
+        "score": {
+          "0": 21684.430301485903,
+          "20": 17229.699859544857,
+          "50": 33737.62668001411,
+          "100": 34152.957075486156,
+          "200": 34181.01420379448,
+          "400": 33959.44349882666
+        },
+        "chosen": 50
+      }
+    },
+    "peer": {
+      "status": "WARN",
+      "detail": "root@172.31.7.46: rdmap0s27 172.31.7.46; env {'ROCE_BACKEND': 'ofi', 'ROCE_OFI_PROVIDER': 'efa', 'ROCE_POLL_SPIN_US': '20'}; failing: none",
+      "preflight": {
+        "verdict": "WARN",
+        "ip": "172.31.7.46",
+        "device": "rdmap0s27",
+        "kind": "efa",
+        "backend": "ofi",
+        "port": null,
+        "netdev": null,
+        "checks": [
+          {
+            "check": "kernel",
+            "status": "PASS",
+            "detail": "7.0.0-1014-aws: fork() is safe with registered memory"
+          },
+          {
+            "check": "memlock",
+            "status": "PASS",
+            "detail": "locked-memory limit 47834 MiB >= 2560 MiB needed",
+            "needed_bytes": 2684354560
+          },
+          {
+            "check": "power",
+            "status": "PASS",
+            "detail": "governor n/a, no deep idle states enabled"
+          },
+          {
+            "check": "device",
+            "status": "PASS",
+            "detail": "1 AWS EFA device(s): rdmap0s27 -- the ofi (libfabric) transport backend",
+            "devices": [
+              {
+                "name": "rdmap0s27",
+                "vendor": "0x1d0f",
+                "pci_driver": "efa",
+                "fw_ver": "",
+                "broadcom": false,
+                "kind": "efa"
+              }
+            ]
+          },
+          {
+            "check": "ip",
+            "status": "PASS",
+            "detail": "172.31.7.46: the bootstrap/control address (data goes over rdmap0s27)"
+          },
+          {
+            "check": "libfabric",
+            "status": "PASS",
+            "detail": "libfabric's efa provider is up (fi_info -p efa -t FI_EP_RDM)"
+          },
+          {
+            "check": "rdma_read",
+            "status": "WARN",
+            "detail": "i3en.12xlarge: not known to do EFA RDMA read in hardware (Nitro v4+ does); libfabric emulates reads with the target's CPU -- correct, slower one-sided reads; the client probe in tools/io500_run.py decides between one-sided and RPC reads"
+          },
+          {
+            "check": "lossless",
+            "status": "PASS",
+            "detail": "EFA's SRD transport is reliable over AWS's lossy fabric: no PFC/DSCP to configure"
+          },
+          {
+            "check": "tuning",
+            "status": "PASS",
+            "detail": "48 CPUs: completion busy-poll 20 us before sleeping (ROCE_POLL_SPIN_US=20; tools/roce_onsite.py then measures the best value on this NIC)"
+          }
+        ],
+        "env": {
+          "ROCE_BACKEND": "ofi",
+          "ROCE_OFI_PROVIDER": "efa",
+          "ROCE_POLL_SPIN_US": "20"
+        },
+        "fixes_applied": [
+          "disabled 48 deep idle states (exit latency > 20 us) (until reboot)"
+        ]
+      }
+    },
+    "peer-build": {
+      "status": "PASS",
+      "detail": "/opt/amazon/efa\n[build] OST tier: kernel backend only (set SPDK_DIR=<built spdk tree> for the SPDK backend)\n[build] built /tmp/rocepool_onsite/roce/native/libroce_transport.so\n[build] built /tmp/rocepool_onsite/roce/native/rocepool-fuse (native FUSE client)\n[build] built /tmp/rocepool_onsite/roce/native/librocepool_kv.so (native KV client API) and rocepool-kv-bench\n[build] built /tmp/rocepool_onsite/roce/native/librocepool_intercept.so (LD_PRELOAD interception client)\n[build] built /tmp/rocepool_onsite/roce/native/librocepool_cufile.so and cufile/libcufile.so.0 (GPUDirect Storage, cuFile API)"
+    },
+    "functional": {
+      "status": "PASS",
+      "detail": "[PASS] smoke [PASS] pool [PASS] mpi [PASS] hpc [PASS] stream",
+      "report_file": "onsite_crossover.json"
+    },
+    "bench": {
+      "status": "PASS",
+      "detail": "N=   1 md        ok/s=  7474.1 err=  0.0% p99max=     0.3ms srv_threads=  14 srv_fds=    8 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN=  10 md        ok/s= 11146.4 err=  0.0% p99max=     1.9ms srv_threads=  14 srv_fds=   17 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN=  50 md        ok/s= 40430.2 err=  0.0% p99max=     3.4ms srv_threads=  14 srv_fds=   57 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN= 100 md        ok/s= 62677.3 err=  0.0% p99max=     3.5ms srv_threads=  14 srv_fds=  107 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN= 200 md        ok/s= 77201.4 err=  0.0% p99max=     5.9ms srv_threads=  14 srv_fds=  207 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN= 500 md        ok/s= 78930.9 err=  0.0% p99max=    19.0ms srv_threads=  14 srv_fds=  507 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN=   1 md_shared ok/s=  7405.1 err=  0.0% p99max=     0.3ms srv_threads=  14 srv_fds=    8 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN=  10 md_shared ok/s= 10934.1 err=  0.0% p99max=     1.9ms srv_threads=  14 srv_fds=   17 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN=  50 md_shared ok/s= 40356.4 err=  0.0% p99max=     3.4ms srv_threads=  14 srv_fds=   57 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN= 100 md_shared ok/s= 64217.7 err=  0.0% p99max=     3.8ms srv_threads=  14 srv_fds=  107 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN= 200 md_shared ok/s= 84718.5 err=  0.0% p99max=     5.6ms srv_threads=  14 srv_fds=  207 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN= 500 md_shared ok/s= 91701.0 err=  0.0% p99max=    17.2ms srv_threads=  14 srv_fds=  507 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN=   1 data      ok/s=   528.5 err=  0.0% p99max=     3.7ms srv_threads=  14 srv_fds=    8 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN=  10 data      ok/s=  1370.0 err=  0.0% p99max=    19.4ms srv_threads=  14 srv_fds=   17 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN=  50 data      ok/s=  4854.3 err=  0.0% p99max=    28.0ms srv_threads=  14 srv_fds=   57 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN= 100 data      ok/s=  7532.4 err=  0.0% p99max=    37.0ms srv_threads=  14 srv_fds=  107 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN= 200 data      ok/s=  9182.1 err=  0.0% p99max=    70.5ms srv_threads=  14 srv_fds=  207 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]\nN= 500 data      ok/s=  8808.6 err=  0.0% p99max=   228.7ms srv_threads=  14 srv_fds=  507 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]",
+      "report_file": "onsite_stress.json"
+    },
+    "ior": {
+      "status": "PASS",
+      "detail": "[deps] mpich: unpacked the bundled mpich-4.2.3-ch3.tar.xz\n[deps] ior: unpacked the bundled ior-49b11cc.tar.xz\n[PASS] shared_1m        write    67.91 MiB/s (  1041.8 IOPS)   read  1003.51 MiB/s ( 1139.25 IOPS)\n[PASS] shared_64k       write   350.85 MiB/s (  8326.0 IOPS)   read  1091.41 MiB/s ( 19920.0 IOPS)\n[PASS] fpp_1m           write  1024.19 MiB/s (  4457.0 IOPS)   read  1794.93 MiB/s ( 1931.41 IOPS)\n[PASS] shared_4m_large  write   864.32 MiB/s (  216.54 IOPS)   read  1686.25 MiB/s (  491.92 IOPS)\n[PASS] fpp_256k         write    481.8 MiB/s ( 10056.0 IOPS)   read  1767.37 MiB/s (  7458.0 IOPS)\n[PASS] mdtest           File creation=6,397/s  File stat=1,007,641/s  File read=86,637/s  File removal=15,094/s  Tree creation=3,086/s  Tree removal=3,545/s",
+      "report_file": "onsite_ior.json"
+    },
+    "ior_hard": {
+      "status": "PASS",
+      "detail": "[PASS] ior_hard         write    98.34 MiB/s (  6631.0 IOPS)   read   337.13 MiB/s (  8126.0 IOPS)\n[PASS] mdtest           File creation=5,253/s  File stat=321,433/s  File read=21,167/s  File removal=14,672/s  Tree creation=2,994/s  Tree removal=2,558/s",
+      "report_file": "onsite_ior_hard.json"
+    },
+    "kv": {
+      "status": "PASS",
+      "detail": "{\"client\": \"native\", \"mode\": \"get\", \"threads\": 1, \"value_bytes\": 64, \"ops_per_s\": 14848.2, \"p50_us\": 47.7, \"p99_us\": 149.3, \"rpcs\": 149482}\n{\"client\": \"python\", \"mode\": \"get\", \"threads\": 1, \"value_bytes\": 64, \"ops_per_s\": 13129.7, \"p50_us\": 61.59400004435156, \"p99_us\": 168.32699998303724}\n{\"client\": \"native\", \"mode\": \"put\", \"threads\": 1, \"value_bytes\": 64, \"ops_per_s\": 17971.1, \"p50_us\": 47.6, \"p99_us\": 136.3, \"rpcs\": 180711}\n{\"client\": \"python\", \"mode\": \"put\", \"threads\": 1, \"value_bytes\": 64, \"ops_per_s\": 12845.9, \"p50_us\": 64.68100013989897, \"p99_us\": 169.43799982982455}\n{\"client\": \"native\", \"mode\": \"get\", \"threads\": 16, \"value_bytes\": 64, \"ops_per_s\": 23157.8, \"p50_us\": 69.0, \"p99_us\": 20706.5, \"rpcs\": 247578}\n{\"client\": \"python\", \"mode\": \"get\", \"threads\": 16, \"value_bytes\": 64, \"ops_per_s\": 18441.5, \"p50_us\": 862.1380000022327, \"p99_us\": 1708.8680001506873}\n{\"client\": \"native\", \"mode\": \"put\", \"threads\": 16, \"value_bytes\": 64, \"ops_per_s\": 23027.0, \"p50_us\": 69.6, \"p99_us\": 20597.3, \"rpcs\": 246270}\n{\"client\": \"python\", \"mode\": \"put\", \"threads\": 16, \"value_bytes\": 64, \"ops_per_s\": 18198.4, \"p50_us\": 873.1129998977849, \"p99_us\": 1740.4320001332962}\n{\"client\": \"native\", \"mode\": \"mget64\", \"threads\": 16, \"value_bytes\": 64, \"ops_per_s\": 251769.6, \"p50_us\": 3352.7, \"p99_us\": 8930.3, \"rpcs\": 173356}\n{\"client\": \"native\", \"mode\": \"get\", \"threads\": 1, \"value_bytes\": 4096, \"ops_per_s\": 15457.6, \"p50_us\": 50.3, \"p99_us\": 159.2, \"rpcs\": 155576}\n{\"client\": \"python\", \"mode\": \"get\", \"threads\": 1, \"value_bytes\": 4096, \"ops_per_s\": 15150.0, \"p50_us\": 63.52699983835919, \"p99_us\": 153.0239999283367}\n{\"client\": \"native\", \"mode\": \"put\", \"threads\": 1, \"value_bytes\": 4096, \"ops_per_s\": 18907.9, \"p50_us\": 50.6, \"p99_us\": 136.3, \"rpcs\": 190079}\n{\"client\": \"python\", \"mode\": \"put\", \"threads\": 1, \"value_bytes\": 4096, \"ops_per_s\": 14512.1, \"p50_us\": 66.26799995501642, \"p99_us\": 156.98099991823256}\n{\"client\": \"native\", \"mode\": \"get\", \"threads\": 16, \"value_bytes\": 4096, \"ops_per_s\": 22193.9, \"p50_us\": 72.0, \"p99_us\": 21803.2, \"rpcs\": 237939}\n{\"client\": \"python\", \"mode\": \"get\", \"threads\": 16, \"value_bytes\": 4096, \"ops_per_s\": 17660.6, \"p50_us\": 902.607999933025, \"p99_us\": 1771.8060000788682}\n{\"client\": \"native\", \"mode\": \"put\", \"threads\": 16, \"value_bytes\": 4096, \"ops_per_s\": 21850.7, \"p50_us\": 74.1, \"p99_us\": 21692.6, \"rpcs\": 234507}\n{\"client\": \"python\", \"mode\": \"put\", \"threads\": 16, \"value_bytes\": 4096, \"ops_per_s\": 17520.9, \"p50_us\": 907.5650000340829, \"p99_us\": 1793.0060000708181}\n{\"client\": \"native\", \"mode\": \"mget64\", \"threads\": 16, \"value_bytes\": 4096, \"ops_per_s\": 137606.4, \"p50_us\": 6546.2, \"p99_us\": 13972.2, \"rpcs\": 102004}",
+      "report_file": "onsite_kv.json"
+    },
+    "gds": {
+      "status": "PASS",
+      "detail": "no NVIDIA GPU on this host: nothing to stream into (GPUDirect path covered by tests/test_gds.py)",
+      "report_file": "onsite_gds.json",
+      "peers": {
+        "root@172.31.7.46": {
+          "gpus": 0,
+          "dmabuf": false,
+          "peermem": false,
+          "notes": [
+            "no NVIDIA GPU (nvidia-smi not found or failed)"
+          ]
+        }
+      }
+    },
+    "kvcache": {
+      "status": "PASS",
+      "detail": "llama3-70b, 6144 of 8192 tokens cached (1920 MiB KV): host load p50 3477.0 ms (2.2 GB/s, block keys) -> TTFT 5330.7 ms vs 7414.8 ms recomputed (x1.39, prefill estimated)",
+      "report_file": "onsite_kvcache.json"
+    },
+    "cluster-prep": {
+      "status": "WARN",
+      "detail": "root@172.31.7.46: copied to /root/rocepool (+ .bench_cache/mpich, .bench_cache/io500_src/io500, .bench_cache/io500_src/bin); preflight WARN (rdmap0s27 172.31.7.46)",
+      "peers": {
+        "root@172.31.7.46": {
+          "status": "WARN",
+          "detail": "copied to /root/rocepool (+ .bench_cache/mpich, .bench_cache/io500_src/io500, .bench_cache/io500_src/bin); preflight WARN (rdmap0s27 172.31.7.46)"
+        }
+      }
+    },
+    "nvme-preflight": {
+      "status": "PASS",
+      "detail": "local: tier file:/nvmedata/rocepool_ost_{n}.tier:21921 (O_DIRECT write 2630 MiB/s); P2P memory none\nroot@172.31.7.46: tier file:/nvmedata/rocepool_ost_{n}.tier:21921 (O_DIRECT write 2501 MiB/s); P2P memory none",
+      "hosts": {
+        "local": {
+          "tier": "file:/nvmedata/rocepool_ost_{n}.tier:21921",
+          "p2pmem": null,
+          "notes": [],
+          "tier_dir": "/nvmedata",
+          "tier_mount": {
+            "device": "/dev/md0",
+            "namespace": "nvme1n1",
+            "mountpoint": "/nvmedata",
+            "fstype": "xfs",
+            "free_bytes": 29422912274432,
+            "via": [
+              "nvme1n1",
+              "nvme2n1",
+              "nvme3n1",
+              "nvme4n1"
+            ]
+          },
+          "tier_write": {
+            "mib_s": 2630.2,
+            "seconds": 0.39
+          }
+        },
+        "root@172.31.7.46": {
+          "tier": "file:/nvmedata/rocepool_ost_{n}.tier:21921",
+          "p2pmem": null,
+          "notes": [],
+          "tier_dir": "/nvmedata",
+          "tier_mount": {
+            "device": "/dev/md0",
+            "namespace": "nvme1n1",
+            "mountpoint": "/nvmedata",
+            "fstype": "xfs",
+            "free_bytes": 29422912274432,
+            "via": [
+              "nvme1n1",
+              "nvme2n1",
+              "nvme3n1",
+              "nvme4n1"
+            ]
+          },
+          "tier_write": {
+            "mib_s": 2501.2,
+            "seconds": 0.41
+          }
+        }
+      }
+    },
+    "io500": {
+      "status": "PASS",
+      "detail": "   [   70.1s] phase mdtest-easy-write\n   [  138.2s] phase timestamp\n   [  138.9s] phase ior-hard-write\n   [  200.8s] phase mdtest-hard-write\n   [  269.7s] phase find\n   [  290.3s] phase ior-easy-read\n   [  331.2s] phase mdtest-easy-stat\n   [  366.5s] phase ior-hard-read\n   [  393.6s] phase mdtest-hard-stat\n   [  417.2s] phase mdtest-easy-delete\n   [  452.7s] phase mdtest-hard-read\n   [  499.2s] phase mdtest-hard-delete\n   [  523.0s] phase ior-rnd4K-easy-read\n== IO500 says the result is INVALID; find matched 156288 files\nIO500 on real RoCE: 2 hosts 172.31.14.220, 172.31.7.46\n  measured score: {'bw_gib_s': 4.659038, 'md_kiops': 204.685371, 'score': 30.881011}\n  phase                      measured  emu%    rpc/op  hot MDT   projected  bottleneck\n  ior-easy-write           4.969 GiB/s    0      2.14      55%    15.15 GiB/s  per-rank latency (ranks x round trips)\n  ior-easy-read            8.468 GiB/s    0      2.01      54%    13.34 GiB/s  per-rank latency (ranks x round trips)\n  ior-hard-write           2.180 GiB/s    0      1.05     100%     5.00 GiB/s  per-rank latency (ranks x round trips)\n  ior-hard-read            5.137 GiB/s    0      1.05     100%    12.71 GiB/s  per-rank latency (ranks x round trips)\n  mdtest-easy-write      126.348 kIOPS    0      2.00      50%   235.66 kIOPS  per-rank latency (ranks x round trips)\n  mdtest-easy-stat       248.096 kIOPS    0      1.00      50%   493.57 kIOPS  per-rank latency (ranks x round trips)\n  mdtest-easy-delete     249.616 kIOPS    0      1.00      50%   514.64 kIOPS  per-rank latency (ranks x round trips)\n  mdtest-hard-write       79.390 kIOPS    0      3.00      50%   155.79 kIOPS  per-rank latency (ranks x round trips)\n  mdtest-hard-stat       245.101 kIOPS    0      1.00      50%   503.10 kIOPS  per-rank latency (ranks x round trips)\n  mdtest-hard-read       120.182 kIOPS    0      2.00      50%   247.25 kIOPS  per-rank latency (ranks x round trips)\n  mdtest-hard-delete     242.930 kIOPS    0      1.00      50%   510.37 kIOPS  per-rank latency (ranks x round trips)\n  find                   693.107 kIOPS    0      0.03      50%   706.04 kIOPS  per-rank latency (ranks x round trips)\n  projected on these hosts (2 nodes x 48 cores, 100 GbE): bw 10.64 GiB/s, md 378.1 kIOPS, score 63.44\n  score range over the estimated inputs: 37.8 .. 81.8\n  vs WEKA Afton (score 105.94): 1.67x (bw 3.13x, md 0.89x; >1 = WEKA ahead)\n  what the fixes are worth (cumulative):\n       63.4  (bw  10.64 GiB/s, md   378.1 kIOPS)  as measured, valid 300 s run\n       63.4  (bw  10.64 GiB/s, md   378.1 kIOPS)  + one directory's entries spread over all MDTs (name hash), finer MDT locks (done: ROCEPOOL_DIR_STRIPE=1 + MD_BUCKETS; a no-op on a run that already has them)\n       63.4  (bw  10.64 GiB/s, md   378.1 kIOPS)  + FOPEN_PARALLEL_DIRECT_WRITES: no per-node inode lock on a shared file\n       63.4  (bw  10.64 GiB/s, md   378.1 kIOPS)  + FUSE over io_uring (per-core queues, Linux 6.14+): ~3x per-mount rate, less wake-up cost (implemented: io500_run.py probes it against /dev/fuse on the hosts and uses the faster; a no-op on a run that already used it)\n       63.4  (bw  10.64 GiB/s, md   378.1 kIOPS)  + the LD_PRELOAD interception library in every rank (no FUSE channel, no kernel on the I/O path; implemented: io500_run.py --client auto probes it against FUSE and uses the faster; a no-op on a run that already used it)\n       63.4  (bw  10.64 GiB/s, md   378.1 kIOPS)  + one-sided reads and lookups (client RDMA READs stripes and MDT entries; implemented: io500_run.py --direct-read auto probes it; a no-op on a run that already used it -- its effect is in the measured per-op server CPU)\n       63.4  (bw  10.64 GiB/s, md   378.1 kIOPS)  + the OST's NVMe tier for the 300 s write phases (implemented: roce/native/ost_tier.c, io500_run.py --ost-tier auto; a no-op on a run that already had it -- its limits are then the drives' capacity and write bandwidth)",
+      "report_file": "onsite_io500.json"
+    },
+    "io500-valid": {
+      "status": "PASS",
+      "detail": "   [    1.0s] phase ior-easy-write\n   [  339.8s] phase mdtest-easy-write\n   [  669.7s] phase timestamp\n   [  670.1s] phase ior-hard-write\n   [  976.2s] phase mdtest-hard-write\n   [ 1309.5s] phase find\n   [ 1413.4s] phase ior-easy-read\n   [ 1647.3s] phase mdtest-easy-stat\n   [ 1811.6s] phase ior-hard-read\n   [ 1968.6s] phase mdtest-hard-stat\n   [ 2074.2s] phase mdtest-easy-delete\n   [ 2240.0s] phase mdtest-hard-read\n   [ 2453.2s] phase mdtest-hard-delete\n== IO500 says the result is VALID; find matched 947264 files\nIO500 on real RoCE: 2 hosts 172.31.14.220, 172.31.7.46\n  measured score: {'bw_gib_s': 4.064171, 'md_kiops': 201.006041, 'score': 28.581864}\n  phase                      measured  emu%    rpc/op  hot MDT   projected  bottleneck\n  ior-easy-write           4.862 GiB/s    0      2.13      55%    15.13 GiB/s  per-rank latency (ranks x round trips)\n  ior-easy-read            7.037 GiB/s    0      2.01      55%    11.50 GiB/s  per-rank latency (ranks x round trips)\n  ior-hard-write           2.019 GiB/s    0      1.04     100%     4.73 GiB/s  per-rank latency (ranks x round trips)\n  ior-hard-read            3.950 GiB/s    0      1.05     100%    10.09 GiB/s  per-rank latency (ranks x round trips)\n  mdtest-easy-write      123.229 kIOPS    0      2.00      50%   231.70 kIOPS  per-rank latency (ranks x round trips)\n  mdtest-easy-stat       247.628 kIOPS    0      1.00      50%   488.94 kIOPS  per-rank latency (ranks x round trips)\n  mdtest-easy-delete     245.779 kIOPS    0      1.00      50%   497.08 kIOPS  per-rank latency (ranks x round trips)\n  mdtest-hard-write       77.149 kIOPS    0      3.00      50%   152.74 kIOPS  per-rank latency (ranks x round trips)\n  mdtest-hard-stat       244.750 kIOPS    0      1.00      50%   488.29 kIOPS  per-rank latency (ranks x round trips)\n  mdtest-hard-read       120.680 kIOPS    0      2.00      50%   240.03 kIOPS  per-rank latency (ranks x round trips)\n  mdtest-hard-delete     244.742 kIOPS    0      3.43      50%   806.89 kIOPS  per-rank latency (ranks x round trips)\n  find                   637.118 kIOPS    0      0.04      50%   667.18 kIOPS  per-rank latency (ranks x round trips)\n  projected on these hosts (2 nodes x 48 cores, 100 GbE): bw 9.55 GiB/s, md 390.7 kIOPS, score 61.07\n  score range over the estimated inputs: 36.1 .. 79.5\n  vs WEKA Afton (score 105.94): 1.73x (bw 3.49x, md 0.86x; >1 = WEKA ahead)\n  what the fixes are worth (cumulative):\n       61.1  (bw   9.55 GiB/s, md   390.7 kIOPS)  as measured, valid 300 s run\n       61.1  (bw   9.55 GiB/s, md   390.7 kIOPS)  + one directory's entries spread over all MDTs (name hash), finer MDT locks (done: ROCEPOOL_DIR_STRIPE=1 + MD_BUCKETS; a no-op on a run that already has them)\n       61.1  (bw   9.55 GiB/s, md   390.7 kIOPS)  + FOPEN_PARALLEL_DIRECT_WRITES: no per-node inode lock on a shared file\n       61.1  (bw   9.55 GiB/s, md   390.7 kIOPS)  + FUSE over io_uring (per-core queues, Linux 6.14+): ~3x per-mount rate, less wake-up cost (implemented: io500_run.py probes it against /dev/fuse on the hosts and uses the faster; a no-op on a run that already used it)\n       61.1  (bw   9.55 GiB/s, md   390.7 kIOPS)  + the LD_PRELOAD interception library in every rank (no FUSE channel, no kernel on the I/O path; implemented: io500_run.py --client auto probes it against FUSE and uses the faster; a no-op on a run that already used it)\n       61.1  (bw   9.55 GiB/s, md   390.7 kIOPS)  + one-sided reads and lookups (client RDMA READs stripes and MDT entries; implemented: io500_run.py --direct-read auto probes it; a no-op on a run that already used it -- its effect is in the measured per-op server CPU)\n       61.1  (bw   9.55 GiB/s, md   390.7 kIOPS)  + the OST's NVMe tier for the 300 s write phases (implemented: roce/native/ost_tier.c, io500_run.py --ost-tier auto; a no-op on a run that already had it -- its limits are then the drives' capacity and write bandwidth)",
+      "report_file": "onsite_io500_valid.json"
+    }
+  },
+  "verdict": "WARN"
+}
