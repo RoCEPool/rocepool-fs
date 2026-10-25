@@ -131,6 +131,41 @@ print(len(names), len(set(names)))
 
 
 @unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class StridedFlushTests(_Cluster):
+    """IOR hard's pattern from one rank: 47008-byte pieces a stride apart,
+    so no two buffered writes touch. A flush sent them one at a time, each
+    a WRITE_AT and an MDT set_size round trip (0.68 GiB/s on site); now all
+    of a flush's stripe writes are in flight together and the MDT hears one
+    size update."""
+    port = 23440
+
+    def test_strided_pieces_flush_together_and_read_back(self):
+        set_size = lambda: sum(s.get("by_op", {}).get("3", 0) for s in self.dfs("mdtstats"))
+        before = set_size()
+        out = self.py(f"""
+import hashlib, os
+P = {self.prefix!r}
+piece, nranks, nseg = 47008, 8, 200
+fd = os.open(P + "/strided", os.O_CREAT | os.O_WRONLY, 0o644)
+for k in range(nseg):  # this rank (3 of 8) writes its piece of every segment
+    os.pwrite(fd, hashlib.sha256(b"%d" % k).digest() * 1469, (k * nranks + 3) * piece)
+os.close(fd)
+with open(P + "/strided", "rb") as f:
+    data = f.read()
+ok = len(data) == (nseg - 1) * nranks * piece + 4 * piece
+for k in range(nseg):
+    at = (k * nranks + 3) * piece
+    ok = ok and data[at:at + piece] == hashlib.sha256(b"%d" % k).digest() * 1469
+    ok = ok and data[at - piece:at] == bytes(piece)  # the holes read as zeros
+print(ok)
+""", timeout=300)
+        self.assertEqual(out.strip(), "True")
+        # 200 pieces in one flush (16 MiB buffer): a handful of size
+        # updates (create, the flush), not one per piece
+        self.assertLessEqual(set_size() - before, 4)
+
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
 class SlowOSTTests(_Cluster):
     """An OST that takes 6.5 s per write (a slow drive with a queue in front
     of it, as on site) is slow, not dead: the writes must succeed. With the
