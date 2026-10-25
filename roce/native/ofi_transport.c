@@ -114,6 +114,11 @@ static uint32_t env_u32(const char *name, uint32_t dflt) {
     long v = (e && *e) ? strtol(e, NULL, 10) : 0;
     return v > 0 ? (uint32_t)v : dflt;
 }
+static uint64_t now_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
 static long now_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -606,6 +611,7 @@ struct op {
     int err;
     size_t len;
     uint64_t seq;              /* server request slots: arrival order */
+    uint64_t t_ns;             /* server request slots: when it arrived */
 };
 #define OP_TX 1
 #define OP_RX 2
@@ -696,7 +702,7 @@ static void dispatch(struct ofi_ep *e, const struct fi_cq_data_entry *ent) {
     if (!o) return;
     o->len = ent->len;
     o->err = 0;
-    if (o->kind == OP_SLOT) o->seq = __atomic_add_fetch(&e->arrivals, 1, __ATOMIC_RELAXED);
+    if (o->kind == OP_SLOT) { o->seq = __atomic_add_fetch(&e->arrivals, 1, __ATOMIC_RELAXED); o->t_ns = now_ns(); }
     __atomic_store_n(&o->done, 1, __ATOMIC_RELEASE);  /* several threads may drain one CQ */
 }
 
@@ -714,7 +720,7 @@ static int ep_drain(struct ofi_ep *e) {
                 struct op *o = err.op_context;
                 o->err = err.err ? err.err : FI_EIO;
                 o->len = err.len;
-                if (o->kind == OP_SLOT) o->seq = __atomic_add_fetch(&e->arrivals, 1, __ATOMIC_RELAXED);
+                if (o->kind == OP_SLOT) { o->seq = __atomic_add_fetch(&e->arrivals, 1, __ATOMIC_RELAXED); o->t_ns = now_ns(); }
                 __atomic_store_n(&o->done, 1, __ATOMIC_RELEASE);
                 /* a receive we cancelled ourselves: keep the error that made us cancel it */
                 if (o->err != FI_ECANCELED)
@@ -1419,9 +1425,34 @@ struct worker {
     pthread_mutex_t pick;
     uint8_t *claimed;
     struct bufpool *pool;
+    /* STATS "transport": requests handled; arrival -> picked up (queued
+     * behind others); picked up -> reply posted / sent (handler, bulk
+     * reads, and for a synchronous reply its completion); waiting for a
+     * reply to complete; async replies; times every async slot was busy */
+    uint64_t st_reqs, st_queue_ns, st_busy_ns, st_txwait_ns, st_async, st_ring_full;
+    uint64_t st_t0;
 };
 static __thread uint8_t *tl_small;
 static __thread void *tl_small_desc;
+
+/* This thread's small replies in flight. A reply used to be sent and then
+ * waited for (until EFA's SRD acknowledged it, a network round trip) before
+ * the endpoint's thread took the next request: on 2 x i3en the MDTs topped
+ * out near 92 k requests/s each with their threads 40% busy, the same in
+ * every metadata phase (stat, delete, read). Now the thread goes on at once
+ * and recycles the buffer, and releases the client's address entry, when
+ * the send completes. Replies too big for a slot still go synchronously. */
+#define TX_RING 32
+struct txslot { struct op op; int busy; fi_addr_t to; };
+struct txring {
+    uint8_t *buf;          /* TX_RING x SMALL_FRAME, registered */
+    struct fid_mr *mr;
+    void *desc;
+    struct txslot s[TX_RING];
+    int nbusy;
+    uint64_t sent, waited;  /* async sends; times all slots were busy */
+};
+static __thread struct txring *tl_tx;
 
 struct roce_server {
     roce_request_handler handler;
@@ -1466,7 +1497,42 @@ static int slot_post(struct ofi_ep *e, int i) {
     return do_recv(e, e->slab + (size_t)i * SMALL_FRAME, SMALL_FRAME, e->slab_desc, &e->slots[i], OP_SLOT);
 }
 
-/* send a reply (hdr + payload) to `to` and wait for it to leave */
+static void peer_release(struct roce_server *s, fi_addr_t a);
+
+/* finished async replies: free their slots and their clients' AV entries */
+static void tx_reap(struct worker *w) {
+    struct txring *t = tl_tx;
+    if (!t || !t->nbusy) return;
+    for (int i = 0; i < TX_RING; i++) {
+        struct txslot *x = &t->s[i];
+        if (!x->busy || !__atomic_load_n(&x->op.done, __ATOMIC_ACQUIRE)) continue;
+        if (x->op.err && x->op.err != FI_ECANCELED) {
+            static _Atomic int said;
+            if (atomic_fetch_add(&said, 1) < 5) fprintf(stderr, "ofi_transport: a reply failed: %s\n", fi_strerror(x->op.err));
+        }
+        x->busy = 0;
+        t->nbusy--;
+        peer_release(w->s, x->to);
+    }
+}
+
+/* a free slot of this thread's ring, waiting (progressing the endpoint)
+ * while all are in flight; NULL after 30 s */
+static struct txslot *tx_slot(struct worker *w) {
+    struct txring *t = tl_tx;
+    long end = 0;
+    for (;;) {
+        tx_reap(w);
+        if (t->nbusy < TX_RING)
+            for (int i = 0; i < TX_RING; i++) if (!t->s[i].busy) return &t->s[i];
+        if (!end) { end = now_ms() + 30000; t->waited++; __atomic_add_fetch(&w->st_ring_full, 1, __ATOMIC_RELAXED); }
+        else if (now_ms() > end) { set_error("replies not completing (peer gone?)"); return NULL; }
+        if (ep_wait(w->e, 10, -1) == -1) return NULL;
+    }
+}
+
+/* Send a reply (hdr + payload) to `to`. Releases the peer (peer_admit's
+ * hold) once the reply has left -- later, for a small reply sent async. */
 static int send_reply(struct worker *w, fi_addr_t to, uint64_t tag, uint32_t status, uint8_t *resp, size_t rlen) {
     struct ofi_ep *e = w->e;
     struct rep_hdr h = {.magic = REP_MAGIC, .status = status, .tag = tag};
@@ -1475,7 +1541,22 @@ static int send_reply(struct worker *w, fi_addr_t to, uint64_t tag, uint32_t sta
     void *desc;
     struct bufpool *bp = NULL;
     struct rbuf *pb = resp ? pool_find_any(resp, &bp) : NULL;
-    if (pb && resp - pb->addr >= (ptrdiff_t)REP_HDR) {
+    int pooled = pb && resp - pb->addr >= (ptrdiff_t)REP_HDR;
+    if (!pooled && rlen + REP_HDR <= SMALL_FRAME && tl_tx) {
+        struct txslot *x = tx_slot(w);
+        if (!x) { peer_release(w->s, to); return -1; }
+        start = tl_tx->buf + (size_t)(x - tl_tx->s) * SMALL_FRAME;
+        memcpy(start, &h, REP_HDR);
+        if (rlen) memcpy(start + REP_HDR, resp, rlen);
+        if (do_send(e, start, REP_HDR + rlen, tl_tx->desc, to, &x->op)) { peer_release(w->s, to); return -1; }
+        x->busy = 1;
+        x->to = to;
+        tl_tx->nbusy++;
+        tl_tx->sent++;
+        __atomic_add_fetch(&w->st_async, 1, __ATOMIC_RELAXED);
+        return 0;
+    }
+    if (pooled) {
         start = resp - REP_HDR;
         desc = pb->desc;
     } else if (rlen + REP_HDR <= SMALL_FRAME) {
@@ -1484,7 +1565,7 @@ static int send_reply(struct worker *w, fi_addr_t to, uint64_t tag, uint32_t sta
         if (rlen) memcpy(start + REP_HDR, resp, rlen);
     } else {
         own = pool_get(w->pool, 30000);
-        if (!own) return -1;
+        if (!own) { peer_release(w->s, to); return -1; }
         start = own->addr;
         desc = own->desc;
         memcpy(start + REP_HDR, resp, rlen);
@@ -1494,9 +1575,12 @@ static int send_reply(struct worker *w, fi_addr_t to, uint64_t tag, uint32_t sta
     int rc = do_send(e, start, REP_HDR + rlen, desc, to, &tx);
     if (!rc) {
         struct op *o1[1] = {&tx};
+        uint64_t t0 = now_ns();
         rc = ep_wait_ops(e, o1, 1, 30000, -1);
+        __atomic_add_fetch(&w->st_txwait_ns, now_ns() - t0, __ATOMIC_RELAXED);
     }
     if (own) pool_put(w->pool, own);
+    peer_release(w->s, to);
     return rc;
 }
 
@@ -1543,9 +1627,8 @@ static void handle_slot(struct worker *w, int i) {
     struct alive_arg aa = {w->s, to};
     tl_alive = peer_alive;
     tl_alive_arg = &aa;
-    handle_slot_admitted(w, i, &h, to);
+    handle_slot_admitted(w, i, &h, to);  /* sends exactly one reply, which releases the peer */
     tl_alive = NULL;
-    peer_release(w->s, to);
 }
 
 static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *hp, fi_addr_t to) {
@@ -1616,7 +1699,21 @@ static void *worker_main(void *arg) {
         free(tl_small);
         tl_small = NULL;  /* falls back to the endpoint's (only safe alone) */
     }
+    const char *ar = getenv("ROCE_OFI_ASYNC_REPLIES");  /* "0": every reply synchronous (as before) */
+    struct txring *ring = !(ar && !strcmp(ar, "0")) ? calloc(1, sizeof(*ring)) : NULL;
+    if (ring) {
+        uint64_t k2;
+        ring->buf = aligned_alloc(4096, (size_t)TX_RING * SMALL_FRAME);
+        if (!ring->buf || mr_reg(w->s->d, ring->buf, (size_t)TX_RING * SMALL_FRAME, &ring->mr, &ring->desc, &k2)) {
+            fprintf(stderr, "ofi_transport: async reply buffers: %s (replies stay synchronous)\n", roce_last_error());
+            free(ring->buf);
+            free(ring);
+            ring = NULL;
+        }
+    }
+    tl_tx = ring;
     while (!atomic_load(&w->s->stopping)) {
+        tx_reap(w);
         /* the oldest arrived request nobody has claimed */
         int best = -1;
         pthread_mutex_lock(&w->pick);
@@ -1626,7 +1723,11 @@ static void *worker_main(void *arg) {
         if (best >= 0) w->claimed[best] = 1;
         pthread_mutex_unlock(&w->pick);
         if (best < 0) { ep_wait(e, 50, -1); continue; }
+        uint64_t t_pick = now_ns();
+        __atomic_add_fetch(&w->st_queue_ns, t_pick - e->slots[best].t_ns, __ATOMIC_RELAXED);
         handle_slot(w, best);
+        __atomic_add_fetch(&w->st_busy_ns, now_ns() - t_pick, __ATOMIC_RELAXED);
+        __atomic_add_fetch(&w->st_reqs, 1, __ATOMIC_RELAXED);
         int bad = slot_post(e, best);
         pthread_mutex_lock(&w->pick);
         w->claimed[best] = 0;
@@ -1635,6 +1736,13 @@ static void *worker_main(void *arg) {
             fprintf(stderr, "ofi_transport: cannot repost a receive: %s\n", roce_last_error());
             break;
         }
+    }
+    if (ring) {  /* let the replies in flight finish before their buffers go */
+        long end = now_ms() + 2000;
+        while (ring->nbusy && now_ms() < end) { ep_wait(e, 10, -1); tx_reap(w); }
+        tl_tx = NULL;
+        if (!ring->nbusy) { fi_close(&ring->mr->fid); free(ring->buf); free(ring); }
+        /* else leaked on purpose: the NIC may still read them */
     }
     if (smr) fi_close(&smr->fid);
     free(tl_small);
@@ -1948,6 +2056,7 @@ roce_server_t *roce_server_start(const char *bind_address, roce_request_handler 
             goto fail;
         }
         s->nw++;
+        w->st_t0 = now_ns();
         struct ofi_ep *e = w->e;
         pthread_mutex_init(&w->pick, NULL);
         w->nthreads = (int)per;
@@ -1982,6 +2091,29 @@ fail:
     if (s->av) fi_close(&s->av->fid);
     free(s);
     return NULL;
+}
+
+size_t roce_server_stats_json(roce_server_t *s, char *out, size_t out_len) {
+    uint64_t r = 0, q = 0, b = 0, tw = 0, as = 0, rf = 0, up = 0;
+    int threads = 0;
+    uint64_t now = now_ns();
+    for (int i = 0; i < s->nw; i++) {
+        struct worker *w = &s->w[i];
+        r += __atomic_load_n(&w->st_reqs, __ATOMIC_RELAXED);
+        q += __atomic_load_n(&w->st_queue_ns, __ATOMIC_RELAXED);
+        b += __atomic_load_n(&w->st_busy_ns, __ATOMIC_RELAXED);
+        tw += __atomic_load_n(&w->st_txwait_ns, __ATOMIC_RELAXED);
+        as += __atomic_load_n(&w->st_async, __ATOMIC_RELAXED);
+        rf += __atomic_load_n(&w->st_ring_full, __ATOMIC_RELAXED);
+        up += (now - w->st_t0) * (uint64_t)w->nthreads;
+        threads += w->nthreads;
+    }
+    int n = snprintf(out, out_len,
+                     "\"endpoints\": %d, \"threads\": %d, \"reqs\": %llu, \"queue_ns\": %llu, \"busy_ns\": %llu, "
+                     "\"reply_wait_ns\": %llu, \"async_replies\": %llu, \"reply_ring_full\": %llu, \"thread_ns\": %llu",
+                     s->nw, threads, (unsigned long long)r, (unsigned long long)q, (unsigned long long)b,
+                     (unsigned long long)tw, (unsigned long long)as, (unsigned long long)rf, (unsigned long long)up);
+    return n > 0 && (size_t)n < out_len ? (size_t)n : 0;
 }
 
 int roce_server_local_address(roce_server_t *s, char *out, size_t out_len) {

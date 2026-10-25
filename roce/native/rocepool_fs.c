@@ -1108,6 +1108,27 @@ static int fs_write_runs(const char *path, const wrun_t *runs, int nruns) {
     return rc;
 }
 
+/* how much of an inline file an open for reading fetches with it */
+#define OPEN_PREFETCH 8192
+
+int fs_open_read(const char *path, attr_t *a, uint8_t **data, size_t *dlen) {
+    *data = NULL;
+    *dlen = 0;
+    resp_t r;
+    const uint8_t *d;
+    size_t n;
+    int rc = mdt_inline_read(path, 0, 0, OPEN_PREFETCH, a, &r, &d, &n);
+    if (rc) return rc;
+    ac_put(path, a);
+    if (a->inl && n == a->size && n <= OPEN_PREFETCH) {
+        *data = xmalloc(n ? n : 1);
+        memcpy(*data, d, n);
+        *dlen = n;
+    }
+    resp_free(&r);
+    return 0;
+}
+
 int fs_write_range(const char *path, uint64_t off, const uint8_t *data, size_t len) {
     wseg_t seg = { data, len, NULL };
     return fs_write_segs(path, off, &seg, 1);
@@ -1160,12 +1181,12 @@ int fs_truncate(const char *path, uint64_t size) {
 }
 
 int fs_remove_file(const char *path) {
-    attr_t a;
-    int rc = fs_getattr(path, &a);
-    if (rc) return rc;
-    if (a.is_dir) return -EISDIR;
+    /* No lookup first: the MDT's unlink answers NOT_FOUND / IS_DIR itself
+     * and returns the entry (layout, size) the stripes are deleted by. The
+     * lookup made every delete two MDT round trips -- mdtest's delete
+     * phases ran at half the MDTs' request rate (2 x i3en, 2026-10-25). */
     attr_t e;
-    rc = mdt_unlink(path, 0, &e);
+    int rc = mdt_unlink(path, 0, &e);
     if (rc == 0 || rc == -ENOENT) ac_put(path, NULL);
     if (rc) return rc;
     if (e.inl && !e.frozen) return 0;  /* the bytes went away with the MDT entry */
@@ -1703,7 +1724,7 @@ static void open_unregister(handle_t *h) {
 void invalidate_open_caches(const char *path) {
     pthread_mutex_lock(&g_open_lk);
     for (size_t i = 0; i < g_nopen; i++)
-        if (g_open[i]->sc && !strcmp(g_open[i]->path, path)) sc_clear(g_open[i]->sc);
+        if (g_open[i]->sc && !strcmp(g_open[i]->path, path)) { sc_clear(g_open[i]->sc); g_open[i]->pre_ok = 0; }
     pthread_mutex_unlock(&g_open_lk);
 }
 
@@ -1722,6 +1743,7 @@ void handle_free(handle_t *h) {
     for (size_t i = 0; i < h->ndents; i++) free(h->dents[i].name);
     free(h->dents);
     if (h->sc) sc_unref(h->sc);
+    free(h->pre);
     free(h->path);
     pthread_mutex_destroy(&h->lk);
     free(h);
@@ -1865,6 +1887,13 @@ int handle_write(handle_t *h, uint64_t off, const uint8_t *data, size_t len, uin
 }
 
 ssize_t handle_read(handle_t *h, uint64_t off, uint8_t *out, size_t len) {
+    if (h->pre_ok && !h->ndirty) {  /* the content the open fetched */
+        if (off >= h->pre_len) return 0;
+        size_t n = h->pre_len - (size_t)off < len ? h->pre_len - (size_t)off : len;
+        memcpy(out, h->pre + off, n);
+        h->next_off = off + n;
+        return (ssize_t)n;
+    }
     int rc = handle_flush(h);  /* same-fd read-after-write */
     attr_t a;
     if (!rc) rc = fs_getattr(h->path, &a);

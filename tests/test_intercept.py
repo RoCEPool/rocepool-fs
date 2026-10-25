@@ -164,6 +164,77 @@ print(ok)
         # updates (create, the flush), not one per piece
         self.assertLessEqual(set_size() - before, 4)
 
+    def test_unlink_is_one_mdt_round_trip(self):
+        """A delete used to look the file up first (two MDT requests per
+        file): mdtest's delete phases ran at half the MDTs' request rate."""
+        self.py(f"""
+import os
+P = {self.prefix!r}
+os.mkdir(P + "/del")
+for i in range(300):
+    os.close(os.open(P + "/del/f%d" % i, os.O_CREAT | os.O_WRONLY, 0o644))
+with open(P + "/del/big", "wb") as f: f.write(os.urandom(3 << 20))  # striped: its objects go too
+os.mkdir(P + "/del/sub")
+""")
+        ops = lambda: [sum(s.get("by_op", {}).get(k, 0) for s in self.dfs("mdtstats")) for k in ("1", "4")]
+        before = ops()
+        # lookups by RPC, as on EFA without RDMA read in hardware (here a
+        # lookup would be a one-sided read the MDT never counts)
+        penv, self.penv = self.penv, dict(self.penv, ROCEPOOL_DIRECT_LOOKUP="0")
+        self.addCleanup(setattr, self, "penv", penv)
+        out = self.py(f"""
+import errno, os
+P = {self.prefix!r}
+for i in range(300):
+    os.unlink(P + "/del/f%d" % i)
+os.unlink(P + "/del/big")
+def err(fn):
+    try: fn(); return 0
+    except OSError as e: return e.errno
+print(err(lambda: os.unlink(P + "/del/sub")) == errno.EISDIR, err(lambda: os.unlink(P + "/del/nope")) == errno.ENOENT,
+      sorted(os.listdir(P + "/del")))
+""")
+        self.assertEqual(out.strip(), "True True ['sub']")
+        lookups, unlinks = [a - b for a, b in zip(ops(), before)]
+        self.assertGreaterEqual(unlinks, 301)
+        self.assertLess(lookups, 30, (lookups, unlinks))  # was one per file
+        self.assertEqual(self.dfs("stripes", "del/big"), 0)  # its stripe objects went too
+
+    def test_open_and_read_of_a_small_file_is_one_mdt_round_trip(self):
+        """mdtest-hard-read opens a 3901-byte (inline) file and reads it: a
+        lookup, then an inline read. The open now fetches the content with
+        the attributes, and the read is served from it."""
+        self.py(f"""
+import os
+P = {self.prefix!r}
+os.mkdir(P + "/rd")
+for i in range(200):
+    with open(P + "/rd/f%d" % i, "wb") as f: f.write(bytes([i % 251]) * 3901)
+with open(P + "/rd/big", "wb") as f: f.write(bytes(range(256)) * 12288)  # 3 MiB, striped
+""")
+        ops = lambda: sum(s.get("by_op", {}).get(k, 0) for s in self.dfs("mdtstats") for k in ("1", "8"))
+        before = ops()
+        penv, self.penv = self.penv, dict(self.penv, ROCEPOOL_DIRECT_LOOKUP="0")  # lookups by RPC, as on EFA
+        self.addCleanup(setattr, self, "penv", penv)
+        out = self.py(f"""
+import errno, os
+P = {self.prefix!r}
+ok = all(open(P + "/rd/f%d" % i, "rb").read() == bytes([i % 251]) * 3901 for i in range(200))
+fd = os.open(P + "/rd/f7", os.O_RDONLY)  # pread inside and past the end, fstat
+ok = ok and os.pread(fd, 10, 3895) == bytes([7]) * 6 and os.pread(fd, 10, 5000) == b"" and os.fstat(fd).st_size == 3901
+os.close(fd)
+ok = ok and open(P + "/rd/big", "rb").read() == bytes(range(256)) * 12288
+try: os.open(P + "/rd/nope", os.O_RDONLY); ok = False
+except OSError as e: ok = ok and e.errno == errno.ENOENT
+d = os.open(P + "/rd", os.O_RDONLY); os.close(d)  # a directory opens as before
+r = os.open(P + "/rd/f9", os.O_RDONLY)  # the reader's content goes with a truncate here
+os.truncate(P + "/rd/f9", 5)
+ok = ok and os.read(r, 100) == bytes([9]) * 5
+print(ok)
+""")
+        self.assertEqual(out.strip(), "True")
+        self.assertLess(ops() - before, 200 * 1.2)  # was 2 per small file (lookup + inline read)
+
 
 @unittest.skipUnless(shutil.which("gcc"), "needs gcc")
 class SlowOSTTests(_Cluster):
