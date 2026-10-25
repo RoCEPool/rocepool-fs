@@ -696,6 +696,14 @@ fail:
     return NULL;
 }
 
+/* how long this thread's recent waits lasted past the spin (EWMA, us):
+ * decides whether it yields or sleeps (ep_wait) */
+static __thread long tl_wait_ewma_us;
+/* a server endpoint's worker: the waits that yield (a client's waits
+ * spin, then sleep: its program's threads need the cores) */
+static __thread int tl_server_thread;
+static void wait_note(long us) { tl_wait_ewma_us = (7 * tl_wait_ewma_us + us) / 8; }
+
 /* after the busy-poll, how long a thread with no CQ wait object (EFA)
  * yields its core between polls before it sleeps (ROCE_POLL_YIELD_US) */
 static long yield_us(void) {
@@ -787,7 +795,19 @@ static int ep_wait(struct ofi_ep *e, int ms, int sock) {
     if (h) return h > 0 ? 1 : -1;
     long until = now_us() + spin_us();
     while (now_us() < until) { h = ep_drain(e); if (h) return h > 0 ? 1 : -1; }
-    long yield_until = e->wait_fid || e->sread ? 0 : now_us() + yield_us();
+    /* Yield only when this thread's waits have been short: a server
+     * thread between metadata requests, a client waiting for a lookup.
+     * A thread whose waits are long (bulk I/O: milliseconds) sleeps --
+     * yielding there kept every waiting thread on a CPU: on 2 x i3en the
+     * hosts went from 16% to 83% busy in ior-hard-write and every IOR
+     * phase lost 12-23% (here, 2 cores: ior-hard write 192 -> 62 MiB/s). */
+    long t_wait = now_us();
+    long win = 0;
+    if (!e->wait_fid && !e->sread && tl_server_thread && tl_wait_ewma_us < yield_us() / 4) {
+        win = 4 * tl_wait_ewma_us + 20;
+        if (win > yield_us()) win = yield_us();
+    }
+    long yield_until = win ? t_wait + win : 0;
     long end = now_ms() + ms;
     for (;;) {
         if (sock_dead(sock)) return -2;
@@ -818,7 +838,10 @@ static int ep_wait(struct ofi_ep *e, int ms, int sock) {
             nanosleep(&ts, NULL);
         }
         h = ep_drain(e);
-        if (h) return h > 0 ? 1 : -1;
+        if (h) {
+            if (h > 0) wait_note(now_us() - t_wait);
+            return h > 0 ? 1 : -1;
+        }
     }
 }
 
@@ -1717,6 +1740,7 @@ static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *
 static void *worker_main(void *arg) {
     struct worker *w = arg;
     pthread_setname_np(pthread_self(), "rt-ofi");
+    tl_server_thread = 1;
     pin_to_next_core();
     struct ofi_ep *e = w->e;
     /* this thread's registered reply buffer */

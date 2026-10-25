@@ -73,7 +73,8 @@ class OfiNoWaitObjectTests(unittest.TestCase):
     thread, or a reply a client waited for, paid ~90 us (i3en calibration:
     p50 127 us without the spin, 35 us with). Here the tcp provider with no
     wait object, as on EFA; the waits now yield the core for a while
-    instead, and requests and async replies must stay correct."""
+    instead (server threads only, and only while their waits are short),
+and requests and async replies must stay correct."""
 
     def test_correct_and_no_sleep_in_the_latency(self):
         sys.path.insert(0, ROOT)
@@ -125,9 +126,10 @@ print("RESULT " + json.dumps({"ok": ok, "p50_us": lat[200] * 1e6, "async": st["t
         self.assertGreater(runs["2000"]["async"], 0)  # small replies went async
         # the server's threads (spawned with the yield default) answer an idle
         # request without a sleep; the client side differs only in its own wait
-        # here (2 cores): p50 ~80-115 us with the yield, ~115-200 us without
+        # only the server's threads yield (clients spin, then sleep: their
+        # program needs the cores), so the client setting changes nothing
+        # measurable here; the bound catches a millisecond sleep
         self.assertLess(runs["2000"]["p50_us"], 2000, runs)
-        self.assertLessEqual(runs["2000"]["p50_us"], 1.1 * runs["0"]["p50_us"], runs)
 
 
 if __name__ == "__main__":
