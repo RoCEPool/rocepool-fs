@@ -76,6 +76,7 @@ static void *sym(const char *name) {
 }
 
 static int g_log;
+static int g_open_prefetch = 1;  /* ROCEPOOL_OPEN_PREFETCH=0: open() looks up only, as before */
 static pthread_once_t g_libc_once = PTHREAD_ONCE_INIT;
 static int g_libc_ok;
 static void load_libc(void);
@@ -129,6 +130,7 @@ static size_t g_prefix_len;
 static void read_prefix(void) {
     const char *prefix = getenv("ROCEPOOL_PREFIX");
     g_log = getenv("ROCEPOOL_INTERCEPT_LOG") ? atoi(getenv("ROCEPOOL_INTERCEPT_LOG")) : 0;
+    { const char *op = getenv("ROCEPOOL_OPEN_PREFETCH"); if (op && !strcmp(op, "0")) g_open_prefetch = 0; }
     if (!prefix || prefix[0] != '/' || strlen(prefix) >= sizeof(g_prefix)) return;
     snprintf(g_prefix, sizeof(g_prefix), "%s", prefix);
     g_prefix_len = strlen(g_prefix);
@@ -315,7 +317,23 @@ static void fill_stat(struct stat *st, const char *path, const attr_t *a) {
 static int do_open(const char *rel, int flags, mode_t mode) {
     (void)mode;
     attr_t a;
-    int rc = fs_getattr(rel, &a);
+    uint8_t *pre = NULL;
+    size_t pre_len = 0;
+    int rc = -EAGAIN;
+    if ((flags & O_ACCMODE) == O_RDONLY && !(flags & (O_CREAT | O_TRUNC | O_DIRECTORY)) && *rel && g_open_prefetch) {
+        /* one MDT request: the attributes (fresh: no close-to-open
+         * revalidation needed) and a small file's content. Was a lookup
+         * here and an inline read at the first read(): mdtest-hard-read
+         * ran at half the MDTs' request rate. */
+        rc = fs_open_read(rel, &a, &pre, &pre_len);
+        if (rc == 0 && a.is_dir) rc = -EAGAIN;
+        if (rc == -EISDIR) rc = -EAGAIN;
+        if (rc == 0) goto opened;
+        if (rc == -ENOENT) return seterr(-ENOENT);
+        free(pre);
+        pre = NULL;
+    }
+    rc = fs_getattr(rel, &a);
     if (rc == -ENOENT) {
         if (!(flags & O_CREAT)) return seterr(-ENOENT);
         rc = fs_create_file_excl(rel, (flags & O_EXCL) != 0, &a);
@@ -337,11 +355,13 @@ static int do_open(const char *rel, int flags, mode_t mode) {
         rc = fs_truncate(rel, 0);
         if (rc) return seterr(rc);
     }
+opened:;
     int fd = reserve_fd();
-    if (fd < 0) return -1;
+    if (fd < 0) { free(pre); return -1; }
     ofile_t *f = calloc(1, sizeof(*f));
     f->h = handle_new(rel, a.is_dir);
     if (!a.is_dir) { f->h->sc = sc_new(rel, &a); open_register(f->h); }
+    if (pre) { f->h->pre = pre; f->h->pre_len = pre_len; f->h->pre_ok = 1; }
     f->refs = 1;
     f->is_dir = a.is_dir;
     f->flags = flags;

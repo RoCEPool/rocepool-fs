@@ -1899,6 +1899,12 @@ static void deadline_after(struct timespec *dl, long ms) {
  *      clients through the CM (they drop the connection before reusing it);
  *   4. wait for those connection threads to exit, so the handler and
  *      user_data are never called after this returns (same bound). */
+size_t roce_server_stats_json(roce_server_t *server, char *out, size_t out_len) {
+    (void)server;
+    if (out_len) out[0] = 0;
+    return 0;  /* the verbs backend keeps none (yet) */
+}
+
 void roce_server_stop(roce_server_t *server) {
     if (!server) return;
     struct conn_gate *g = server->gate;

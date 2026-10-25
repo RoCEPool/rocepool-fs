@@ -240,6 +240,11 @@ int roce_server_local_address(roce_server_t *server, char *out, size_t out_len);
  * loopback_transport.ServerHandle.stop()). */
 void roce_server_stop(roce_server_t *server);
 
+/* Transport-level server counters, for a bottleneck analysis: writes them
+ * as JSON object members ("\"k\": v, ...", no braces) into out and returns
+ * the length; 0 when the backend keeps none. */
+size_t roce_server_stats_json(roce_server_t *server, char *out, size_t out_len);
+
 #ifdef __cplusplus
 }
 #endif

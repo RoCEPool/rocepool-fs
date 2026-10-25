@@ -104,6 +104,11 @@ typedef struct {
     size_t ndents;
     int listed;
     uint64_t next_off;   /* where a sequential reader's next read would start */
+    /* a small inline file's whole content, fetched by the open itself
+     * (fs_open_read): reads are served from it, no MDT round trip */
+    uint8_t *pre;
+    size_t pre_len;
+    volatile int pre_ok;
 } handle_t;
 
 /* short names used throughout the client sources */
@@ -127,6 +132,10 @@ extern rp_peer_t g_mdts[MAX_PEERS], g_osts[MAX_PEERS];
 
 /* ---- namespace (paths are normalised: no leading slash; "" = root) ---- */
 int fs_getattr(const char *path, attr_t *a);
+/* open for reading: the attributes and, for a small inline file, its whole
+ * content in one MDT request (*data malloc'd, NULL if not fetched).
+ * -EISDIR for a directory. */
+int fs_open_read(const char *path, attr_t *a, uint8_t **data, size_t *dlen);
 int fs_mkdir(const char *path, attr_t *a);
 int fs_create_file(const char *path, attr_t *a);
 int fs_create_file_excl(const char *path, int exclusive, attr_t *a);  /* -EEXIST when exclusive and present */
