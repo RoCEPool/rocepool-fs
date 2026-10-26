@@ -1495,7 +1495,7 @@ struct name_ent { uint8_t name[256]; size_t len; fi_addr_t addr; int refs; int v
  * handshake gives clients reply_to = epoch << 32 | index; a worker admits
  * a request only while that index is live in that epoch (busy counts the
  * admitted ones), and fi_av_remove waits until none is busy. */
-struct aent { uint32_t epoch; int live; int busy; int owed; };
+struct aent { uint32_t epoch; int live; int busy; int owed; int local; };  /* local: the client runs on this host */
 struct sconn { int sock; fi_addr_t *addrs; int naddrs; int w; };
 
 /* One per server endpoint; served by `nthreads` threads (ROCE_OFI_SERVER_
@@ -1521,6 +1521,9 @@ struct worker {
     /* where busy goes: admitting the client, the handler, posting the
      * reply (fi_send), reposting the receive (fi_recv) */
     uint64_t st_admit_ns, st_handler_ns, st_send_ns, st_repost_ns;
+    /* pulling a request's payload (its sources), split by where the client
+     * runs: this host (the NIC loops back) or another */
+    uint64_t st_pull_n[2], st_pull_ns[2], st_pull_bytes[2];
     uint64_t st_t0;
 };
 static __thread uint8_t *tl_small;
@@ -1681,11 +1684,15 @@ static int send_reply(struct worker *w, fi_addr_t to, uint64_t tag, uint32_t sta
     return rc;
 }
 
-static int peer_admit(struct roce_server *s, uint64_t reply_to, fi_addr_t *to) {
+static int peer_admit(struct roce_server *s, uint64_t reply_to, fi_addr_t *to, int *local) {
     fi_addr_t a = (fi_addr_t)(reply_to & 0xffffffffu);
     int ok = 0;
     pthread_mutex_lock(&s->av_lk);
-    if (a < s->nae && s->ae[a].live && s->ae[a].epoch == (uint32_t)(reply_to >> 32)) { s->ae[a].busy++; ok = 1; }
+    if (a < s->nae && s->ae[a].live && s->ae[a].epoch == (uint32_t)(reply_to >> 32)) {
+        s->ae[a].busy++;
+        ok = 1;
+        if (local) *local = s->ae[a].local;
+    }
     pthread_mutex_unlock(&s->av_lk);
     *to = a;
     return ok;
@@ -1705,7 +1712,7 @@ static void peer_release(struct roce_server *s, fi_addr_t a) {
     pthread_mutex_unlock(&s->av_lk);
 }
 
-static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *hp, fi_addr_t to);
+static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *hp, fi_addr_t to, int local);
 
 static void handle_slot(struct worker *w, int i) {
     struct ofi_ep *e = w->e;
@@ -1721,17 +1728,18 @@ static void handle_slot(struct worker *w, int i) {
     }
     fi_addr_t to;
     uint64_t t_a = now_ns();
-    int admitted = peer_admit(w->s, h.reply_to, &to);
+    int local = 0;
+    int admitted = peer_admit(w->s, h.reply_to, &to, &local);
     __atomic_add_fetch(&w->st_admit_ns, now_ns() - t_a, __ATOMIC_RELAXED);
     if (!admitted) return;  /* its client is gone: nobody to answer */
     struct alive_arg aa = {w->s, to};
     tl_alive = peer_alive;
     tl_alive_arg = &aa;
-    handle_slot_admitted(w, i, &h, to);  /* sends exactly one reply, which releases the peer */
+    handle_slot_admitted(w, i, &h, to, local);  /* sends exactly one reply, which releases the peer */
     tl_alive = NULL;
 }
 
-static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *hp, fi_addr_t to) {
+static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *hp, fi_addr_t to, int local) {
     struct ofi_ep *e = w->e;
     uint8_t *msg = e->slab + (size_t)i * SMALL_FRAME;
     struct req_hdr h = *hp;
@@ -1760,8 +1768,15 @@ static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *
             off += h.src[k].len;
         }
         tl_bulk_wait = 1;  /* the server pulling a payload: progress it */
+        uint64_t t_p = now_ns();
         if (posted && ep_wait_ops(e, pp, (int)posted, 30000, -1)) ok = 0;
         tl_bulk_wait = 0;
+        if (ok) {
+            int k = local ? 0 : 1;
+            __atomic_add_fetch(&w->st_pull_n[k], 1, __ATOMIC_RELAXED);
+            __atomic_add_fetch(&w->st_pull_ns[k], now_ns() - t_p, __ATOMIC_RELAXED);
+            __atomic_add_fetch(&w->st_pull_bytes[k], off - h.inline_len, __ATOMIC_RELAXED);
+        }
         if (!ok) {
             /* never reuse a buffer a read may still write into */
             int all = 1;
@@ -1985,6 +2000,19 @@ static int boot_message(struct roce_server *s, struct sconn *sc) {
         uint8_t name[256];
         if (read_all(sc->sock, &len, 4, 5000) || len > sizeof(name) || read_all(sc->sock, name, len, 5000)) return -1;
         if (name_ref(s, name, len, &addrs[i])) return -1;
+        {   /* the client is on this host when its bootstrap socket comes from one of ours */
+            struct sockaddr_storage pa, la;
+            socklen_t pl = sizeof(pa), ll = sizeof(la);
+            int loc = 0;
+            if (!getpeername(sc->sock, (struct sockaddr *)&pa, &pl) && !getsockname(sc->sock, (struct sockaddr *)&la, &ll) &&
+                pa.ss_family == AF_INET && la.ss_family == AF_INET) {
+                uint32_t pi = ((struct sockaddr_in *)&pa)->sin_addr.s_addr, li = ((struct sockaddr_in *)&la)->sin_addr.s_addr;
+                loc = pi == li || (ntohl(pi) >> 24) == 127;
+            }
+            pthread_mutex_lock(&s->av_lk);
+            if (addrs[i] < s->nae) s->ae[addrs[i]].local = loc;
+            pthread_mutex_unlock(&s->av_lk);
+        }
         fi_addr_t *na = realloc(sc->addrs, (size_t)(sc->naddrs + 1) * sizeof(*na));
         if (!na) return -1;
         sc->addrs = na;
@@ -2202,6 +2230,7 @@ fail:
 
 size_t roce_server_stats_json(roce_server_t *s, char *out, size_t out_len) {
     uint64_t r = 0, q = 0, b = 0, tw = 0, as = 0, rf = 0, up = 0, ad = 0, hd = 0, sd = 0, rp = 0, rmin = UINT64_MAX, rmax = 0;
+    uint64_t pn[2] = {0, 0}, pns[2] = {0, 0}, pb[2] = {0, 0};
     int threads = 0;
     uint64_t now = now_ns();
     for (int i = 0; i < s->nw; i++) {
@@ -2214,6 +2243,11 @@ size_t roce_server_stats_json(roce_server_t *s, char *out, size_t out_len) {
         hd += __atomic_load_n(&w->st_handler_ns, __ATOMIC_RELAXED);
         sd += __atomic_load_n(&w->st_send_ns, __ATOMIC_RELAXED);
         rp += __atomic_load_n(&w->st_repost_ns, __ATOMIC_RELAXED);
+        for (int k = 0; k < 2; k++) {
+            pn[k] += __atomic_load_n(&w->st_pull_n[k], __ATOMIC_RELAXED);
+            pns[k] += __atomic_load_n(&w->st_pull_ns[k], __ATOMIC_RELAXED);
+            pb[k] += __atomic_load_n(&w->st_pull_bytes[k], __ATOMIC_RELAXED);
+        }
         q += __atomic_load_n(&w->st_queue_ns, __ATOMIC_RELAXED);
         b += __atomic_load_n(&w->st_busy_ns, __ATOMIC_RELAXED);
         tw += __atomic_load_n(&w->st_txwait_ns, __ATOMIC_RELAXED);
@@ -2226,11 +2260,15 @@ size_t roce_server_stats_json(roce_server_t *s, char *out, size_t out_len) {
                      "\"endpoints\": %d, \"threads\": %d, \"reqs\": %llu, \"queue_ns\": %llu, \"busy_ns\": %llu, "
                      "\"reply_wait_ns\": %llu, \"async_replies\": %llu, \"reply_ring_full\": %llu, \"thread_ns\": %llu, "
                      "\"admit_ns\": %llu, \"handler_ns\": %llu, \"send_ns\": %llu, \"repost_ns\": %llu, "
-                     "\"ep_reqs_min\": %llu, \"ep_reqs_max\": %llu",
+                     "\"ep_reqs_min\": %llu, \"ep_reqs_max\": %llu, "
+                     "\"pull_local_n\": %llu, \"pull_local_ns\": %llu, \"pull_local_bytes\": %llu, "
+                     "\"pull_remote_n\": %llu, \"pull_remote_ns\": %llu, \"pull_remote_bytes\": %llu",
                      s->nw, threads, (unsigned long long)r, (unsigned long long)q, (unsigned long long)b,
                      (unsigned long long)tw, (unsigned long long)as, (unsigned long long)rf, (unsigned long long)up,
                      (unsigned long long)ad, (unsigned long long)hd, (unsigned long long)sd, (unsigned long long)rp,
-                     (unsigned long long)(s->nw ? rmin : 0), (unsigned long long)rmax);
+                     (unsigned long long)(s->nw ? rmin : 0), (unsigned long long)rmax,
+                     (unsigned long long)pn[0], (unsigned long long)pns[0], (unsigned long long)pb[0],
+                     (unsigned long long)pn[1], (unsigned long long)pns[1], (unsigned long long)pb[1]);
     return n > 0 && (size_t)n < out_len ? (size_t)n : 0;
 }
 

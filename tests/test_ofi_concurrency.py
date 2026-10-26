@@ -169,6 +169,11 @@ for n in (16000, 16384, 47008, 60000, 65400, 65536, 65600, 70000, 1 << 20):
     ok = ok and e.get("p%d" % n) == data
     e.write_at("w%d" % n, 1000, data)            # a WRITE_AT carrying it
     ok = ok and e.get("w%d" % n) == bytes(1000) + data
+import json
+from roce.protocol import Frame, Op
+t = json.loads(RoCETransport().send_request(sys.argv[2], Frame(op=Op.STATS, request_id=1, key="", value=b"")).value)["transport"]
+# payloads over 64 KiB were pulled by the server, from a client on its host
+print("PULLS", t["pull_local_n"], t["pull_remote_n"], t["pull_local_bytes"])
 print("RESULT", ok)
 '''
             r = subprocess.run([sys.executable, "-c", code, ROOT, ost], env=env, capture_output=True, text=True, timeout=300)
@@ -176,6 +181,10 @@ print("RESULT", ok)
             srv.stdin.close()
             srv.wait(timeout=20)
         self.assertIn("RESULT True", r.stdout, r.stdout + r.stderr)
+        pulls = next(l for l in r.stdout.splitlines() if l.startswith("PULLS")).split()
+        self.assertGreaterEqual(int(pulls[1]), 6, r.stdout)  # 65600, 70000, 1 MiB: put + write_at each
+        self.assertEqual(int(pulls[2]), 0, r.stdout)
+        self.assertGreater(int(pulls[3]), 1 << 20, r.stdout)
 
 
 if __name__ == "__main__":
