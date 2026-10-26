@@ -132,5 +132,51 @@ print("RESULT " + json.dumps({"ok": ok, "p50_us": lat[200] * 1e6, "async": st["t
         self.assertLess(runs["2000"]["p50_us"], 2000, runs)
 
 
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class OfiInlinePayloadTests(unittest.TestCase):
+    """Writes up to 64 KiB go inside the request (the server does not pull
+    them: on EFA without RDMA read in hardware a pull progresses only while
+    the client polls). Payloads around the limit, both ways, byte-exact."""
+
+    def test_payloads_around_the_inline_limit(self):
+        sys.path.insert(0, ROOT)
+        from roce.native.build_lib import ensure_softverbs_lib
+        was = os.environ.get("ROCEPOOL_BACKEND")
+        os.environ["ROCEPOOL_BACKEND"] = "ofi"
+        try:
+            lib = ensure_softverbs_lib()
+        finally:
+            if was is None:
+                os.environ.pop("ROCEPOOL_BACKEND")
+            else:
+                os.environ["ROCEPOOL_BACKEND"] = was
+        env = dict(os.environ, ROCE_TRANSPORT_LIB=lib, PYTHONPATH=ROOT, ROCE_OFI_PROVIDER="tcp", ROCE_OFI_CQ_WAIT="none")
+        srv = subprocess.Popen([sys.executable, "-u", os.path.join(ROOT, "tests", "fakes", "native_cluster.py"), ROOT,
+                                "23580", "1", "1"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
+        try:
+            _, _, ost = srv.stdout.readline().split()
+            code = r'''
+import random, sys
+sys.path.insert(0, sys.argv[1])
+from roce.roce_transport import RoCETransport
+from roce.remote_engine import RemoteEngine
+e = RemoteEngine(sys.argv[2], RoCETransport())
+ok = True
+for n in (16000, 16384, 47008, 60000, 65400, 65536, 65600, 70000, 1 << 20):
+    data = random.Random(n).randbytes(n)
+    e.put("p%d" % n, data)
+    ok = ok and e.get("p%d" % n) == data
+    e.write_at("w%d" % n, 1000, data)            # a WRITE_AT carrying it
+    ok = ok and e.get("w%d" % n) == bytes(1000) + data
+print("RESULT", ok)
+'''
+            r = subprocess.run([sys.executable, "-c", code, ROOT, ost], env=env, capture_output=True, text=True, timeout=300)
+        finally:
+            srv.stdin.close()
+            srv.wait(timeout=20)
+        self.assertIn("RESULT True", r.stdout, r.stdout + r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

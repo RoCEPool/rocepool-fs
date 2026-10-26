@@ -78,7 +78,14 @@
 
 #define OFI_API FI_VERSION(1, 18)
 #define RT_MAX_SRC 4
-#define SMALL_FRAME (16 * 1024)      /* request header + inline bytes, and small replies */
+/* request header + inline bytes, and small replies. 64 KiB (was 16): a
+ * request up to it carries its payload, so the server does not pull it --
+ * on EFA without RDMA read in hardware (i3en) a pull moves only while the
+ * client polls, and ior-hard-write's 47008-byte pieces each cost the OST
+ * ~0.4 ms of transport for 30 us of work (run 40309495341). 64 KiB is EFA's
+ * medium-message size (FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE): sent at once,
+ * no handshake. */
+#define SMALL_FRAME (64 * 1024)
 #define HEADROOM 64                  /* before a pooled reply: room for the reply header */
 #define RX_DEPTH_DEFAULT 64          /* posted request buffers per server endpoint */
 #define MAX_DOMS 8
