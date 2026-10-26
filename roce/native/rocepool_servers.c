@@ -2026,7 +2026,7 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
         if (!rc) rc = buf_put(&b, "}", 1);
     }
     if (!rc && n->server) {  /* where a request's time goes outside the handler */
-        char tx[1024];
+        char tx[2048];
         if (roce_server_stats_json(n->server, tx, sizeof(tx)) > 0) rc = buf_printf(&b, ", \"transport\": {%s}", tx);
     }
     if (!rc) rc = buf_printf(&b, ", \"rss_bytes\": %llu, \"numa_free_bytes\": %lld}", rss, node_free);
