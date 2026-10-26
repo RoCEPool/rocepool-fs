@@ -712,6 +712,23 @@ static long yield_us(void) {
     return v;
 }
 
+/* A wait for a request that moves bulk data -- a write whose payload the
+ * server pulls, a read whose reply is long -- busy-polls this long
+ * (ROCE_POLL_BULK_SPIN_US) instead of ROCE_POLL_SPIN_US. Without RDMA read
+ * in hardware (EFA on i3en and older), libfabric moves that data by
+ * messages that progress only while this side polls: a client asleep in
+ * 55 us steps stretched a 1 MiB PUT to 2-5 ms on the OST (run 40195061844:
+ * handler 0.35 ms, transport busy 2.3-4.6 ms), and the calibration, which
+ * measures 64-byte gets, had lowered the spin from 100 to 50 us between
+ * runs A and C (ior-easy-write 5.63 -> 4.86 GiB/s). */
+static long bulk_spin_us(void) {
+    static long v = -1;
+    if (v < 0) { const char *s = getenv("ROCE_POLL_BULK_SPIN_US"); v = s && *s ? atol(s) : 500; if (v < 0) v = 0; }
+    return v;
+}
+static __thread int tl_bulk_wait;       /* the thread is waiting on a bulk transfer */
+static __thread int tl_last_reply_large;  /* its previous reply was longer than a small frame */
+
 static int spin_us(void) {
     static int v = -1;
     if (v < 0) { const char *s = getenv("ROCE_POLL_SPIN_US"); v = s && *s ? atoi(s) : 20; if (v < 0) v = 0; }
@@ -793,7 +810,9 @@ static int ep_wait(struct ofi_ep *e, int ms, int sock) {
     }
     int h = ep_drain(e);
     if (h) return h > 0 ? 1 : -1;
-    long until = now_us() + spin_us();
+    long sp = spin_us();
+    if (tl_bulk_wait && bulk_spin_us() > sp) sp = bulk_spin_us();
+    long until = now_us() + sp;
     while (now_us() < until) { h = ep_drain(e); if (h) return h > 0 ? 1 : -1; }
     /* Yield only when this thread's waits have been short: a server
      * thread between metadata requests, a client waiting for a lookup.
@@ -1272,6 +1291,7 @@ static int shared_request(struct roce_conn *c, const void *head, size_t head_len
     }
     struct op *both[2] = {&tx, &rx};
     int rc;
+    tl_bulk_wait = ((struct req_hdr *)e->small)->nsrc > 0 || tl_last_reply_large;
     for (;;) {
         rc = ep_wait_ops(e, both, 2, timeout_ms, c->sock);
         if (rc) break;
@@ -1280,6 +1300,8 @@ static int shared_request(struct roce_conn *c, const void *head, size_t head_len
         /* a late reply to an earlier, timed-out request: drop it, wait on */
         if (do_recv(e, rb->addr, c->pool->frame, rb->desc, &rx, OP_RX)) { rc = -1; break; }
     }
+    tl_bulk_wait = 0;
+    if (!rc) tl_last_reply_large = rx.len > SMALL_FRAME;
     if (rc) {
         /* the send and the receive may still be in flight: get the buffers
          * back before they are reused, or retire the endpoint */
@@ -1482,6 +1504,9 @@ struct worker {
      * reads, and for a synchronous reply its completion); waiting for a
      * reply to complete; async replies; times every async slot was busy */
     uint64_t st_reqs, st_queue_ns, st_busy_ns, st_txwait_ns, st_async, st_ring_full;
+    /* where busy goes: admitting the client, the handler, posting the
+     * reply (fi_send), reposting the receive (fi_recv) */
+    uint64_t st_admit_ns, st_handler_ns, st_send_ns, st_repost_ns;
     uint64_t st_t0;
 };
 static __thread uint8_t *tl_small;
@@ -1592,15 +1617,21 @@ static int send_reply(struct worker *w, fi_addr_t to, uint64_t tag, uint32_t sta
     uint8_t *start;
     void *desc;
     struct bufpool *bp = NULL;
-    struct rbuf *pb = resp ? pool_find_any(resp, &bp) : NULL;
+    /* a small reply is copied into the ring whatever holds it: no need to
+     * look it up in every registered pool (a lock per pool, per reply) */
+    int small = rlen + REP_HDR <= SMALL_FRAME && tl_tx;
+    struct rbuf *pb = resp && !small ? pool_find_any(resp, &bp) : NULL;
     int pooled = pb && resp - pb->addr >= (ptrdiff_t)REP_HDR;
-    if (!pooled && rlen + REP_HDR <= SMALL_FRAME && tl_tx) {
+    if (small) {
         struct txslot *x = tx_slot(w);
         if (!x) { peer_release(w->s, to); return -1; }
         start = tl_tx->buf + (size_t)(x - tl_tx->s) * SMALL_FRAME;
         memcpy(start, &h, REP_HDR);
         if (rlen) memcpy(start + REP_HDR, resp, rlen);
-        if (do_send(e, start, REP_HDR + rlen, tl_tx->desc, to, &x->op)) { peer_release(w->s, to); return -1; }
+        uint64_t t_s = now_ns();
+        int sr = do_send(e, start, REP_HDR + rlen, tl_tx->desc, to, &x->op);
+        __atomic_add_fetch(&w->st_send_ns, now_ns() - t_s, __ATOMIC_RELAXED);
+        if (sr) { peer_release(w->s, to); return -1; }
         x->busy = 1;
         x->to = to;
         tl_tx->nbusy++;
@@ -1675,7 +1706,10 @@ static void handle_slot(struct worker *w, int i) {
         return;
     }
     fi_addr_t to;
-    if (!peer_admit(w->s, h.reply_to, &to)) return;  /* its client is gone: nobody to answer */
+    uint64_t t_a = now_ns();
+    int admitted = peer_admit(w->s, h.reply_to, &to);
+    __atomic_add_fetch(&w->st_admit_ns, now_ns() - t_a, __ATOMIC_RELAXED);
+    if (!admitted) return;  /* its client is gone: nobody to answer */
     struct alive_arg aa = {w->s, to};
     tl_alive = peer_alive;
     tl_alive_arg = &aa;
@@ -1711,7 +1745,9 @@ static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *
             else pp[posted++] = &ops[k];
             off += h.src[k].len;
         }
+        tl_bulk_wait = 1;  /* the server pulling a payload: progress it */
         if (posted && ep_wait_ops(e, pp, (int)posted, 30000, -1)) ok = 0;
+        tl_bulk_wait = 0;
         if (!ok) {
             /* never reuse a buffer a read may still write into */
             int all = 1;
@@ -1724,7 +1760,9 @@ static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *
     }
     size_t rlen = 0;
     tl_reply_pool = w->pool;
+    uint64_t t_h = now_ns();
     uint8_t *resp = w->s->handler(frame, h.total_len, &rlen, w->s->user);
+    __atomic_add_fetch(&w->st_handler_ns, now_ns() - t_h, __ATOMIC_RELAXED);
     tl_reply_pool = NULL;
     if (fb) pool_put(w->pool, fb);
     if (!resp) { send_reply(w, to, h.tag, 1, NULL, 0); return; }
@@ -1781,7 +1819,9 @@ static void *worker_main(void *arg) {
         handle_slot(w, best);
         __atomic_add_fetch(&w->st_busy_ns, now_ns() - t_pick, __ATOMIC_RELAXED);
         __atomic_add_fetch(&w->st_reqs, 1, __ATOMIC_RELAXED);
+        uint64_t t_r = now_ns();
         int bad = slot_post(e, best);
+        __atomic_add_fetch(&w->st_repost_ns, now_ns() - t_r, __ATOMIC_RELAXED);
         pthread_mutex_lock(&w->pick);
         w->claimed[best] = 0;
         pthread_mutex_unlock(&w->pick);
@@ -2147,12 +2187,19 @@ fail:
 }
 
 size_t roce_server_stats_json(roce_server_t *s, char *out, size_t out_len) {
-    uint64_t r = 0, q = 0, b = 0, tw = 0, as = 0, rf = 0, up = 0;
+    uint64_t r = 0, q = 0, b = 0, tw = 0, as = 0, rf = 0, up = 0, ad = 0, hd = 0, sd = 0, rp = 0, rmin = UINT64_MAX, rmax = 0;
     int threads = 0;
     uint64_t now = now_ns();
     for (int i = 0; i < s->nw; i++) {
         struct worker *w = &s->w[i];
-        r += __atomic_load_n(&w->st_reqs, __ATOMIC_RELAXED);
+        uint64_t rw = __atomic_load_n(&w->st_reqs, __ATOMIC_RELAXED);
+        r += rw;
+        if (rw < rmin) rmin = rw;
+        if (rw > rmax) rmax = rw;
+        ad += __atomic_load_n(&w->st_admit_ns, __ATOMIC_RELAXED);
+        hd += __atomic_load_n(&w->st_handler_ns, __ATOMIC_RELAXED);
+        sd += __atomic_load_n(&w->st_send_ns, __ATOMIC_RELAXED);
+        rp += __atomic_load_n(&w->st_repost_ns, __ATOMIC_RELAXED);
         q += __atomic_load_n(&w->st_queue_ns, __ATOMIC_RELAXED);
         b += __atomic_load_n(&w->st_busy_ns, __ATOMIC_RELAXED);
         tw += __atomic_load_n(&w->st_txwait_ns, __ATOMIC_RELAXED);
@@ -2163,9 +2210,13 @@ size_t roce_server_stats_json(roce_server_t *s, char *out, size_t out_len) {
     }
     int n = snprintf(out, out_len,
                      "\"endpoints\": %d, \"threads\": %d, \"reqs\": %llu, \"queue_ns\": %llu, \"busy_ns\": %llu, "
-                     "\"reply_wait_ns\": %llu, \"async_replies\": %llu, \"reply_ring_full\": %llu, \"thread_ns\": %llu",
+                     "\"reply_wait_ns\": %llu, \"async_replies\": %llu, \"reply_ring_full\": %llu, \"thread_ns\": %llu, "
+                     "\"admit_ns\": %llu, \"handler_ns\": %llu, \"send_ns\": %llu, \"repost_ns\": %llu, "
+                     "\"ep_reqs_min\": %llu, \"ep_reqs_max\": %llu",
                      s->nw, threads, (unsigned long long)r, (unsigned long long)q, (unsigned long long)b,
-                     (unsigned long long)tw, (unsigned long long)as, (unsigned long long)rf, (unsigned long long)up);
+                     (unsigned long long)tw, (unsigned long long)as, (unsigned long long)rf, (unsigned long long)up,
+                     (unsigned long long)ad, (unsigned long long)hd, (unsigned long long)sd, (unsigned long long)rp,
+                     (unsigned long long)(s->nw ? rmin : 0), (unsigned long long)rmax);
     return n > 0 && (size_t)n < out_len ? (size_t)n : 0;
 }
 

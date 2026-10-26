@@ -77,6 +77,7 @@ static void *sym(const char *name) {
 
 static int g_log;
 static int g_open_prefetch = 1;  /* ROCEPOOL_OPEN_PREFETCH=0: open() looks up only, as before */
+static int g_create_first = 1;   /* ROCEPOOL_CREATE_FIRST=0: open(O_CREAT) looks up first, as before */
 static pthread_once_t g_libc_once = PTHREAD_ONCE_INIT;
 static int g_libc_ok;
 static void load_libc(void);
@@ -131,6 +132,7 @@ static void read_prefix(void) {
     const char *prefix = getenv("ROCEPOOL_PREFIX");
     g_log = getenv("ROCEPOOL_INTERCEPT_LOG") ? atoi(getenv("ROCEPOOL_INTERCEPT_LOG")) : 0;
     { const char *op = getenv("ROCEPOOL_OPEN_PREFETCH"); if (op && !strcmp(op, "0")) g_open_prefetch = 0; }
+    { const char *cf = getenv("ROCEPOOL_CREATE_FIRST"); if (cf && !strcmp(cf, "0")) g_create_first = 0; }
     if (!prefix || prefix[0] != '/' || strlen(prefix) >= sizeof(g_prefix)) return;
     snprintf(g_prefix, sizeof(g_prefix), "%s", prefix);
     g_prefix_len = strlen(g_prefix);
@@ -333,6 +335,20 @@ static int do_open(const char *rel, int flags, mode_t mode) {
         free(pre);
         pre = NULL;
     }
+    if ((flags & O_CREAT) && *rel && g_create_first) {
+        /* One MDT request: a non-exclusive create returns the entry that is
+         * already there, an exclusive one EXISTS. Was a lookup first (ENOENT
+         * for a new file), then the create: mdtest-easy-write took two
+         * requests per file and ran at half the MDTs' rate (2 x i3en, run
+         * 40195061844: 123 k creates/s against 248 k stats/s). */
+        rc = fs_create_file_excl(rel, (flags & O_EXCL) != 0, &a);
+        if (rc == 0 && a.is_dir && (flags & O_ACCMODE) != O_RDONLY) rc = -EISDIR;
+        if (rc) {
+            if (g_log) fprintf(stderr, "rocepool_intercept[%d]: create %s flags %#x failed: %d\n", (int)getpid(), rel, flags, rc);
+            return seterr(rc);
+        }
+        goto created;
+    }
     rc = fs_getattr(rel, &a);
     if (rc == -ENOENT) {
         if (!(flags & O_CREAT)) return seterr(-ENOENT);
@@ -350,6 +366,7 @@ static int do_open(const char *rel, int flags, mode_t mode) {
         if (g_log) fprintf(stderr, "rocepool_intercept[%d]: open %s flags %#x failed: %d\n", (int)getpid(), rel, flags, rc);
         return seterr(rc);
     }
+created:
     if (!a.is_dir && (flags & O_TRUNC) && a.size) {
         invalidate_open_caches(rel);
         rc = fs_truncate(rel, 0);

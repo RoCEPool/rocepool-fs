@@ -78,6 +78,18 @@ class SpinCalibrationTests(unittest.TestCase):
         bad = calibrate_spin("x", {}, "x", runner=lambda s: {"error": "boom"})
         self.assertIsNone(bad["chosen"])
 
+    def test_bulk_choice(self):
+        """1 MiB puts/gets pick the bulk-transfer spin: the shortest within 3%
+        of the best (the small spin, measured on 64-byte gets, says nothing
+        about transfers that progress only while the waiting side polls)."""
+        from tools.roce_onsite import calibrate_bulk_spin
+
+        def fake(bs):
+            put = {100: 900, 500: 2400, 2000: 2450}[bs]
+            return {"put": {"ops_per_s": put}, "get": {"ops_per_s": put * 1.5}}
+        self.assertEqual(calibrate_bulk_spin("x", {}, "x", runner=fake)["chosen"], 500)
+        self.assertIsNone(calibrate_bulk_spin("x", {}, "x", runner=lambda b: {"error": "boom"})["chosen"])
+
     @unittest.skipUnless(shutil.which("gcc"), "needs gcc")
     def test_real_measurement_on_the_emulator(self):
         from roce.native.build_lib import ensure_kv_lib, ensure_softverbs_lib

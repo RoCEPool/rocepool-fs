@@ -235,6 +235,44 @@ print(ok)
         self.assertEqual(out.strip(), "True")
         self.assertLess(ops() - before, 200 * 1.2)  # was 2 per small file (lookup + inline read)
 
+    def test_create_is_one_mdt_round_trip(self):
+        """open(O_CREAT) looked the new file up (ENOENT) before creating it:
+        mdtest-easy-write took two MDT requests per file, mdtest-hard-write
+        three (with the inline write), and ran at 1/2 and 1/3 of the MDTs'
+        request rate. Now the create goes first, and the semantics stay."""
+        self.py(f"import os; os.mkdir({self.prefix!r} + '/cr')")
+        ops = lambda: {k: sum(s.get("by_op", {}).get(k, 0) for s in self.dfs("mdtstats")) for k in ("1", "2", "7")}
+        before = ops()
+        penv, self.penv = self.penv, dict(self.penv, ROCEPOOL_DIRECT_LOOKUP="0")  # lookups by RPC, as on EFA
+        self.addCleanup(setattr, self, "penv", penv)
+        out = self.py(f"""
+import errno, os
+P = {self.prefix!r} + "/cr"
+for i in range(200):  # mdtest-easy-write: create, close
+    os.close(os.open(P + "/e%d" % i, os.O_CREAT | os.O_RDWR, 0o644))
+for i in range(200):  # mdtest-hard-write: create, 3901 bytes, close
+    fd = os.open(P + "/h%d" % i, os.O_CREAT | os.O_RDWR, 0o644); os.write(fd, b"h" * 3901); os.close(fd)
+def err(fn):
+    try: fn(); return 0
+    except OSError as e: return e.errno
+ok = err(lambda: os.open(P + "/h1", os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o644)) == errno.EEXIST
+fd = os.open(P + "/h2", os.O_CREAT | os.O_RDWR, 0o644); os.close(fd)  # an existing file keeps its bytes
+ok = ok and open(P + "/h2", "rb").read() == b"h" * 3901
+fd = os.open(P + "/h3", os.O_CREAT | os.O_TRUNC | os.O_RDWR, 0o644); os.close(fd)
+ok = ok and os.stat(P + "/h3").st_size == 0
+ok = ok and err(lambda: os.open(P, os.O_CREAT | os.O_RDWR, 0o644)) == errno.EISDIR
+ok = ok and err(lambda: os.open(P + "/nodir/x", os.O_CREAT | os.O_RDWR, 0o644)) == errno.ENOENT
+ok = ok and os.open(P + "/new", os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644) > 0
+ok = ok and len(os.listdir(P)) == 401
+print(ok)
+""")
+        self.assertEqual(out.strip(), "True")
+        after = ops()
+        d = {k: after[k] - before[k] for k in after}
+        # 400 files: 400 creates and 200 inline writes; a few lookups (the
+        # directory, the checks above) -- was 400 lookups more
+        self.assertLess(d["1"] + d["2"] + d["7"], 400 + 200 + 60, d)
+
 
 @unittest.skipUnless(shutil.which("gcc"), "needs gcc")
 class SlowOSTTests(_Cluster):
