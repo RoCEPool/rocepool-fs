@@ -367,17 +367,22 @@ def write_probe(cfile: str, env: dict, cluster: dict, step) -> None:
     spin: the setting is judged under the real load (a calibration on one
     host chose 2 ms, which made IOR's writes slower), and the OSTs'
     transport counters say where each request's time went."""
+    # the variable varied (ROCEPOOL_WRITE_PROBE_VAR, default the bulk spin)
+    # is set on every host (ROCEPOOL_FORCE_ENV): a value only node 0 got made
+    # an earlier comparison one-sided
+    var = os.environ.get("ROCEPOOL_WRITE_PROBE_VAR", "ROCE_POLL_BULK_SPIN_US")
     spins = [s.strip() for s in os.environ.get("ROCEPOOL_WRITE_PROBE_SPINS", "0,200,1000").split(",") if s.strip()]
+    tag = "spin" if var == "ROCE_POLL_BULK_SPIN_US" else var.lower().replace("roce_", "").replace("_us", "")
     rows = []
     for sp in spins:
-        name, fname = f"writes-spin{sp}", f"onsite_writes_spin{sp}.json"
+        name, fname = f"writes-{tag}{sp}", f"onsite_writes_{tag}{sp}.json"
         out = os.path.join(ROOT, fname)
-        begin(name, f"ior-easy-write + ior-hard-write on {len(cluster['nodes'])} hosts, ROCE_POLL_BULK_SPIN_US={sp}")
+        begin(name, f"ior-easy-write + ior-hard-write on {len(cluster['nodes'])} hosts, {var}={sp} on every host")
         cmd = [sys.executable, os.path.join(ROOT, "tools", "io500_run.py"), "--report", out, "--project", "auto",
                "--client", "intercept", "--direct-read", "off", "--stonewall", "30",
                "--phases", "ior-easy-write,ior-hard-write"]
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600,
-                           env=dict(env, ROCEPOOL_CLUSTER=cfile, ROCE_POLL_BULK_SPIN_US=sp))
+                           env=dict(env, ROCEPOOL_CLUSTER=cfile, ROCEPOOL_FORCE_ENV=var, **{var: sp}))
         try:
             with open(out) as f:
                 rep = json.load(f)
@@ -385,7 +390,7 @@ def write_probe(cfile: str, env: dict, cluster: dict, step) -> None:
         except (OSError, ValueError):
             ph = {}
         ok = r.returncode == 0 and "ior-easy-write" in ph and "ior-hard-write" in ph
-        rows.append(f"spin {sp} us: ior-easy-write {ph.get('ior-easy-write')} GiB/s, "
+        rows.append(f"{var}={sp}: ior-easy-write {ph.get('ior-easy-write')} GiB/s, "
                     f"ior-hard-write {ph.get('ior-hard-write')} GiB/s")
         step(name, PASS if ok else FAIL, rows[-1] if ok else (r.stdout + r.stderr)[-1500:], report_file=fname)
     step("writes", PASS, "\n".join(rows))

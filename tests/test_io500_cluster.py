@@ -346,3 +346,17 @@ class IO500ClusterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ForceEnvTests(unittest.TestCase):
+    """ROCEPOOL_FORCE_ENV: named variables reach every host's processes, not
+    only node 0's (a targeted measurement once set ROCE_POLL_BULK_SPIN_US on
+    the head alone); anything else non-ROCEPOOL stays each host's own"""
+
+    def test_forced_names_pass_to_peers(self):
+        from tools.cluster import Node
+        cmd = Node(1, "10.0.0.2", peer="root@10.0.0.2").wrap(
+            ["python3", "x.py"], env={"ROCEPOOL_FORCE_ENV": "ROCE_POLL_SPIN_US", "ROCE_POLL_SPIN_US": "20",
+                                      "ROCE_TOS": "106"})[-1]
+        self.assertIn("ROCE_POLL_SPIN_US=20", cmd)
+        self.assertNotIn("ROCE_TOS", cmd)

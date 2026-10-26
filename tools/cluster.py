@@ -122,8 +122,13 @@ class Node:
         # only what must be the same on every host; each host's own RoCE
         # tuning (ROCE_TOS, busy-poll, ... from its preflight) comes from its
         # roce_env.sh, which node 0's values must not override
+        # ROCEPOOL_FORCE_ENV=NAME,...: these too, on every host (a targeted
+        # measurement that must set e.g. ROCE_POLL_SPIN_US the same everywhere
+        # -- otherwise only node 0's processes get it)
+        force = {n.strip() for n in (env or {}).get("ROCEPOOL_FORCE_ENV", "").split(",") if n.strip()}
         passthru = " ".join(f"{k}={shlex.quote(v)}" for k, v in (env or {}).items()
-                            if k.startswith("ROCEPOOL") or k in ("ROCE_TRANSPORT_LIB", "ROCE_MAX_FRAME_BYTES"))
+                            if k.startswith("ROCEPOOL") or k in ("ROCE_TRANSPORT_LIB", "ROCE_MAX_FRAME_BYTES")
+                            or k in force)
         cmd = (f"cd {shlex.quote(ROOT)} && {{ [ -f roce_env.sh ] && . ./roce_env.sh; true; }} && "
                f"exec env {passthru} PYTHONPATH={shlex.quote(ROOT)} {' '.join(shlex.quote(a) for a in argv)}")
         from tools.topology import SSH_OPTS
