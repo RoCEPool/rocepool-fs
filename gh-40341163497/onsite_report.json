@@ -1,0 +1,373 @@
+{
+  "started": "2026-10-26 14:42:27",
+  "steps": {
+    "preflight": {
+      "status": "WARN",
+      "detail": "rdmap0s27 port None (None) ip 172.31.6.189; env: {'ROCE_BACKEND': 'ofi', 'ROCE_OFI_PROVIDER': 'efa', 'ROCE_POLL_SPIN_US': '20'}; fixes: ['disabled 48 deep idle states (exit latency > 20 us) (until reboot)']",
+      "preflight": {
+        "verdict": "WARN",
+        "ip": "172.31.6.189",
+        "device": "rdmap0s27",
+        "kind": "efa",
+        "backend": "ofi",
+        "port": null,
+        "netdev": null,
+        "checks": [
+          {
+            "check": "kernel",
+            "status": "PASS",
+            "detail": "7.0.0-1014-aws: fork() is safe with registered memory"
+          },
+          {
+            "check": "memlock",
+            "status": "PASS",
+            "detail": "locked-memory limit 47834 MiB >= 2560 MiB needed",
+            "needed_bytes": 2684354560
+          },
+          {
+            "check": "power",
+            "status": "PASS",
+            "detail": "governor n/a, no deep idle states enabled"
+          },
+          {
+            "check": "device",
+            "status": "PASS",
+            "detail": "1 AWS EFA device(s): rdmap0s27 -- the ofi (libfabric) transport backend",
+            "devices": [
+              {
+                "name": "rdmap0s27",
+                "vendor": "0x1d0f",
+                "pci_driver": "efa",
+                "fw_ver": "",
+                "broadcom": false,
+                "kind": "efa"
+              }
+            ]
+          },
+          {
+            "check": "ip",
+            "status": "PASS",
+            "detail": "172.31.6.189: the bootstrap/control address (data goes over rdmap0s27)"
+          },
+          {
+            "check": "libfabric",
+            "status": "PASS",
+            "detail": "libfabric's efa provider is up (fi_info -p efa -t FI_EP_RDM)"
+          },
+          {
+            "check": "rdma_read",
+            "status": "WARN",
+            "detail": "i3en.12xlarge: not known to do EFA RDMA read in hardware (Nitro v4+ does); libfabric emulates reads with the target's CPU -- correct, slower one-sided reads; the client probe in tools/io500_run.py decides between one-sided and RPC reads"
+          },
+          {
+            "check": "lossless",
+            "status": "PASS",
+            "detail": "EFA's SRD transport is reliable over AWS's lossy fabric: no PFC/DSCP to configure"
+          },
+          {
+            "check": "tuning",
+            "status": "PASS",
+            "detail": "48 CPUs: completion busy-poll 20 us before sleeping (ROCE_POLL_SPIN_US=20; tools/roce_onsite.py then measures the best value on this NIC)"
+          }
+        ],
+        "env": {
+          "ROCE_BACKEND": "ofi",
+          "ROCE_OFI_PROVIDER": "efa",
+          "ROCE_POLL_SPIN_US": "50"
+        },
+        "fixes_applied": [
+          "disabled 48 deep idle states (exit latency > 20 us) (until reboot)"
+        ]
+      }
+    },
+    "peers": {
+      "status": "PASS",
+      "detail": "local: ip-172-31-6-189 172.31.6.189; root@172.31.0.95: ip-172-31-0-95 172.31.0.95",
+      "peers": {
+        "local": {
+          "hostname": "ip-172-31-6-189",
+          "ip": "172.31.6.189"
+        },
+        "root@172.31.0.95": {
+          "uid": "0",
+          "hostname": "ip-172-31-0-95",
+          "addresses": [
+            "127.0.0.1",
+            "172.31.0.95",
+            "172.31.15.255"
+          ],
+          "roce_ip": "172.31.0.95"
+        }
+      }
+    },
+    "build": {
+      "status": "PASS",
+      "detail": "[build] transport backend: ofi / [build] using libfabric at /opt/amazon/efa / [build] OST tier: kernel backend only (set SPDK_DIR=<built spdk tree> for the SPDK backend) / [build] built /root/rocepool/roce/native/libroce_transport.so / [build] built /root/rocepool/roce/native/rocepool-fuse (native FUSE client) / [build] built /root/rocepool/roce/native/librocepool_kv.so (native KV client API) and rocepool-kv-bench / [build] built /root/rocepool/roce/native/librocepool_intercept.so (LD_PRELOAD interception client) / [build] built /root/rocepool/roce/native/librocepool_cufile.so and cufile/libcufile.so.0 (GPUDirect Storage, cuFile API)"
+    },
+    "transport": {
+      "status": "PASS",
+      "detail": "pooling, stale-connection recovery, drain, SRQ back-pressure, bounded registration, native OST/MDT parity + CAS atomicity over 172.31.6.189 (91.3s)"
+    },
+    "spin": {
+      "status": "PASS",
+      "detail": "ROCE_POLL_SPIN_US=50 (measured: 0 us: 1 thr 16016/s p50 62 us, 8 thr 29220/s; 20 us: 1 thr 12194/s p50 82 us, 8 thr 24408/s; 50 us: 1 thr 27450/s p50 36 us, 8 thr 39834/s; 100 us: 1 thr 28040/s p50 35 us, 8 thr 41128/s; 200 us: 1 thr 28071/s p50 35 us, 8 thr 41072/s; 400 us: 1 thr 27868/s p50 35 us, 8 thr 40448/s)",
+      "calibration": {
+        "table": {
+          "0": {
+            "1": {
+              "ops_per_s": 16016.5,
+              "p50_us": 62.1,
+              "p99_us": 68.9,
+              "rpcs": 33033
+            },
+            "8": {
+              "ops_per_s": 29220.0,
+              "p50_us": 64.3,
+              "p99_us": 5988.0,
+              "rpcs": 66440
+            }
+          },
+          "20": {
+            "1": {
+              "ops_per_s": 12194.5,
+              "p50_us": 82.0,
+              "p99_us": 90.7,
+              "rpcs": 25389
+            },
+            "8": {
+              "ops_per_s": 24408.0,
+              "p50_us": 84.0,
+              "p99_us": 129.5,
+              "rpcs": 56816
+            }
+          },
+          "50": {
+            "1": {
+              "ops_per_s": 27450.5,
+              "p50_us": 35.9,
+              "p99_us": 44.6,
+              "rpcs": 55901
+            },
+            "8": {
+              "ops_per_s": 39833.5,
+              "p50_us": 46.8,
+              "p99_us": 5369.5,
+              "rpcs": 87667
+            }
+          },
+          "100": {
+            "1": {
+              "ops_per_s": 28040.5,
+              "p50_us": 35.1,
+              "p99_us": 44.1,
+              "rpcs": 57081
+            },
+            "8": {
+              "ops_per_s": 41128.0,
+              "p50_us": 46.5,
+              "p99_us": 4613.3,
+              "rpcs": 90256
+            }
+          },
+          "200": {
+            "1": {
+              "ops_per_s": 28071.0,
+              "p50_us": 35.1,
+              "p99_us": 43.9,
+              "rpcs": 57142
+            },
+            "8": {
+              "ops_per_s": 41072.0,
+              "p50_us": 46.6,
+              "p99_us": 4688.0,
+              "rpcs": 90144
+            }
+          },
+          "400": {
+            "1": {
+              "ops_per_s": 27867.5,
+              "p50_us": 35.3,
+              "p99_us": 44.8,
+              "rpcs": 56735
+            },
+            "8": {
+              "ops_per_s": 40448.0,
+              "p50_us": 47.2,
+              "p99_us": 5415.8,
+              "rpcs": 88896
+            }
+          }
+        },
+        "score": {
+          "0": 21633.356882370335,
+          "20": 17252.343492986685,
+          "50": 33067.34781850519,
+          "100": 33959.53009097741,
+          "200": 33954.854027075424,
+          "400": 33573.57055780633
+        },
+        "chosen": 50
+      }
+    },
+    "peer": {
+      "status": "WARN",
+      "detail": "root@172.31.0.95: rdmap0s27 172.31.0.95; env {'ROCE_BACKEND': 'ofi', 'ROCE_OFI_PROVIDER': 'efa', 'ROCE_POLL_SPIN_US': '20'}; failing: none",
+      "preflight": {
+        "verdict": "WARN",
+        "ip": "172.31.0.95",
+        "device": "rdmap0s27",
+        "kind": "efa",
+        "backend": "ofi",
+        "port": null,
+        "netdev": null,
+        "checks": [
+          {
+            "check": "kernel",
+            "status": "PASS",
+            "detail": "7.0.0-1014-aws: fork() is safe with registered memory"
+          },
+          {
+            "check": "memlock",
+            "status": "PASS",
+            "detail": "locked-memory limit 47834 MiB >= 2560 MiB needed",
+            "needed_bytes": 2684354560
+          },
+          {
+            "check": "power",
+            "status": "PASS",
+            "detail": "governor n/a, no deep idle states enabled"
+          },
+          {
+            "check": "device",
+            "status": "PASS",
+            "detail": "1 AWS EFA device(s): rdmap0s27 -- the ofi (libfabric) transport backend",
+            "devices": [
+              {
+                "name": "rdmap0s27",
+                "vendor": "0x1d0f",
+                "pci_driver": "efa",
+                "fw_ver": "",
+                "broadcom": false,
+                "kind": "efa"
+              }
+            ]
+          },
+          {
+            "check": "ip",
+            "status": "PASS",
+            "detail": "172.31.0.95: the bootstrap/control address (data goes over rdmap0s27)"
+          },
+          {
+            "check": "libfabric",
+            "status": "PASS",
+            "detail": "libfabric's efa provider is up (fi_info -p efa -t FI_EP_RDM)"
+          },
+          {
+            "check": "rdma_read",
+            "status": "WARN",
+            "detail": "i3en.12xlarge: not known to do EFA RDMA read in hardware (Nitro v4+ does); libfabric emulates reads with the target's CPU -- correct, slower one-sided reads; the client probe in tools/io500_run.py decides between one-sided and RPC reads"
+          },
+          {
+            "check": "lossless",
+            "status": "PASS",
+            "detail": "EFA's SRD transport is reliable over AWS's lossy fabric: no PFC/DSCP to configure"
+          },
+          {
+            "check": "tuning",
+            "status": "PASS",
+            "detail": "48 CPUs: completion busy-poll 20 us before sleeping (ROCE_POLL_SPIN_US=20; tools/roce_onsite.py then measures the best value on this NIC)"
+          }
+        ],
+        "env": {
+          "ROCE_BACKEND": "ofi",
+          "ROCE_OFI_PROVIDER": "efa",
+          "ROCE_POLL_SPIN_US": "20"
+        },
+        "fixes_applied": [
+          "disabled 48 deep idle states (exit latency > 20 us) (until reboot)"
+        ]
+      }
+    },
+    "peer-build": {
+      "status": "PASS",
+      "detail": "/opt/amazon/efa\n[build] OST tier: kernel backend only (set SPDK_DIR=<built spdk tree> for the SPDK backend)\n[build] built /tmp/rocepool_onsite/roce/native/libroce_transport.so\n[build] built /tmp/rocepool_onsite/roce/native/rocepool-fuse (native FUSE client)\n[build] built /tmp/rocepool_onsite/roce/native/librocepool_kv.so (native KV client API) and rocepool-kv-bench\n[build] built /tmp/rocepool_onsite/roce/native/librocepool_intercept.so (LD_PRELOAD interception client)\n[build] built /tmp/rocepool_onsite/roce/native/librocepool_cufile.so and cufile/libcufile.so.0 (GPUDirect Storage, cuFile API)"
+    },
+    "functional": {
+      "status": "PASS",
+      "detail": "[PASS] smoke [PASS] pool [PASS] mpi [PASS] hpc [PASS] stream",
+      "report_file": "onsite_crossover.json"
+    },
+    "cluster-prep": {
+      "status": "WARN",
+      "detail": "root@172.31.0.95: copied to /root/rocepool (+ .bench_cache/mpich, .bench_cache/io500_src/io500, .bench_cache/io500_src/bin); preflight WARN (rdmap0s27 172.31.0.95)",
+      "peers": {
+        "root@172.31.0.95": {
+          "status": "WARN",
+          "detail": "copied to /root/rocepool (+ .bench_cache/mpich, .bench_cache/io500_src/io500, .bench_cache/io500_src/bin); preflight WARN (rdmap0s27 172.31.0.95)"
+        }
+      }
+    },
+    "nvme-preflight": {
+      "status": "PASS",
+      "detail": "local: tier file:/nvmedata/rocepool_ost_{n}.tier:21921 (O_DIRECT write 2541 MiB/s); P2P memory none\nroot@172.31.0.95: tier file:/nvmedata/rocepool_ost_{n}.tier:21921 (O_DIRECT write 2045 MiB/s); P2P memory none",
+      "hosts": {
+        "local": {
+          "tier": "file:/nvmedata/rocepool_ost_{n}.tier:21921",
+          "p2pmem": null,
+          "notes": [],
+          "tier_dir": "/nvmedata",
+          "tier_mount": {
+            "device": "/dev/md0",
+            "namespace": "nvme1n1",
+            "mountpoint": "/nvmedata",
+            "fstype": "xfs",
+            "free_bytes": 29422912274432,
+            "via": [
+              "nvme1n1",
+              "nvme2n1",
+              "nvme3n1",
+              "nvme4n1"
+            ]
+          },
+          "tier_write": {
+            "mib_s": 2540.6,
+            "seconds": 0.4
+          }
+        },
+        "root@172.31.0.95": {
+          "tier": "file:/nvmedata/rocepool_ost_{n}.tier:21921",
+          "p2pmem": null,
+          "notes": [],
+          "tier_dir": "/nvmedata",
+          "tier_mount": {
+            "device": "/dev/md0",
+            "namespace": "nvme1n1",
+            "mountpoint": "/nvmedata",
+            "fstype": "xfs",
+            "free_bytes": 29422912274432,
+            "via": [
+              "nvme1n1",
+              "nvme2n1",
+              "nvme3n1",
+              "nvme4n1"
+            ]
+          },
+          "tier_write": {
+            "mib_s": 2045.1,
+            "seconds": 0.5
+          }
+        }
+      }
+    },
+    "writes-spin0": {
+      "status": "PASS",
+      "detail": "spin 0 us: ior-easy-write 4.969 GiB/s, ior-hard-write 2.983 GiB/s",
+      "report_file": "onsite_writes_spin0.json"
+    },
+    "writes": {
+      "status": "PASS",
+      "detail": "spin 0 us: ior-easy-write 4.969 GiB/s, ior-hard-write 2.983 GiB/s"
+    }
+  },
+  "verdict": "WARN"
+}
