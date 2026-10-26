@@ -706,7 +706,11 @@ def main() -> int:
             rows = "; ".join(f"{s} us: 1 thr {r[1]['ops_per_s']:.0f}/s p50 {r[1]['p50_us']:.0f} us, "
                              f"8 thr {r[8]['ops_per_s']:.0f}/s" for s, r in cal["table"].items() if "error" not in r)
             step("spin", PASS, f"ROCE_POLL_SPIN_US={spin} (measured: {rows})", calibration=cal)
-        if os.environ.get("ROCE_BACKEND", "") == "ofi" or "ofi" in pf["env"].get("ROCE_BACKEND", ""):
+        # ROCEPOOL_BULK_SPIN_CALIBRATE=1 only: a few threads of 1 MiB puts on
+        # one host chose 2 ms, which under IOR's 32 ranks a host made writes
+        # slower (CPU 80% busy, run 40309495341)
+        if os.environ.get("ROCEPOOL_BULK_SPIN_CALIBRATE") == "1" and \
+                (os.environ.get("ROCE_BACKEND", "") == "ofi" or "ofi" in pf["env"].get("ROCE_BACKEND", "")):
             begin("bulk-spin", "measuring the busy-poll for bulk transfers (1 MiB puts/gets, about 30 s)")
             bcal = calibrate_bulk_spin(ip, env, kv_bench)
             if bcal["chosen"] is None:

@@ -723,7 +723,14 @@ static long yield_us(void) {
  * runs A and C (ior-easy-write 5.63 -> 4.86 GiB/s). */
 static long bulk_spin_us(void) {
     static long v = -1;
-    if (v < 0) { const char *s = getenv("ROCE_POLL_BULK_SPIN_US"); v = s && *s ? atol(s) : 500; if (v < 0) v = 0; }
+    /* off by default: in IOR (32 ranks a host, run 40309495341) a 2 ms
+     * bulk spin kept the waiting threads on the CPUs -- host 80% busy,
+     * ior-hard-write 2.18 -> 1.66 and ior-easy-write 5.60 -> 5.03 GiB/s
+     * against the previous quick run -- though 4 threads of 1 MiB puts on
+     * one host gained 17%. Without RDMA read in hardware the payload pull
+     * is bounded by the clients' progress either way (EFA families with it:
+     * tools/roce_preflight.py EFA_RDMA_READ_FAMILIES, e.g. i4i, i7ie). */
+    if (v < 0) { const char *s = getenv("ROCE_POLL_BULK_SPIN_US"); v = s && *s ? atol(s) : 0; if (v < 0) v = 0; }
     return v;
 }
 static __thread int tl_bulk_wait;       /* the thread is waiting on a bulk transfer */
