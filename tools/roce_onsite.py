@@ -112,6 +112,7 @@ def run_scenario(script: str, port: int, ip: str, env: dict, timeout: int = 600)
 
 
 SPIN_CANDIDATES = (0, 20, 50, 100, 200, 400)
+BULK_SPIN_CANDIDATES = (100, 500, 2000)
 SPIN_SERVER = r"""
 import sys
 sys.path.insert(0, sys.argv[1])
@@ -121,6 +122,49 @@ print("READY", h.local_address(), flush=True)
 sys.stdin.read()
 import os; os._exit(0)
 """
+
+
+def calibrate_bulk_spin(ip: str, env: dict, kv_bench: str, port: int = 21450, secs: float = 2.0,
+                        candidates=BULK_SPIN_CANDIDATES, runner=None) -> dict:
+    """How long a wait on a bulk transfer busy-polls (ROCE_POLL_BULK_SPIN_US):
+    1 MiB puts and gets, 4 threads, per candidate. Without RDMA read in
+    hardware the data moves only while the waiting side polls, so the small
+    spin (measured on 64-byte gets) is the wrong one for it: between two AWS
+    runs it went 100 -> 50 us and ior-easy-write 5.63 -> 4.86 GiB/s. Best
+    geometric mean of put and get MB/s; within 3% of it the shortest wins."""
+    def run_one(bs):
+        e = dict(env, ROCE_POLL_BULK_SPIN_US=str(bs))
+        srv = subprocess.Popen([sys.executable, "-c", SPIN_SERVER, ROOT, f"{ip}:{port}"], stdin=subprocess.PIPE,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=e)
+        try:
+            line = srv.stdout.readline()
+            if not line.startswith("READY"):
+                return {"error": (line + srv.stderr.read())[-300:]}
+            addr = line.split()[1]
+            res = {}
+            for mode in ("put", "get"):
+                r = subprocess.run([kv_bench, addr, "4", str(secs), str(1 << 20), mode], capture_output=True, text=True,
+                                   env=e, timeout=120)
+                m = next((l for l in r.stdout.splitlines() if l.startswith("RESULT ")), None)
+                if not m:
+                    return {"error": (r.stdout + r.stderr)[-300:]}
+                res[mode] = json.loads(m[len("RESULT "):])
+            return res
+        finally:
+            srv.stdin.close()
+            try:
+                srv.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                srv.kill()
+    runner = runner or run_one
+    table = {bs: runner(bs) for bs in candidates}
+    ok = {s: r for s, r in table.items() if "error" not in r}
+    if not ok:
+        return {"table": table, "chosen": None}
+    score = {s: (r["put"]["ops_per_s"] * r["get"]["ops_per_s"]) ** 0.5 for s, r in ok.items()}
+    best = max(score.values())
+    chosen = min(s for s, v in score.items() if v >= 0.97 * best)
+    return {"table": table, "score": score, "chosen": chosen}
 
 
 def calibrate_spin(ip: str, env: dict, kv_bench: str, port: int = 21400, secs: float = 2.0,
@@ -662,6 +706,19 @@ def main() -> int:
             rows = "; ".join(f"{s} us: 1 thr {r[1]['ops_per_s']:.0f}/s p50 {r[1]['p50_us']:.0f} us, "
                              f"8 thr {r[8]['ops_per_s']:.0f}/s" for s, r in cal["table"].items() if "error" not in r)
             step("spin", PASS, f"ROCE_POLL_SPIN_US={spin} (measured: {rows})", calibration=cal)
+        if os.environ.get("ROCE_BACKEND", "") == "ofi" or "ofi" in pf["env"].get("ROCE_BACKEND", ""):
+            begin("bulk-spin", "measuring the busy-poll for bulk transfers (1 MiB puts/gets, about 30 s)")
+            bcal = calibrate_bulk_spin(ip, env, kv_bench)
+            if bcal["chosen"] is None:
+                step("bulk-spin", WARN, f"calibration failed, keeping the default: {list(bcal['table'].values())[0]}",
+                     calibration=bcal)
+            else:
+                pf["env"]["ROCE_POLL_BULK_SPIN_US"] = env["ROCE_POLL_BULK_SPIN_US"] = str(bcal["chosen"])
+                write_env(env_file, pf["env"])
+                rows = "; ".join(f"{s} us: put {r['put']['ops_per_s']:.0f}/s get {r['get']['ops_per_s']:.0f}/s"
+                                 for s, r in bcal["table"].items() if "error" not in r)
+                step("bulk-spin", PASS, f"ROCE_POLL_BULK_SPIN_US={bcal['chosen']} (1 MiB, 4 threads: {rows})",
+                     calibration=bcal)
 
     # 4. peer -------------------------------------------------------------
     if args.peer:
