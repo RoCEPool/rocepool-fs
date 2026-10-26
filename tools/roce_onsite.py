@@ -361,6 +361,36 @@ def parse_peers(spec: str) -> list[tuple[str, str]]:
     return out
 
 
+def write_probe(cfile: str, env: dict, cluster: dict, step) -> None:
+    """IOR's two write phases (ior-easy-write, ior-hard-write) across every
+    host, 30 s each, through the interception client, once per bulk-transfer
+    spin: the setting is judged under the real load (a calibration on one
+    host chose 2 ms, which made IOR's writes slower), and the OSTs'
+    transport counters say where each request's time went."""
+    spins = [s.strip() for s in os.environ.get("ROCEPOOL_WRITE_PROBE_SPINS", "0,200,1000").split(",") if s.strip()]
+    rows = []
+    for sp in spins:
+        name, fname = f"writes-spin{sp}", f"onsite_writes_spin{sp}.json"
+        out = os.path.join(ROOT, fname)
+        begin(name, f"ior-easy-write + ior-hard-write on {len(cluster['nodes'])} hosts, ROCE_POLL_BULK_SPIN_US={sp}")
+        cmd = [sys.executable, os.path.join(ROOT, "tools", "io500_run.py"), "--report", out, "--project", "auto",
+               "--client", "intercept", "--direct-read", "off", "--stonewall", "30",
+               "--phases", "ior-easy-write,ior-hard-write"]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600,
+                           env=dict(env, ROCEPOOL_CLUSTER=cfile, ROCE_POLL_BULK_SPIN_US=sp))
+        try:
+            with open(out) as f:
+                rep = json.load(f)
+            ph = {k: round(v["value"], 3) for k, v in (rep.get("phases") or {}).items()}
+        except (OSError, ValueError):
+            ph = {}
+        ok = r.returncode == 0 and "ior-easy-write" in ph and "ior-hard-write" in ph
+        rows.append(f"spin {sp} us: ior-easy-write {ph.get('ior-easy-write')} GiB/s, "
+                    f"ior-hard-write {ph.get('ior-hard-write')} GiB/s")
+        step(name, PASS if ok else FAIL, rows[-1] if ok else (r.stdout + r.stderr)[-1500:], report_file=fname)
+    step("writes", PASS, "\n".join(rows))
+
+
 def cluster_step(args, ip: str, lib: str, fuse_client: str, intercept_lib: str, env: dict, pf_env: dict,
                  step) -> None:
     """7. N-host IO500. Every peer gets the tree (same path), its own
@@ -470,6 +500,9 @@ def cluster_step(args, ip: str, lib: str, fuse_client: str, intercept_lib: str, 
         json.dump(cluster, f, indent=2)
     if args.bench == "none":
         step("io500", WARN, f"not run (--bench none); cluster ready: ROCEPOOL_CLUSTER={cfile} tools/io500_run.py")
+        return
+    if args.bench == "writes":
+        write_probe(cfile, env, cluster, step)
         return
     runs = [("io500", "onsite_io500.json", ["--stonewall", "30" if args.bench == "quick" else "60"])]
     if args.bench == "full":  # + the untouched official procedure, for the score itself
@@ -598,7 +631,9 @@ def main() -> int:
     ap.add_argument("--peers", help="N-host run: user@host=roce_ip,user@host=roce_ip,... (every server but this "
                                     "one); the two-host steps use the first of them")
     ap.add_argument("--remote-dir", default="/tmp/rocepool_onsite")
-    ap.add_argument("--bench", choices=("quick", "full", "none"), default="quick")
+    ap.add_argument("--bench", choices=("quick", "full", "none", "writes"), default="quick",
+                    help="writes: only IOR's two write phases across the hosts (30 s each), once per bulk-transfer "
+                         "spin in ROCEPOOL_WRITE_PROBE_SPINS (default 0,200,1000) -- a targeted measurement")
     ap.add_argument("--lib", help="use this already-built library instead of building (skips step 2)")
     ap.add_argument("--force", action="store_true", help="continue past FAIL results")
     ap.add_argument("--soft-roce", action="store_true",
@@ -780,7 +815,7 @@ def main() -> int:
         return finish(1)
 
     # 6. bench -----------------------------------------------------------------
-    if args.bench != "none":
+    if args.bench not in ("none", "writes"):
         ladder = "1,10,50,100" if args.bench == "quick" else "1,10,50,100,200,500"
         out = os.path.join(ROOT, "onsite_stress.json")
         begin("bench", f"concurrency ladder {ladder} clients (md, md_shared, data)")

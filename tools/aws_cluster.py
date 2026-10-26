@@ -426,6 +426,9 @@ class Run:
         files = ["onsite_report.json", "onsite_io500.json", "onsite_io500_valid.json", "run.log", "aws_run.out",
                  "onsite_crossover.json", "onsite_stress.json", "onsite_ior.json", "onsite_ior_hard.json",
                  "onsite_kv.json", "onsite_gds.json", "onsite_kvcache.json", "selftest.log"]
+        # targeted measurements (roce_onsite.py --bench writes): onsite_writes_spin<N>.json
+        r = self.ssh(head, "cd /root/rocepool && ls onsite_writes_*.json 2>/dev/null", check=False, timeout=60)
+        files += [f for f in r.stdout.split() if f.startswith("onsite_writes_") and f.endswith(".json")]
         got = []
         for f in files:
             try:

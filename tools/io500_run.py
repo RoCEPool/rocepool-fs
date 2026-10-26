@@ -95,8 +95,14 @@ def _mem_total_gib() -> float:
 EASY_TRANSFER_MIB = 2  # ior-easy's transferSize
 
 
+# IO500's phase sections, in run order; each takes "run = FALSE"
+IO500_PHASES = ("ior-easy-write", "mdtest-easy-write", "ior-hard-write", "mdtest-hard-write", "find", "ior-easy-read",
+                "mdtest-easy-stat", "ior-hard-read", "mdtest-hard-stat", "mdtest-easy-delete", "mdtest-hard-read",
+                "mdtest-hard-delete", "ior-rnd4K-easy-read")
+
+
 def write_ini(path: str, *, datadir: str, resdir: str, pause_dir: str | None, stonewall: int, ior_easy_block_mib: int,
-              ior_hard_segments: int, md_easy_n: int, md_hard_n: int) -> None:
+              ior_hard_segments: int, md_easy_n: int, md_hard_n: int, phases: list | None = None) -> None:
     lines = ["[global]", f"datadir = {datadir}", "timestamp-datadir = FALSE", f"resultdir = {resdir}",
              "timestamp-resultdir = FALSE", "api = POSIX", "drop-caches = FALSE", "verbosity = 1", "",
              "[debug]", f"stonewall-time = {stonewall}"]
@@ -109,6 +115,10 @@ def write_ini(path: str, *, datadir: str, resdir: str, pause_dir: str | None, st
     lines += ["", "[ior-easy]", f"transferSize = {EASY_TRANSFER_MIB}m", f"blockSize = {easy_block}m", "filePerProc = TRUE", "",
               "[mdtest-easy]", f"n = {md_easy_n}", "", "[ior-hard]", f"segmentCount = {ior_hard_segments}", "",
               "[mdtest-hard]", f"n = {md_hard_n}", ""]
+    if phases:  # only these (a targeted, not a valid run)
+        for ph in IO500_PHASES:
+            if ph not in phases:
+                lines += [f"[{ph}]", "run = FALSE", ""]
     with open(path, "w") as f:
         f.write("\n".join(lines))
 
@@ -413,6 +423,9 @@ def main() -> int:
     ap.add_argument("--md-easy-n", type=int, default=None, help="mdtest-easy files per rank (cap)")
     ap.add_argument("--md-hard-n", type=int, default=None, help="mdtest-hard files per rank (cap)")
     ap.add_argument("--valid", action="store_true", help="official procedure: 300 s stonewall, no pauses")
+    ap.add_argument("--phases", default=None,
+                    help="comma-separated IO500 phases to run, the others skipped (run = FALSE): a targeted "
+                         "measurement, e.g. ior-easy-write,ior-hard-write; never a valid score")
     ap.add_argument("--no-pause", action="store_true",
                     help="no pause-dir (as --valid) with any stonewall: counters are taken at the phase headers")
     ap.add_argument("--project", default="10x32c-100g",
@@ -888,7 +901,8 @@ def main() -> int:
         ini = os.path.join(work, "config.ini")
         write_ini(ini, datadir=os.path.join(MNT, "io500data"), resdir=os.path.join(work, "results"),
                   pause_dir=pause, stonewall=stonewall, ior_easy_block_mib=easy_block,
-                  ior_hard_segments=hard_segs, md_easy_n=md_easy_n, md_hard_n=md_hard_n)
+                  ior_hard_segments=hard_segs, md_easy_n=md_easy_n, md_hard_n=md_hard_n,
+                  phases=[p.strip() for p in args.phases.split(",")] if args.phases else None)
         hostfile, _, extra = cluster.mpi_files(work, args.ranks_per_node)
         cmd = [os.path.join(mpi_bin, "mpiexec"), *extra, *bind_args, *mpi_extra, "-f", hostfile, "-n", str(ranks), io500, ini]
         snap = Snapshotter(cluster, servers)

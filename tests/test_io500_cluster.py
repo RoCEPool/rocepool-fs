@@ -129,6 +129,20 @@ class ValidityTests(unittest.TestCase):
         self.assertIn("blockSize = 1544m", text)
         self.assertIn("transferSize = 2m", text)
 
+    def test_only_the_given_phases_run(self):
+        """--phases (roce_onsite.py --bench writes): every other IO500 phase
+        gets run = FALSE, so a targeted measurement costs minutes"""
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        ini = os.path.join(d, "c.ini")
+        write_ini(ini, datadir="/x", resdir="/y", pause_dir=None, stonewall=30, ior_easy_block_mib=64,
+                  ior_hard_segments=50, md_easy_n=200, md_hard_n=200, phases=["ior-easy-write", "ior-hard-write"])
+        text = open(ini).read()
+        self.assertNotIn("[ior-easy-write]", text)
+        self.assertNotIn("[ior-hard-write]", text)
+        for ph in ("mdtest-easy-write", "find", "ior-easy-read", "mdtest-hard-delete", "ior-rnd4K-easy-read"):
+            self.assertIn(f"[{ph}]\nrun = FALSE", text)
+
 
 class CapacityBudgetTests(unittest.TestCase):
     """The site's two hosts: one with an NVMe tier per OST, one RAM only --
