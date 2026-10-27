@@ -360,3 +360,18 @@ class ForceEnvTests(unittest.TestCase):
                                       "ROCE_TOS": "106"})[-1]
         self.assertIn("ROCE_POLL_SPIN_US=20", cmd)
         self.assertNotIn("ROCE_TOS", cmd)
+
+
+class HeadViaSshTests(unittest.TestCase):
+    """ROCEPOOL_HEAD_VIA_SSH=1: node 0's processes start through ssh to its
+    own address, exactly like a peer's (a diagnosis of node 0's OST pulling
+    payloads 2x slower); without it node 0 runs them directly"""
+
+    def test_wrap(self):
+        from tools.cluster import Node
+        n = Node(0, "10.0.0.1")
+        self.assertEqual(n.wrap(["python3", "x.py"], env={}), ["python3", "x.py"])
+        cmd = n.wrap(["python3", "x.py"], env={"ROCEPOOL_HEAD_VIA_SSH": "1"})
+        self.assertEqual(cmd[0], "ssh")
+        self.assertIn("root@10.0.0.1", cmd)
+        self.assertIn("roce_env.sh", cmd[-1])

@@ -696,6 +696,16 @@ def main() -> int:
                         s["numa_node"] = j % numa_nodes
             print(f"== NUMA: {numa_nodes} nodes per host; each MDT/OST pinned to one, ranks bound to NUMA", flush=True)
         report["numa_nodes_per_host"] = numa_nodes
+        # each server on a host pins its worker threads from its own core on
+        # (every one counted from core 0: an MDT's and an OST's threads shared
+        # the same cores) -- within its NUMA node's cores when it has one
+        if cluster.real and facts and numa_nodes <= 1:
+            for node in cluster.nodes:
+                mine = [x for x in servers if x["node"] == node.index]
+                cores = int((facts[node.index] if node.index < len(facts) else facts[0]).get("cores") or 0)
+                for j, s in enumerate(mine):
+                    if cores and len(mine) > 1:
+                        s.setdefault("env", {})["ROCEPOOL_PIN_OFFSET"] = str(j * cores // len(mine))
         # millions of files: the MDT's allocations (and EFA's registrations)
         # take more memory mappings than the default vm.max_map_count
         # (65530) allows -- malloc then fails with RAM free

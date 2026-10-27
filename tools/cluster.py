@@ -117,8 +117,12 @@ class Node:
             if net:
                 pre.insert(1, f"--net={os.path.join(NETNS_DIR, ns)}")
             return pre + argv
-        if self.local:
+        if self.local and (env or os.environ).get("ROCEPOOL_HEAD_VIA_SSH") != "1":
             return list(argv)
+        # ROCEPOOL_HEAD_VIA_SSH=1: node 0's processes start through ssh too,
+        # exactly as the peers' (its own roce_env.sh, the same passthrough):
+        # a diagnosis -- node 0's OST pulled payloads 2x slower than a peer's
+        target = self.peer or f"root@{self.ip}"
         # only what must be the same on every host; each host's own RoCE
         # tuning (ROCE_TOS, busy-poll, ... from its preflight) comes from its
         # roce_env.sh, which node 0's values must not override
@@ -132,7 +136,7 @@ class Node:
         cmd = (f"cd {shlex.quote(ROOT)} && {{ [ -f roce_env.sh ] && . ./roce_env.sh; true; }} && "
                f"exec env {passthru} PYTHONPATH={shlex.quote(ROOT)} {' '.join(shlex.quote(a) for a in argv)}")
         from tools.topology import SSH_OPTS
-        return ["ssh", *SSH_OPTS, self.peer, cmd]
+        return ["ssh", *SSH_OPTS, target, cmd]
 
 
 class Cluster:
