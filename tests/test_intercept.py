@@ -455,6 +455,177 @@ os.unlink(d + "/real"); os.rmdir(d); print(os.path.exists(d))
         self.assertEqual(out.splitlines(), ["kernel ['real'] True", "False"])
 
 
+_PFIND = os.path.join(ROOT, ".bench_cache", "io500_src", "build", "pfind", "pfind")
+_MPIRUN = os.path.join(ROOT, ".bench_cache", "mpich", "bin", "mpirun")
+
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class DirectoryPositionTests(_Cluster):
+    """telldir/seekdir on our directory streams. A directory larger than
+    every MDT's first page is "paged": read as its MDTs' listings one after
+    another, fetched from any position, with positions spread over
+    [0, LONG_MAX) -- IO500 find's pfind -H 1 halves a reader's position
+    range to give the other half to an idle rank, which seeks there. Before
+    this, one rank read mdtest-hard's whole directory (9.4 M entries on 4
+    nodes) and find stayed at ~1 M entries/s from 2 nodes to 4."""
+    port = 23450
+
+    def positions(self, d, n_files, env):
+        code = f"""
+import ctypes, os
+P = {self.prefix!r}
+os.makedirs(P + "/{d}", exist_ok=True)
+for i in range({n_files}):
+    os.close(os.open(P + "/{d}/file.mdtest.%d.%d" % (i % 5, i), os.O_CREAT | os.O_WRONLY, 0o644))
+libc = ctypes.CDLL(None)
+libc.opendir.restype = ctypes.c_void_p
+libc.opendir.argtypes = [ctypes.c_char_p]
+libc.readdir.restype = ctypes.c_void_p
+libc.readdir.argtypes = [ctypes.c_void_p]
+libc.telldir.restype = ctypes.c_long
+libc.telldir.argtypes = [ctypes.c_void_p]
+libc.seekdir.argtypes = [ctypes.c_void_p, ctypes.c_long]
+libc.closedir.argtypes = [ctypes.c_void_p]
+NAME_OFF = 19  # struct dirent: d_ino 8, d_off 8, d_reclen 2, d_type 1
+def name(ent):
+    return ctypes.string_at(ent + NAME_OFF).decode()
+LONG_MAX = 2**63 - 1
+d = libc.opendir((P + "/{d}").encode())
+seq = []
+while True:
+    pos = libc.telldir(d)
+    ent = libc.readdir(d)
+    if not ent:
+        break
+    seq.append((pos, name(ent)))
+end = libc.telldir(d)
+poss = [p for p, _ in seq]
+print(len(seq), len(set(n for _, n in seq)), poss == sorted(poss), len(set(poss)) == len(poss), end == LONG_MAX)
+# every recorded position leads back to its entry, also from another stream
+e = libc.opendir((P + "/{d}").encode())
+bad = 0
+for k in list(range(0, len(seq), 97)) + [len(seq) - 1]:
+    libc.seekdir(e, seq[k][0])
+    if libc.telldir(e) != seq[k][0] or name(libc.readdir(e)) != seq[k][1]:
+        bad += 1
+print(bad)
+# pfind's split: positions between entries go to the next one; past the
+# end, telldir answers LONG_MAX (>= any position sought)
+ranges, cuts = [], sorted({{0, LONG_MAX // 3, LONG_MAX // 2, LONG_MAX - 5, LONG_MAX}})
+seen = []
+for a, b in zip(cuts, cuts[1:]):
+    f = libc.opendir((P + "/{d}").encode())
+    if a:
+        libc.seekdir(f, a)
+    while True:
+        pos = libc.telldir(f)
+        if pos < a:
+            seen.append("BACKWARDS")
+            break
+        if pos >= b:
+            break
+        ent = libc.readdir(f)
+        if not ent:
+            break
+        seen.append(name(ent))
+    libc.closedir(f)
+print(len(seen), len(set(seen)), sorted(seen) == sorted(n for _, n in seq))
+libc.closedir(d); libc.closedir(e)
+"""
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, cwd=self.tmp,
+                             env=dict(self.penv, **env))
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        return out.stdout.split("\n")
+
+    def test_paged_directory_positions_split_and_seek(self):
+        lines = self.positions("paged", 3000, {"ROCEPOOL_READDIR_FIRST": "4096", "ROCEPOOL_READDIR_PAGE": "8192"})
+        self.assertEqual(lines[:3], ["3000 3000 True True True", "0", "3000 3000 True"])
+
+    def test_small_directory_positions_split_and_seek(self):
+        lines = self.positions("small", 40, {})
+        self.assertEqual(lines[:3], ["40 40 True True True", "0", "40 40 True"])
+
+    def test_a_change_is_seen_by_the_next_listing(self):
+        """Positional readers share one snapshot per MDT, but only while the
+        directory is unchanged."""
+        env = dict(self.penv, ROCEPOOL_READDIR_FIRST="4096", ROCEPOOL_READDIR_PAGE="8192")
+        code = f"""
+import os
+P = {self.prefix!r}
+os.makedirs(P + "/chg", exist_ok=True)
+for i in range(1500):
+    os.close(os.open(P + "/chg/f%05d" % i, os.O_CREAT | os.O_WRONLY, 0o644))
+print(len(os.listdir(P + "/chg")))
+os.unlink(P + "/chg/f00007")
+os.close(os.open(P + "/chg/new", os.O_CREAT | os.O_WRONLY, 0o644))
+names = os.listdir(P + "/chg")
+print(len(names), "f00007" in names, "new" in names)
+with open(P + "/chg/f00009", "wb") as f:
+    f.write(b"x" * 123)
+print([e.stat().st_size for e in os.scandir(P + "/chg") if e.name == "f00009"])
+"""
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, cwd=self.tmp,
+                             env=env)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertEqual(out.stdout.split("\n")[:3], ["1500", "1500 False True", "[123]"])
+
+
+@unittest.skipUnless(shutil.which("gcc") and os.path.exists(_PFIND) and os.path.exists(_MPIRUN),
+                     "needs gcc, and pfind + mpirun built in .bench_cache")
+class PfindSplitTests(_Cluster):
+    """The unmodified pfind of the IO500 app, through mpirun with the
+    library preloaded, with and without -H 1 (IO500's
+    pfind-parallelize-single-dir-access-using-hashing): the same files are
+    found either way, and with it the big directory is read by every rank."""
+    port = 23470
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.ts = os.path.join(cls.tmp, "timestampfile")
+        with open(cls.ts, "w"):
+            pass
+        os.utime(cls.ts, (1, 1))   # every file is newer
+        code = f"""
+import os
+P = {cls.prefix!r}
+os.makedirs(P + "/find/hard", exist_ok=True)
+for r in range(3):
+    os.makedirs(P + "/find/easy/r%d" % r, exist_ok=True)
+    for i in range(300):
+        os.close(os.open(P + "/find/easy/r%d/file.mdtest.%d.%d" % (r, r, i), os.O_CREAT | os.O_WRONLY, 0o644))
+data = b"h" * 3901
+for i in range(6000):
+    with open(P + "/find/hard/file.mdtest.%d.%d" % (i % 4, i), "wb") as f:
+        f.write(data)
+"""
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=600, cwd=cls.tmp,
+                             env=cls.penv)
+        assert out.returncode == 0, out.stdout + out.stderr
+        cls.expect = sum(1 for i in range(6000) if "01" in "file.mdtest.%d.%d" % (i % 4, i))
+
+    def pfind(self, *extra):
+        env = dict(self.penv, ROCEPOOL_READDIR_FIRST="4096", ROCEPOOL_READDIR_PAGE="16384")
+        out = subprocess.run([_MPIRUN, "-n", "4", _PFIND, self.prefix + "/find", "-newer", self.ts, "-size", "3901c",
+                              "-name", "*01*", "-C", "-P", "-q", "10000", "-M", "100", *extra],
+                             capture_output=True, text=True, env=env, timeout=600)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        return out.stdout
+
+    def matched(self, out):
+        import re
+        m = re.search(r"MATCHED (\d+)/(\d+)", out)
+        self.assertTrue(m, out)
+        return int(m.group(1)), int(m.group(2))
+
+    def test_same_files_found_with_and_without_the_split(self):
+        total = 6000 + 3 * 300
+        plain = self.pfind()
+        split = self.pfind("-H", "1")
+        self.assertEqual(self.matched(plain), (self.expect, total), plain)
+        self.assertEqual(self.matched(split), (self.expect, total), split)
+
+
 @unittest.skipUnless(shutil.which("gcc") and os.path.exists(os.path.join(ROOT, ".bench_cache", "ior_src", "src", "ior"))
                      and os.path.exists(os.path.join(ROOT, ".bench_cache", "mpich", "bin", "mpirun")),
                      "needs the IOR/MPICH built by tools/bench_ior.py")

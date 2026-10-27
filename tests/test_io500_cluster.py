@@ -142,6 +142,22 @@ class ValidityTests(unittest.TestCase):
         self.assertNotIn("[ior-hard-write]", text)
         for ph in ("mdtest-easy-write", "find", "ior-easy-read", "mdtest-hard-delete", "ior-rnd4K-easy-read"):
             self.assertIn(f"[{ph}]\nrun = FALSE", text)
+        self.assertEqual(text.count("[find]"), 1)
+
+    def test_find_splits_a_directory_among_ranks(self):
+        """pfind -H 1: one rank reading mdtest-hard's whole directory kept
+        find at ~1 M entries/s from 2 nodes to 4"""
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        ini = os.path.join(d, "c.ini")
+        kw = dict(datadir="/x", resdir="/y", pause_dir=None, stonewall=30, ior_easy_block_mib=64,
+                  ior_hard_segments=50, md_easy_n=200, md_hard_n=200)
+        write_ini(ini, **kw)
+        self.assertIn("[find]\npfind-parallelize-single-dir-access-using-hashing = TRUE", open(ini).read())
+        os.environ["ROCEPOOL_FIND_SPLIT"] = "0"
+        self.addCleanup(os.environ.pop, "ROCEPOOL_FIND_SPLIT", None)
+        write_ini(ini, **kw)
+        self.assertNotIn("[find]", open(ini).read())
 
 
 class CapacityBudgetTests(unittest.TestCase):

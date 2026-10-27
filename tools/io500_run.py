@@ -115,10 +115,15 @@ def write_ini(path: str, *, datadir: str, resdir: str, pause_dir: str | None, st
     lines += ["", "[ior-easy]", f"transferSize = {EASY_TRANSFER_MIB}m", f"blockSize = {easy_block}m", "filePerProc = TRUE", "",
               "[mdtest-easy]", f"n = {md_easy_n}", "", "[ior-hard]", f"segmentCount = {ior_hard_segments}", "",
               "[mdtest-hard]", f"n = {md_hard_n}", ""]
-    if phases:  # only these (a targeted, not a valid run)
-        for ph in IO500_PHASES:
-            if ph not in phases:
-                lines += [f"[{ph}]", "run = FALSE", ""]
+    skip = [ph for ph in IO500_PHASES if phases and ph not in phases]  # only these (a targeted, not a valid run)
+    if "find" not in skip and os.environ.get("ROCEPOOL_FIND_SPLIT", "1") != "0":
+        # pfind -H 1: idle ranks take halves of a directory being read (by
+        # telldir/seekdir position, which the intercept library spreads
+        # evenly). Without it one rank read mdtest-hard's whole directory and
+        # find stayed at ~1 M entries/s from 2 nodes to 4 (i3en, 2026-10-27).
+        lines += ["[find]", "pfind-parallelize-single-dir-access-using-hashing = TRUE", ""]
+    for ph in skip:
+        lines += [f"[{ph}]", "run = FALSE", ""]
     with open(path, "w") as f:
         f.write("\n".join(lines))
 
