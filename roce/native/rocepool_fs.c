@@ -679,6 +679,119 @@ int mdt_readdir(const char *dir, dirent_t **out, size_t *count) {
     return 0;
 }
 
+/* ---- positional listing (MDT op 13) ----
+ * A directory read as the concatenation of its MDTs' listings (MDT 0's
+ * entries, then MDT 1's, ...), each in its snapshot's name order, fetched
+ * a page at a time from any index. Every reader of the same unchanged
+ * directory sees the same order and indices, so separate readers can split
+ * it by index (IO500 find's pfind -H 1). */
+int mdt_dir_nmdts(const char *dir) {
+    peer_t *peers[MAX_PEERS];
+    return mdts_for_children(dir, peers);
+}
+
+static int mdt_readdir_at_one(peer_t *p, const char *dir, uint64_t at, uint32_t budget,
+                              dirent_t **out, size_t *count, uint64_t *total, int *more) {
+    if (budget > rp_frame_bytes / 2) budget = (uint32_t)(rp_frame_bytes / 2);  /* the reply must fit our frame */
+    uint8_t req[13];
+    req[0] = 13;
+    memcpy(req + 1, &budget, 4);
+    memcpy(req + 5, &at, 8);
+    resp_t r;
+    int rc = rpc(p, OP_MDT, dir, req, sizeof(req), NULL, 0, &r);
+    if (rc) return rc;
+    if (r.op != OP_MDT_OK || r.vlen < 12) {
+        rc = r.op == OP_ERROR && !strcmp(r.code, "UNSUPPORTED_OP") ? -EOPNOTSUPP
+           : r.op == OP_ERROR ? mdt_errno(r.code) : -EIO;
+        resp_free(&r);
+        return rc;
+    }
+    uint32_t n;
+    memcpy(total, r.val, 8);
+    memcpy(&n, r.val + 8, 4);
+    *more = (n & 0x80000000u) != 0;
+    n &= 0x7fffffffu;
+    dirent_t *v = xmalloc((n ? n : 1) * sizeof(*v));
+    size_t off = 12, got = 0;
+    for (; got < n; got++) {
+        dirent_t *d = &v[got];
+        if (off + 2 > r.vlen) break;
+        uint16_t ln;
+        memcpy(&ln, r.val + off, 2);
+        off += 2;
+        if (off + ln > r.vlen) break;
+        d->name = xmalloc(ln + 1u);
+        memcpy(d->name, r.val + off, ln);
+        d->name[ln] = 0;
+        off += ln;
+        size_t used = decode_entry(r.val + off, r.vlen - off, &d->a);
+        if (!used) { free(d->name); break; }
+        off += used;
+    }
+    resp_free(&r);
+    if (got < n) *more = 0;
+    *out = v;
+    *count = got;
+    return 0;
+}
+
+/* entries of dir on its k-th MDT (mdts_for_children order) from index `at`,
+ * at most about `budget` bytes of them; *total = that MDT's entry count */
+int mdt_readdir_at(const char *dir, int k, uint64_t at, uint32_t budget,
+                   dirent_t **out, size_t *count, uint64_t *total, int *more) {
+    peer_t *peers[MAX_PEERS];
+    int n = mdts_for_children(dir, peers);
+    if (k < 0 || k >= n) return -EINVAL;
+    return mdt_readdir_at_one(peers[k], dir, at, budget, out, count, total, more);
+}
+
+typedef struct {
+    group_t *g;
+    peer_t *p;
+    const char *dir;
+    uint32_t budget;
+    dirent_t *ents;
+    size_t n;
+    uint64_t total;
+    int more;
+} at_task_t;
+
+static void readdir_at_task(void *arg) {
+    at_task_t *t = arg;
+    group_done(t->g, mdt_readdir_at_one(t->p, t->dir, 0, t->budget, &t->ents, &t->n, &t->total, &t->more));
+}
+
+/* the first page of every MDT in parallel (with each MDT's count): one
+ * round trip says how big the directory is, and for a small one it is the
+ * whole listing. ents[k]/n[k]/total[k]/more[k] per MDT; returns the MDT
+ * count, or -errno (the pages fetched so far are freed). */
+int mdt_readdir_first(const char *dir, uint32_t budget, dirent_t **ents, size_t *n,
+                      uint64_t *total, int *more) {
+    peer_t *peers[MAX_PEERS];
+    int k = mdts_for_children(dir, peers);
+    at_task_t tasks[MAX_PEERS];
+    void *args[MAX_PEERS];
+    group_t g;
+    group_init(&g, k);
+    for (int i = 0; i < k; i++) {
+        tasks[i] = (at_task_t){&g, peers[i], dir, budget, NULL, 0, 0, 0};
+        args[i] = &tasks[i];
+    }
+    int rc = run_all(readdir_at_task, args, k, &g);
+    for (int i = 0; i < k; i++) {
+        if (rc) {
+            for (size_t j = 0; j < tasks[i].n; j++) free(tasks[i].ents[j].name);
+            free(tasks[i].ents);
+            continue;
+        }
+        ents[i] = tasks[i].ents;
+        n[i] = tasks[i].n;
+        total[i] = tasks[i].total;
+        more[i] = tasks[i].more;
+    }
+    return rc ? rc : k;
+}
+
 static int mdt_child_count(const char *dir, uint64_t *n) {
     dir_task_t tasks[MAX_PEERS];
     int k;

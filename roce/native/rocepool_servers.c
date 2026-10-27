@@ -1197,6 +1197,7 @@ typedef struct rd_snap {
     uint64_t built_ns;
     int refs;      /* under the directory's snap_lk */
     int attached;  /* still the directory's current snapshot */
+    uint64_t ver;  /* the directory's version when the copy began */
 } rd_snap;
 
 typedef struct md_dir {
@@ -1207,6 +1208,9 @@ typedef struct md_dir {
     md_bucket b[MD_BUCKETS];
     pthread_mutex_t snap_lk;
     rd_snap *snap;
+    /* bumped by every change to an entry in it: a snapshot is current
+     * while it matches (positional readers reuse it, op 13) */
+    atomic_ullong ver;
 } md_dir;
 
 /* ---- the slot table: entries readable one-sided ----
@@ -1642,7 +1646,7 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
     md_dir *pd = NULL;
     md_bucket *bk = NULL;
     uint64_t tw = mono_ns(), th = tw;
-    if (op != 5 && op != 6) {
+    if (op != 5 && op != 6 && op != 13) {
         pd = md_get_dir(m, parent, parent_len, op == 2);
         if (pd) {
             bk = md_bucket_of(pd, nh);
@@ -1759,8 +1763,10 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
                 pthread_mutex_unlock(&d->snap_lk);
             }
             if (!sn) {  /* a first page (or none left): a new one */
+                uint64_t ver = atomic_load(&d->ver);
                 sn = rd_snap_build(m, d);
                 if (!sn) { out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
+                sn->ver = ver;
                 sn->refs = 1;
                 rd_snap_attach(d, sn);
             }
@@ -1890,6 +1896,57 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         }
         break;
     }
+    case 13: {  /* readdir by position (request: u8 13, u32 LE max reply bytes,
+                 * u64 LE index): the records of the listing's snapshot from
+                 * that index on, in the same name order as 5. Reply: u64 LE
+                 * the snapshot's entry count, then 5's page (u32 LE count,
+                 * top bit = more follow, records). Several readers can each
+                 * take a range of one directory -- IO500 find's
+                 * single-directory split (pfind -H 1) seeks every reader to
+                 * its own index -- so every page is served from the
+                 * directory's current snapshot while the directory is
+                 * unchanged (its version), and the last page does not drop
+                 * it (another reader's range may still be ahead of it); a
+                 * change, or the next first page of 5, replaces it. */
+        if (f->val_len < 13) { out = frame_error(f, "MDT_INTERNAL", "short readdir_at", out_len); break; }
+        size_t budget = rd_u32le(f->val + 1);
+        uint64_t at = rd_u64le(f->val + 5);
+        if (budget < 4096) budget = 4096;
+        md_dir *d = md_get_dir(m, path, pl, 0);
+        if (!d) {
+            uint8_t *v = frame_alloc(OP_MDT_OK, f, 12, &out, out_len);
+            if (v) { wr_u64le(v, 0); wr_u32le(v + 8, 0); }
+            break;
+        }
+        uint64_t ver = atomic_load(&d->ver);
+        pthread_mutex_lock(&d->snap_lk);
+        rd_snap *sn = d->snap;
+        if (sn && sn->ver != ver) sn = NULL;   /* the directory changed since */
+        if (sn) sn->refs++;
+        pthread_mutex_unlock(&d->snap_lk);
+        if (!sn) {
+            sn = rd_snap_build(m, d);
+            if (!sn) { out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
+            sn->ver = ver;
+            sn->refs = 1;
+            rd_snap_attach(d, sn);
+        }
+        size_t i0 = at < sn->n ? (size_t)at : sn->n, i1 = i0;
+        size_t tot = 12;
+        for (; i1 < sn->n; i1++) {
+            size_t add = sn->off[i1 + 1] - sn->off[i1];
+            if (i1 > i0 && tot + add > budget) break;
+            tot += add;
+        }
+        uint8_t *v = frame_alloc(OP_MDT_OK, f, tot, &out, out_len);
+        if (v) {
+            wr_u64le(v, sn->n);
+            wr_u32le(v + 8, (uint32_t)(i1 - i0) | (i1 < sn->n ? 0x80000000u : 0));
+            memcpy(v + 12, sn->buf + sn->off[i0], sn->off[i1] - sn->off[i0]);
+        }
+        rd_snap_unref(d, sn);
+        break;
+    }
     case 12: {  /* the slot table: u64 LE addr, u64 LE nslots, u32 LE rkey (NO_TABLE if none) */
         md_table *t = &m->tab;
         if (t->base && !t->rkey_ok && m->server && !roce_server_mem_rkey(m->server, t->mem, &t->rkey)) t->rkey_ok = 1;
@@ -1907,6 +1964,8 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         out = frame_error(f, "UNSUPPORTED_OP", msg, out_len);
     }
     }
+    if (pd && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10))
+        atomic_fetch_add_explicit(&pd->ver, 1, memory_order_release);
     if (bk && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10)) {
         /* keep the one-sided table in step while the bucket is still ours */
         md_entry *e = op == 4 ? NULL : *md_find(bk, name, name_len, nh);

@@ -144,6 +144,12 @@ int fs_remove_file(const char *path);
 int fs_truncate(const char *path, uint64_t size);
 int fs_spill(const char *path);
 int mdt_readdir(const char *dir, dirent_t **out, size_t *count);
+/* positional listing: the MDTs' listings concatenated (rocepool_fs.c) */
+int mdt_dir_nmdts(const char *dir);
+int mdt_readdir_at(const char *dir, int k, uint64_t at, uint32_t budget,
+                   dirent_t **out, size_t *count, uint64_t *total, int *more);
+int mdt_readdir_first(const char *dir, uint32_t budget, dirent_t **ents, size_t *n,
+                      uint64_t *total, int *more);
 int mdt_set_size(const char *path, uint64_t size, int exact, attr_t *a);
 int mdt_inline_read(const char *path, int freeze, uint64_t off, uint32_t len, attr_t *a, rp_resp_t *r,
                     const uint8_t **data, size_t *dlen);

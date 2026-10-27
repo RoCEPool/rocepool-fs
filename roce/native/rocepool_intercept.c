@@ -64,7 +64,7 @@ REAL(read); REAL(write); REAL(pread); REAL(pread64); REAL(pwrite); REAL(pwrite64
 REAL(lseek); REAL(lseek64); REAL(fstat); REAL(fstat64); REAL(stat); REAL(stat64); REAL(lstat); REAL(lstat64);
 REAL(fstatat); REAL(fstatat64); REAL(unlink); REAL(unlinkat); REAL(mkdir); REAL(mkdirat); REAL(rmdir);
 REAL(access); REAL(faccessat); REAL(opendir); REAL(fdopendir); REAL(readdir); REAL(readdir64); REAL(closedir);
-REAL(dirfd); REAL(rewinddir); REAL(fsync); REAL(fdatasync); REAL(ftruncate); REAL(ftruncate64); REAL(truncate);
+REAL(dirfd); REAL(rewinddir); REAL(telldir); REAL(seekdir); REAL(fsync); REAL(fdatasync); REAL(ftruncate); REAL(ftruncate64); REAL(truncate);
 REAL(truncate64); REAL(dup); REAL(dup2); REAL(dup3); REAL(fcntl); REAL(realpath); REAL(statfs); REAL(statvfs);
 REAL(chmod); REAL(fchmod); REAL(chown); REAL(rename); REAL(renameat); REAL(utimes); REAL(futimens); REAL(utimensat);
 REAL(fchdir); REAL(chdir); REAL(fopen); REAL(fopen64); REAL(fdopen);
@@ -113,7 +113,7 @@ static void load_libc(void) {
     LOAD(lseek); LOAD(lseek64); LOAD(fstat); LOAD(fstat64); LOAD(stat); LOAD(stat64); LOAD(lstat); LOAD(lstat64);
     LOAD(fstatat); LOAD(fstatat64); LOAD(unlink); LOAD(unlinkat); LOAD(mkdir); LOAD(mkdirat); LOAD(rmdir);
     LOAD(access); LOAD(faccessat); LOAD(opendir); LOAD(fdopendir); LOAD(readdir); LOAD(readdir64); LOAD(closedir);
-    LOAD(dirfd); LOAD(rewinddir); LOAD(fsync); LOAD(fdatasync); LOAD(ftruncate); LOAD(ftruncate64); LOAD(truncate);
+    LOAD(dirfd); LOAD(rewinddir); LOAD(telldir); LOAD(seekdir); LOAD(fsync); LOAD(fdatasync); LOAD(ftruncate); LOAD(ftruncate64); LOAD(truncate);
     LOAD(truncate64); LOAD(dup); LOAD(dup2); LOAD(dup3); LOAD(fcntl); LOAD(realpath); LOAD(statfs); LOAD(statvfs);
     LOAD(chmod); LOAD(fchmod); LOAD(chown); LOAD(rename); LOAD(renameat); LOAD(utimes); LOAD(futimens); LOAD(utimensat);
     LOAD(fchdir); LOAD(chdir); LOAD(fopen); LOAD(fopen64); LOAD(fdopen);
@@ -164,17 +164,34 @@ typedef struct {
 static ofile_t *g_fds[FD_TABLE];
 static pthread_rwlock_t g_fd_lk = PTHREAD_RWLOCK_INITIALIZER;
 
+/* An open directory stream. A directory whose listing fits the first page
+ * of every MDT is held whole (`ents`, name order). A larger one is
+ * "paged": read as its MDTs' listings one after another, a page at a time
+ * from any index (MDT op 13), so a reader that seeks into the middle
+ * fetches only what it reads -- IO500 find's pfind -H 1 splits one huge
+ * directory (mdtest-hard's) among its ranks by telldir/seekdir positions.
+ * Positions spread the entries evenly over [0, LONG_MAX): pfind halves the
+ * remaining position range to split, and every reader of the unchanged
+ * directory maps a position to the same entry. */
 typedef struct {
     int fd;               /* reserved real descriptor (dirfd) */
     char *path;
-    dirent_t *ents;
+    dirent_t *ents;       /* whole listing (not paged) */
     size_t n, next;
+    int paged;
+    int nmdt;
+    uint64_t base[MAX_PEERS + 1];   /* index of MDT k's first entry */
+    uint64_t total, step, g;        /* entries, position step, next index */
+    dirent_t *page[MAX_PEERS];      /* each MDT's current page */
+    size_t page_n[MAX_PEERS];
+    uint64_t page_at[MAX_PEERS];    /* MDT-local index of page[k][0] */
     struct dirent64 cur64;
     struct dirent cur;
 } odir_t;
 
 #define DIR_TABLE 4096
 static odir_t *g_dirs[DIR_TABLE];
+static int g_dir_hi;      /* slots at and above this are empty */
 static pthread_mutex_t g_dir_lk = PTHREAD_MUTEX_INITIALIZER;
 
 static int split_list(char *s, char **out, int max) {
@@ -244,7 +261,7 @@ static const char *ours(int dirfd, const char *path, char *out, size_t n) {
         /* relative to one of our directory descriptors? */
         const char *base = NULL;
         pthread_mutex_lock(&g_dir_lk);
-        for (int i = 0; i < DIR_TABLE; i++)
+        for (int i = 0; i < g_dir_hi; i++)
             if (g_dirs[i] && g_dirs[i]->fd == dirfd) { base = g_dirs[i]->path; break; }
         if (base) snprintf(abs, sizeof(abs), "%s/%s/%s", g_prefix, base, path);
         pthread_mutex_unlock(&g_dir_lk);
@@ -1041,7 +1058,7 @@ static odir_t *dir_of(DIR *d) {
     if (!d) return NULL;
     pthread_mutex_lock(&g_dir_lk);
     odir_t *hit = NULL;
-    for (int i = 0; i < DIR_TABLE; i++)
+    for (int i = 0; i < g_dir_hi; i++)   /* every readdir: only the used slots */
         if ((DIR *)g_dirs[i] == d) { hit = g_dirs[i]; break; }
     pthread_mutex_unlock(&g_dir_lk);
     return hit;
@@ -1052,19 +1069,103 @@ static void dir_drop(odir_t *d) {
     free(d->ents);
     d->ents = NULL;
     d->n = d->next = 0;
+    for (int k = 0; k < MAX_PEERS; k++) {
+        for (size_t i = 0; i < d->page_n[k]; i++) free(d->page[k][i].name);
+        free(d->page[k]);
+        d->page[k] = NULL;
+        d->page_n[k] = 0;
+        d->page_at[k] = 0;
+    }
+    d->paged = 0;
+    d->nmdt = 0;
+    d->total = d->g = 0;
 }
 
-/* fetch the listing (all MDTs, merged) and prime the attribute cache for
- * the stats that usually follow a readdir */
-static int dir_list(odir_t *d) {
-    int rc = mdt_readdir(d->path, &d->ents, &d->n);
-    if (rc) return rc;
-    for (size_t i = 0; i < d->n; i++) {
+/* prime the attribute cache for the stats that usually follow a readdir */
+static void dir_prime(const odir_t *d, const dirent_t *e, size_t n) {
+    for (size_t i = 0; i < n; i++) {
         char child[PATH_MAX];
-        int w = *d->path ? snprintf(child, sizeof(child), "%s/%s", d->path, d->ents[i].name)
-                         : snprintf(child, sizeof(child), "%s", d->ents[i].name);
-        if (w > 0 && (size_t)w < sizeof(child)) ac_put(child, &d->ents[i].a);
+        int w = *d->path ? snprintf(child, sizeof(child), "%s/%s", d->path, e[i].name)
+                         : snprintf(child, sizeof(child), "%s", e[i].name);
+        if (w > 0 && (size_t)w < sizeof(child)) ac_put(child, &e[i].a);
     }
+}
+
+static int cmp_dent_name(const void *a, const void *b) {
+    return strcmp(((const dirent_t *)a)->name, ((const dirent_t *)b)->name);
+}
+
+/* bytes per page of a paged listing: a reader that seeks into the middle
+ * fetches about this much it does not read, and each page's entries are
+ * put in the attribute cache (100 k entries) just before they are read */
+static uint32_t dir_page_bytes(void) {
+    static uint32_t v;
+    if (!v) {
+        const char *s = getenv("ROCEPOOL_READDIR_PAGE");
+        long x = s ? atol(s) : 0;
+        v = x >= 4096 && x <= (64l << 20) ? (uint32_t)x : 256u << 10;
+    }
+    return v;
+}
+
+/* bytes of each MDT's first page: small, because a reader that will seek
+ * (pfind -H 1 splits a directory among many readers) reads none of it */
+static uint32_t dir_first_bytes(void) {
+    static uint32_t v;
+    if (!v) {
+        const char *s = getenv("ROCEPOOL_READDIR_FIRST");
+        long x = s ? atol(s) : 0;
+        v = x >= 4096 && x <= (64l << 20) ? (uint32_t)x : 16u << 10;
+    }
+    return v;
+}
+
+/* fetch the listing: whole when every MDT's first page holds all of its
+ * entries, paged otherwise */
+static int dir_list(odir_t *d) {
+    dirent_t *ents[MAX_PEERS];
+    size_t n[MAX_PEERS];
+    uint64_t total[MAX_PEERS];
+    int more[MAX_PEERS];
+    int k = mdt_readdir_first(d->path, dir_first_bytes(), ents, n, total, more);
+    if (k == -EOPNOTSUPP) {  /* an MDT without positional listing: the whole listing */
+        int rc = mdt_readdir(d->path, &d->ents, &d->n);
+        if (rc) return rc;
+        dir_prime(d, d->ents, d->n);
+        return 0;
+    }
+    if (k < 0) return k;
+    int whole = 1;
+    size_t sum = 0;
+    for (int i = 0; i < k; i++) { if (more[i] || n[i] < total[i]) whole = 0; sum += n[i]; }
+    if (whole) {   /* small: one sorted listing, positions are indices */
+        d->ents = xmalloc((sum ? sum : 1) * sizeof(dirent_t));
+        size_t w = 0;
+        for (int i = 0; i < k; i++) {
+            if (n[i]) memcpy(d->ents + w, ents[i], n[i] * sizeof(dirent_t));
+            w += n[i];
+            free(ents[i]);
+        }
+        if (k > 1) qsort(d->ents, sum, sizeof(dirent_t), cmp_dent_name);
+        d->n = sum;
+        dir_prime(d, d->ents, d->n);
+        return 0;
+    }
+    d->paged = 1;
+    d->nmdt = k;
+    d->total = 0;
+    for (int i = 0; i < k; i++) {
+        d->base[i] = d->total;
+        d->total += total[i];
+        d->page[i] = ents[i];
+        d->page_n[i] = n[i];
+        d->page_at[i] = 0;
+    }
+    d->base[k] = d->total;
+    d->step = (uint64_t)(LONG_MAX - 1) / (d->total + 1);
+    if (!d->step) d->step = 1;
+    d->g = 0;
+    for (int i = 0; i < k; i++) dir_prime(d, d->page[i], d->page_n[i]);
     return 0;
 }
 
@@ -1080,11 +1181,12 @@ DIR *opendir(const char *path) {
     d->fd = reserve_fd();
     if (d->fd < 0) { free(d); return NULL; }
     d->path = strdup(rel);
-    rc = dir_list(d);  /* one listing, served to every readdir */
+    rc = dir_list(d);
     if (rc) { real_close(d->fd); free(d->path); free(d); seterr(rc); return NULL; }
     pthread_mutex_lock(&g_dir_lk);
     int slot = -1;
     for (int i = 0; i < DIR_TABLE; i++) if (!g_dirs[i]) { g_dirs[i] = d; slot = i; break; }
+    if (slot >= g_dir_hi) g_dir_hi = slot + 1;
     pthread_mutex_unlock(&g_dir_lk);
     if (slot < 0) { real_close(d->fd); dir_drop(d); free(d->path); free(d); errno = EMFILE; return NULL; }
     return (DIR *)d;
@@ -1101,40 +1203,109 @@ DIR *fdopendir(int fd) {
     return d;
 }
 
-static void fill_dirent(odir_t *d, size_t i) {
-    const dirent_t *e = &d->ents[i];
+static void fill_dirent(odir_t *d, const dirent_t *e, long off) {
     char child[PATH_MAX];
     int w = *d->path ? snprintf(child, sizeof(child), "%s/%s", d->path, e->name) : snprintf(child, sizeof(child), "%s", e->name);
     ino_t ino = w > 0 && (size_t)w < sizeof(child) ? (ino_t)strhash(child) + 2 : 2;
-    memset(&d->cur64, 0, sizeof(d->cur64));
+    size_t nl = strlen(e->name);
+    if (nl >= sizeof(d->cur64.d_name)) nl = sizeof(d->cur64.d_name) - 1;
     d->cur64.d_ino = ino;
-    d->cur64.d_off = (off64_t)(i + 1);
+    d->cur64.d_off = (off64_t)off;
     d->cur64.d_type = e->a.is_dir ? DT_DIR : DT_REG;
-    snprintf(d->cur64.d_name, sizeof(d->cur64.d_name), "%s", e->name);
+    memcpy(d->cur64.d_name, e->name, nl);
+    d->cur64.d_name[nl] = 0;
     d->cur64.d_reclen = (unsigned short)sizeof(d->cur64);
-    memset(&d->cur, 0, sizeof(d->cur));
     d->cur.d_ino = ino;
-    d->cur.d_off = (off_t)(i + 1);
+    d->cur.d_off = (off_t)off;
     d->cur.d_type = d->cur64.d_type;
-    snprintf(d->cur.d_name, sizeof(d->cur.d_name), "%s", e->name);
+    memcpy(d->cur.d_name, e->name, nl);
+    d->cur.d_name[nl] = 0;
     d->cur.d_reclen = (unsigned short)sizeof(d->cur);
+}
+
+/* position of the next entry; LONG_MAX once none is left, so it is at or
+ * past any position a seek asked for (pfind checks telldir >= its seek) */
+static long dir_tell(const odir_t *d) {
+    if (d->paged) return d->g >= d->total ? LONG_MAX : (long)(d->g * d->step);
+    return d->next >= d->n ? LONG_MAX : (long)d->next;
+}
+
+static void dir_seek(odir_t *d, long pos) {
+    uint64_t p = pos < 0 ? 0 : (uint64_t)pos;
+    if (d->paged) {
+        uint64_t g = p / d->step + (p % d->step != 0);  /* the first entry at or after pos */
+        d->g = g > d->total ? d->total : g;
+    } else {
+        d->next = p > d->n ? d->n : (size_t)p;
+    }
+}
+
+/* the next entry, or NULL at the end (errno set on a failed fetch) */
+static const dirent_t *dir_next(odir_t *d, long *off) {
+    if (!d->paged) {
+        if (d->next >= d->n) return NULL;
+        size_t i = d->next++;
+        *off = d->next >= d->n ? LONG_MAX : (long)d->next;
+        return &d->ents[i];
+    }
+    while (d->g < d->total) {
+        int k = 0;
+        while (k + 1 < d->nmdt && d->base[k + 1] <= d->g) k++;
+        uint64_t j = d->g - d->base[k];
+        if (j < d->page_at[k] || j >= d->page_at[k] + d->page_n[k]) {
+            dirent_t *v = NULL;
+            size_t n = 0;
+            uint64_t tot = 0;
+            int more = 0;
+            int rc = mdt_readdir_at(d->path, k, j, dir_page_bytes(), &v, &n, &tot, &more);
+            if (rc) { seterr(rc); return NULL; }
+            for (size_t i = 0; i < d->page_n[k]; i++) free(d->page[k][i].name);
+            free(d->page[k]);
+            d->page[k] = v;
+            d->page_n[k] = n;
+            d->page_at[k] = j;
+            if (!n) { d->g = d->base[k + 1]; continue; }  /* that MDT has fewer entries now */
+            dir_prime(d, v, n);
+        }
+        const dirent_t *e = &d->page[k][j - d->page_at[k]];
+        d->g++;
+        *off = d->g >= d->total ? LONG_MAX : (long)(d->g * d->step);
+        return e;
+    }
+    return NULL;
 }
 
 struct dirent *readdir(DIR *dp) {
     ENSURE();
     odir_t *d = dir_of(dp);
     if (!d) return real_readdir(dp);
-    if (d->next >= d->n) return NULL;
-    fill_dirent(d, d->next++);
+    long off;
+    const dirent_t *e = dir_next(d, &off);
+    if (!e) return NULL;
+    fill_dirent(d, e, off);
     return &d->cur;
 }
 struct dirent64 *readdir64(DIR *dp) {
     ENSURE();
     odir_t *d = dir_of(dp);
     if (!d) return real_readdir64(dp);
-    if (d->next >= d->n) return NULL;
-    fill_dirent(d, d->next++);
+    long off;
+    const dirent_t *e = dir_next(d, &off);
+    if (!e) return NULL;
+    fill_dirent(d, e, off);
     return &d->cur64;
+}
+long telldir(DIR *dp) {
+    ENSURE();
+    odir_t *d = dir_of(dp);
+    if (!d) return real_telldir(dp);
+    return dir_tell(d);
+}
+void seekdir(DIR *dp, long pos) {
+    ENSURE();
+    odir_t *d = dir_of(dp);
+    if (!d) { real_seekdir(dp, pos); return; }
+    dir_seek(d, pos);
 }
 void rewinddir(DIR *dp) {
     ENSURE();
@@ -1142,7 +1313,6 @@ void rewinddir(DIR *dp) {
     if (!d) { real_rewinddir(dp); return; }
     dir_drop(d);
     dir_list(d);   /* POSIX: the stream reflects the directory as of the rewind */
-    d->next = 0;
 }
 int dirfd(DIR *dp) {
     ENSURE();
@@ -1154,7 +1324,8 @@ int closedir(DIR *dp) {
     odir_t *d = dir_of(dp);
     if (!d) return real_closedir(dp);
     pthread_mutex_lock(&g_dir_lk);
-    for (int i = 0; i < DIR_TABLE; i++) if (g_dirs[i] == d) { g_dirs[i] = NULL; break; }
+    for (int i = 0; i < g_dir_hi; i++) if (g_dirs[i] == d) { g_dirs[i] = NULL; break; }
+    while (g_dir_hi > 0 && !g_dirs[g_dir_hi - 1]) g_dir_hi--;
     pthread_mutex_unlock(&g_dir_lk);
     real_close(d->fd);
     dir_drop(d);
