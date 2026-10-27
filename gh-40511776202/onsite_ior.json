@@ -1,0 +1,77 @@
+{
+  "benchmark": "IOR/mdtest (real upstream github.com/hpc/ior, unmodified)",
+  "scale": 1,
+  "backend": "dist",
+  "mountpoint": "/mnt/rocepool_iorbench",
+  "cases": [
+    {
+      "name": "shared_1m",
+      "tasks": 2,
+      "block": "4m",
+      "xfer": "1m",
+      "segments": 1,
+      "file_per_process": false,
+      "elapsed_s": 0.31,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 68.45,
+      "write_iops": 1079.61,
+      "read_bw_mib_s": 1067.8,
+      "read_iops": 1233.07
+    },
+    {
+      "name": "shared_64k",
+      "tasks": 2,
+      "block": "2m",
+      "xfer": "64k",
+      "segments": 1,
+      "file_per_process": false,
+      "elapsed_s": 0.06,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 356.22,
+      "write_iops": 8136.0,
+      "read_bw_mib_s": 1065.83,
+      "read_iops": 19614.0
+    },
+    {
+      "name": "fpp_1m",
+      "tasks": 4,
+      "block": "2m",
+      "xfer": "1m",
+      "segments": 1,
+      "file_per_process": true,
+      "elapsed_s": 0.06,
+      "returncode": 0,
+      "ok": true,
+      "write_bw_mib_s": 944.29,
+      "write_iops": 4082.0,
+      "read_bw_mib_s": 1753.56,
+      "read_iops": 1870.06
+    }
+  ],
+  "dist_config": {
+    "fuse_threads": 4,
+    "attr_ttl_s": 3.0,
+    "osts": 4,
+    "mdts": 2,
+    "servers": "native",
+    "client": "native"
+  },
+  "mdtest": {
+    "tasks": 2,
+    "n": 200,
+    "elapsed_s": 1.14,
+    "hard": false,
+    "returncode": 0,
+    "ops_per_sec": {
+      "File creation": 6218.436,
+      "File stat": 1028015.686,
+      "File read": 86373.641,
+      "File removal": 13951.367,
+      "Tree creation": 2618.167,
+      "Tree removal": 3214.026
+    }
+  },
+  "ok": true
+}
