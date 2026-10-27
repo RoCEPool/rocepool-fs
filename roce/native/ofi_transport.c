@@ -1579,7 +1579,13 @@ static void pin_to_next_core(void) {
     if (sched_getaffinity(0, sizeof(allowed), &allowed)) return;
     int n = CPU_COUNT(&allowed);
     if (n <= 1) return;
-    unsigned k = atomic_fetch_add(&next, 1) % (unsigned)n;
+    /* ROCEPOOL_PIN_OFFSET: where this process's threads start. Every server
+     * process counted from core 0, so an MDT's and an OST's workers shared
+     * cores 0..11 on each host (24 threads on 12 cores); io500_run gives
+     * each server on a host its own range. */
+    static long off = -1;
+    if (off < 0) { const char *o = getenv("ROCEPOOL_PIN_OFFSET"); off = o && *o ? atol(o) : 0; if (off < 0) off = 0; }
+    unsigned k = (unsigned)((off + atomic_fetch_add(&next, 1)) % (unsigned)n);
     cpu_set_t one;
     CPU_ZERO(&one);
     for (int c = 0, seen = 0; c < CPU_SETSIZE; c++)
