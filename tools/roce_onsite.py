@@ -300,7 +300,14 @@ def same_machine(peer: str) -> bool:
     never be shipped.)"""
     import uuid
     token = uuid.uuid4().hex
-    path = os.path.join(ROOT, ".rocepool_host_token")
+    # one file per call, under .bench_cache (which the tree's archive
+    # leaves out): the peers are prepared in parallel, and a token created
+    # and removed in the tree's top directory while another peer's tar read
+    # it made tar exit 1 ("file changed as we read it") -- the 6-node run
+    # 40984482522 lost one peer's copy that way, and with it the IO500
+    cache = os.path.join(ROOT, ".bench_cache")
+    os.makedirs(cache, exist_ok=True)
+    path = os.path.join(cache, f".host_token_{token}")
     with open(path, "w") as f:
         f.write(token)
     try:
@@ -312,22 +319,39 @@ def same_machine(peer: str) -> bool:
             pass
 
 
-def _tar_to_peer(peer: str, tar_args: list[str], timeout: int) -> None:
+def _tar_once(peer: str, tar_args: list[str], timeout: int) -> tuple[int, int, str, str]:
     from tools.topology import SSH_OPTS
-    tar = subprocess.Popen(["tar", "czf", "-", "-C", ROOT, *tar_args], stdout=subprocess.PIPE)
-    try:
-        r = subprocess.run(["ssh", *SSH_OPTS, peer, f"mkdir -p {shlex.quote(ROOT)} && tar xzf - -C {shlex.quote(ROOT)}"],
-                           stdin=tar.stdout, capture_output=True, text=True, timeout=timeout)
-    finally:
-        tar.stdout.close()  # ssh gone -> tar gets EPIPE instead of blocking on a full pipe
+    # GNU tar exits 1 when a file changed while it was read (the archive is
+    # still complete); 2 is a real failure
+    import tempfile
+    with tempfile.TemporaryFile() as errf:  # a file, not a pipe: tar never blocks on its own messages
+        tar = subprocess.Popen(["tar", "czf", "-", "--warning=no-file-changed", "-C", ROOT, *tar_args],
+                               stdout=subprocess.PIPE, stderr=errf)
         try:
-            tar.wait(timeout=60)
-        except subprocess.TimeoutExpired:
-            tar.kill()
-            tar.wait()
-    if r.returncode or tar.returncode:
-        raise RuntimeError(f"copying to {peer}:{ROOT} failed (ssh {r.returncode}, tar {tar.returncode}): "
-                           f"{r.stderr.strip()[-500:]}")
+            r = subprocess.run(["ssh", *SSH_OPTS, peer,
+                                f"mkdir -p {shlex.quote(ROOT)} && tar xzf - -C {shlex.quote(ROOT)}"],
+                               stdin=tar.stdout, capture_output=True, text=True, timeout=timeout)
+        finally:
+            tar.stdout.close()  # ssh gone -> tar gets EPIPE instead of blocking on a full pipe
+            try:
+                tar.wait(timeout=60)
+            except subprocess.TimeoutExpired:
+                tar.kill()
+                tar.wait()
+        errf.seek(0)
+        terr = errf.read().decode(errors="replace")
+    return r.returncode, tar.returncode, r.stderr.strip(), terr.strip()
+
+
+def _tar_to_peer(peer: str, tar_args: list[str], timeout: int, attempts: int = 2) -> None:
+    """The tree (tar_args) to the same path on peer; a failed copy is tried
+    once more before the peer -- and the IO500 with it -- is given up."""
+    for attempt in range(attempts):
+        ssh_rc, tar_rc, serr, terr = _tar_once(peer, tar_args, timeout)
+        if ssh_rc == 0 and tar_rc in (0, 1):
+            return
+    raise RuntimeError(f"copying to {peer}:{ROOT} failed {attempts}x (ssh {ssh_rc}, tar {tar_rc}): "
+                       f"{(serr + ' ' + terr).strip()[-500:]}")
 
 
 def ship_same_path(peer: str, extra: list[str] | None = None, timeout: int = 1800) -> str:
