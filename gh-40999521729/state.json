@@ -1,0 +1,52 @@
+{
+  "run_id": "gh-40999521729",
+  "region": "us-east-2",
+  "mode": "efa",
+  "type": "i3en.12xlarge",
+  "nodes": 6,
+  "facts": {
+    "arch": "amd64",
+    "efa": true,
+    "vcpus": 48,
+    "mem_mib": 393216,
+    "network": "50 Gigabit",
+    "nvme": 30000
+  },
+  "ami": "ami-0fc53b217ec1ad816",
+  "vpc": "vpc-0599fd0abc5040937",
+  "az": "us-east-2a",
+  "subnet": "subnet-099d60c7e4b358f02",
+  "key": null,
+  "sg": null,
+  "pg": null,
+  "placement_group_used": true,
+  "instances": [],
+  "hosts": [
+    {
+      "public": "3.137.185.225",
+      "private": "172.31.7.70"
+    },
+    {
+      "public": "3.135.205.135",
+      "private": "172.31.1.244"
+    },
+    {
+      "public": "18.220.255.94",
+      "private": "172.31.11.38"
+    },
+    {
+      "public": "13.184.108.139",
+      "private": "172.31.9.9"
+    },
+    {
+      "public": "3.22.61.146",
+      "private": "172.31.1.247"
+    },
+    {
+      "public": "3.145.188.183",
+      "private": "172.31.10.247"
+    }
+  ],
+  "setup": true,
+  "down": true
+}
