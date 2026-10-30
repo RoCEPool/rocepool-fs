@@ -16,7 +16,7 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from tools import io500_model  # noqa: E402
-from tools.io500_run import io500_validity, phase_ops, split_budget, write_ini  # noqa: E402
+from tools.io500_run import io500_validity, load_rates, phase_ops, split_budget, write_ini  # noqa: E402
 
 SMALL = ["--stonewall", "3", "--md-easy-n", "300", "--md-hard-n", "300", "--mem-budget-gib", "0.4"]
 SCORED = io500_model.BW_PHASES + io500_model.MD_PHASES
@@ -100,6 +100,39 @@ class ValidityTests(unittest.TestCase):
                "[SCORE ] Bandwidth 0.9 GiB/s : IOPS 107 kiops : TOTAL 9.9 [INVALID]\n")
         v = io500_validity(out, self.res(7, 5), 60, None)
         self.assertEqual((v["unexpected"], v["diagnosis"], v["find_found"]), ([], [], 12))
+
+    def test_mdtest_files_per_rank_cover_the_stonewall(self):
+        """The 6-node valid run (40999521729): mdtest-easy-write created its
+        1 M files per rank at 933 k/s over 192 ranks in 207 s -- below the
+        300 s stonewall, so IO500 called the run INVALID. n now comes from
+        the quick run's rate (942 k/s there)."""
+        from tools.io500_run import md_files_per_rank
+        n = md_files_per_rank(942.32, 300, 192, 1000000)
+        self.assertGreater(n * 192 / (933.35 * 1000), 300 * 1.4)   # the valid run's own speed: well past 300 s
+        self.assertEqual(md_files_per_rank(419.77, 300, 192, 1000000), 1000000)  # mdtest-hard: 1 M already lasts
+        self.assertEqual(md_files_per_rank(None, 300, 192, 1000000), 1000000)   # no quick run: the default
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        q = os.path.join(d, "quick.json")
+        with open(q, "w") as f:
+            json.dump({"phases": {"mdtest-easy-write": {"value": 942.32}, "ior-easy-write": {"value": 16.33}}}, f)
+        self.assertEqual(load_rates(q), {"mdtest-easy-write": 942.32, "ior-easy-write": 16.33})
+
+    def test_short_mdtest_write_is_named_not_ior(self):
+        """That run's report blamed ior-easy-write's data budget; the phase
+        that ran out was mdtest-easy-write."""
+        out = ("[RESULT]       ior-easy-write       16.355855 GiB/s : time 367.232 seconds\n"
+               "ERROR INVALID (src/main.c:484) Runtime of phase (206.770802) is below stonewall time. "
+               "This shouldn't happen!\n"
+               "ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime\n"
+               "[RESULT]    mdtest-easy-write      933.351590 kIOPS : time 206.771 seconds [INVALID]\n"
+               "[RESULT]       ior-hard-write        9.363740 GiB/s : time 306.384 seconds\n"
+               "[SCORE ] Bandwidth 14.807859 GiB/s : IOPS 835.898942 kiops : TOTAL 111.255892 [INVALID]\n")
+        v = io500_validity(out, "/nonexistent", 300, {"budget_gib": 118013.2,
+                                                      "bounded_by": {"ost": "a:19951", "kind": "tier"}})
+        self.assertFalse(v["valid"])
+        self.assertEqual(len(v["diagnosis"]), 1, v["diagnosis"])
+        self.assertTrue(v["diagnosis"][0].startswith("mdtest-easy-write ran out of files"), v["diagnosis"])
 
     def test_data_split_by_measured_speeds(self):
         """the site: 1030 GiB budget; 75/20 gave ior-easy 772 GiB, which a

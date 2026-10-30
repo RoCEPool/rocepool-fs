@@ -277,11 +277,21 @@ def io500_validity(text: str, resdir: str, stonewall: int, capacity: dict | None
         pass
     diagnosis = []
     if any("Write phase needed" in r or "below stonewall" in r for r in unexpected):
-        b = (capacity or {}).get("bounded_by") or {}
-        diagnosis.append("ior-easy-write ran out of data before the stonewall: the IOR data budget "
-                         f"({(capacity or {}).get('budget_gib', '?')} GiB) holds less than {stonewall} s at this "
-                         "write speed" + (f"; it is bounded by OST {b.get('ost')} ({b.get('kind')}) -- more or "
-                                          "faster storage on that host lifts it" if b else ""))
+        # which write phase ran out: IO500 marks its [RESULT] line [INVALID]
+        short_ph = [m.group(1) for m in re.finditer(r"^\[RESULT\]\s+(\S+)\s+[\d.]+ \S+ : time ([\d.]+) seconds",
+                                                    text, re.M) if m.group(1).endswith("write")
+                    and float(m.group(2)) < stonewall]
+        for ph in short_ph or ["ior-easy-write"]:
+            if ph.startswith("mdtest"):
+                diagnosis.append(f"{ph} ran out of files before the stonewall: mdtest's n (files per rank) was "
+                                 f"created in under {stonewall} s -- io500_run.py sizes n from the quick run's rate "
+                                 "(--rates-from); --md-easy-n / --md-hard-n set it")
+                continue
+            b = (capacity or {}).get("bounded_by") or {}
+            diagnosis.append(f"{ph} ran out of data before the stonewall: the IOR data budget "
+                             f"({(capacity or {}).get('budget_gib', '?')} GiB) holds less than {stonewall} s at this "
+                             "write speed" + (f"; it is bounded by OST {b.get('ost')} ({b.get('kind')}) -- more or "
+                                              "faster storage on that host lifts it" if b else ""))
     if found == 0 or any("Find didn't find anything" in r for r in unexpected):
         diagnosis.append("find matched no file: it did not see mdtest-hard's files (a directory listing "
                          "that failed?) or their size/ctime did not match")
@@ -297,10 +307,20 @@ def load_rates(path: str | None) -> dict:
     try:
         with open(path) as f:
             ph = json.load(f).get("phases", {})
-        return {k: ph[k]["value"] for k in ("ior-easy-write", "ior-hard-write", "mdtest-hard-write")
+        return {k: ph[k]["value"] for k in ("ior-easy-write", "ior-hard-write", "mdtest-easy-write", "mdtest-hard-write")
                 if ph.get(k, {}).get("value")}
     except (OSError, ValueError, KeyError, TypeError):
         return {}
+
+
+def md_files_per_rank(kiops: float | None, stonewall: int, ranks: int, floor: int, margin: float = 1.5) -> int:
+    """mdtest's n (files per rank) for a write phase measured at `kiops`
+    over all ranks: enough to still be creating files at the stonewall,
+    with `margin` for a faster real run than the measuring one; never below
+    `floor`."""
+    if not kiops or ranks <= 0:
+        return floor
+    return max(floor, int(kiops * 1000 * stonewall * margin / ranks) + 1)
 
 
 def split_budget(budget: float, stonewall: int, rates: dict, margin: float = 1.15) -> tuple[float, float, str]:
@@ -499,6 +519,14 @@ def main() -> int:
     # keeps 3901 bytes per file inline on the MDTs)
     md_easy_n = args.md_easy_n or (1000000 if cluster.real else 8000)
     md_hard_n = args.md_hard_n or (1000000 if cluster.real else 8000)
+    # mdtest stops at n files per rank: a write phase that creates them all
+    # before the stonewall makes the run INVALID. The 6-node valid run
+    # (40999521729) did: mdtest-easy-write created its 1 M files per rank at
+    # 933 k/s over 192 ranks in 207 s. With the quick run's measured rates, n
+    # covers the stonewall with a margin.
+    md_rates = load_rates(args.rates_from)
+    md_easy_n = args.md_easy_n or md_files_per_rank(md_rates.get("mdtest-easy-write"), stonewall, ranks, md_easy_n)
+    md_hard_n = args.md_hard_n or md_files_per_rank(md_rates.get("mdtest-hard-write"), stonewall, ranks, md_hard_n)
 
     print(f"== {cluster.describe}", flush=True)
     print(f"== {ranks} MPI ranks, stonewall {stonewall}s, IOR data budget {budget:.1f} GiB "
