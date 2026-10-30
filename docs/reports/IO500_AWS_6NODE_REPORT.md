@@ -13,6 +13,8 @@
 
 ## 1. Summary
 
+![RoCEPool vs Vendor W on IO500](images/RoCEPool_IO500_comparison.png)
+
 With 6 general-purpose cloud instances, rocepool scored **111.26** in a standard 300 s IO500 run. Vendor W's 10-node production entry, which uses 28 machines, scored 105.94.
 
 | | rocepool | Vendor W | rocepool vs Vendor W |

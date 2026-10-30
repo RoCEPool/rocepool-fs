@@ -13,6 +13,8 @@
 
 ## 1. 概要
 
+![RoCEPool と Vendor W の IO500 比較](images/RoCEPool_IO500_比較.png)
+
 rocepool は汎用クラウドインスタンス 6 台で、300 秒の標準 IO500 を実行し、スコア **111.26** を記録した。28 台を使う Vendor W の 10 ノード本番エントリのスコアは 105.94。
 
 | | rocepool | Vendor W | rocepool の Vendor W 比 |
