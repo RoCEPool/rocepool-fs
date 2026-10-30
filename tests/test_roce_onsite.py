@@ -162,6 +162,12 @@ class ParallelShipTests(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.src = os.path.join(self.tmp, "src")
+        # the real tree is ~28 MB (mostly deps/*.tar.xz): its tar takes about
+        # a second, long enough for other peers' checks to land inside it --
+        # a tree of small files is archived before any can
+        os.makedirs(os.path.join(self.src, "deps"))
+        with open(os.path.join(self.src, "deps", "bundle.tar.xz"), "wb") as fh:
+            fh.write(os.urandom(20 << 20))
         for d in range(20):
             os.makedirs(os.path.join(self.src, "pkg%d" % d))
             for f in range(30):
@@ -188,16 +194,28 @@ sys.exit(subprocess.call(["sh", "-c", cmd.replace({self.src!r}, dest)]))
         self.onsite.ROOT = self.old_root
 
     def test_five_peers_at_once_all_get_the_tree(self):
+        """Before the fix this failed in nearly every round (locally: 10 of
+        10 rounds with 5 peers, 8 of 10 with 2): what lined the checks up
+        against the copies on AWS is the ssh round trip before them
+        (prepare() asks each peer for its C library), which differs per
+        peer -- here a random delay of up to a second."""
         import concurrent.futures as cf
+        import random
+        import time
         peers = ["root@10.0.0.%d" % i for i in range(1, 6)]
-        for _ in range(4):
+
+        def ship(p):
+            time.sleep(random.uniform(0, 1.0))
+            return self.onsite.ship_same_path(p, timeout=120)
+        for _ in range(3):
             with cf.ThreadPoolExecutor(len(peers)) as ex:
-                out = list(ex.map(lambda p: self.onsite.ship_same_path(p, timeout=120), peers))
+                out = list(ex.map(ship, peers))
             self.assertEqual(len(out), 5)
         for p in peers:
             d = os.path.join(self.tmp, "peers", p.replace("@", "_"))
-            self.assertEqual(len(os.listdir(d)), 20, os.listdir(d))
-        self.assertEqual(sorted(os.listdir(self.src)), sorted(["pkg%d" % d for d in range(20)] + [".bench_cache"]))
+            self.assertEqual(len(os.listdir(d)), 21, os.listdir(d))
+        self.assertEqual(sorted(os.listdir(self.src)),
+                         sorted(["pkg%d" % d for d in range(20)] + ["deps", ".bench_cache"]))
         self.assertEqual(os.listdir(os.path.join(self.src, ".bench_cache")), [])  # no token left behind
 
     def test_a_failed_copy_is_tried_again(self):
