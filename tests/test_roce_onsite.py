@@ -144,3 +144,71 @@ class PeerPrecheckTests(unittest.TestCase):
         st, d, _ = self.run_pc([("root@n2", "10.10.0.12")], rc=255, err="root@n2: Permission denied (publickey).")
         self.assertEqual(st, "FAIL")
         self.assertIn("ssh-copy-id", d)
+
+
+class ParallelShipTests(unittest.TestCase):
+    """The tree goes to every peer at once (cluster_step's thread pool), and
+    each peer first checks whether it shares this machine's filesystem by
+    writing a token into the tree. The 6-node run 40984482522 lost one
+    peer's copy: the token, created and removed in the tree's top directory
+    while another peer's tar read it, made tar exit 1 ("file changed as we
+    read it"), and with that peer gone there was no IO500. A fake ssh runs
+    each "remote" command here, with the tree's path mapped to a directory
+    per peer."""
+
+    def setUp(self):
+        import tools.roce_onsite as onsite
+        self.onsite = onsite
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.src = os.path.join(self.tmp, "src")
+        for d in range(20):
+            os.makedirs(os.path.join(self.src, "pkg%d" % d))
+            for f in range(30):
+                with open(os.path.join(self.src, "pkg%d" % d, "m%d.py" % f), "w") as fh:
+                    fh.write("x = %d\n" % f * 50)
+        bindir = os.path.join(self.tmp, "bin")
+        os.makedirs(bindir)
+        fake = os.path.join(bindir, "ssh")
+        with open(fake, "w") as fh:  # ssh [opts] peer cmd -> cmd here, the tree's path -> peers/<peer>
+            fh.write(f"""#!/usr/bin/env python3
+import os, subprocess, sys
+peer, cmd = sys.argv[-2], sys.argv[-1]
+dest = os.path.join({self.tmp!r}, "peers", peer.replace("@", "_"))
+sys.exit(subprocess.call(["sh", "-c", cmd.replace({self.src!r}, dest)]))
+""")
+        os.chmod(fake, 0o755)
+        self.old_path, self.old_root = os.environ["PATH"], onsite.ROOT
+        os.environ["PATH"] = bindir + os.pathsep + self.old_path
+        onsite.ROOT = self.src
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        os.environ["PATH"] = self.old_path
+        self.onsite.ROOT = self.old_root
+
+    def test_five_peers_at_once_all_get_the_tree(self):
+        import concurrent.futures as cf
+        peers = ["root@10.0.0.%d" % i for i in range(1, 6)]
+        for _ in range(4):
+            with cf.ThreadPoolExecutor(len(peers)) as ex:
+                out = list(ex.map(lambda p: self.onsite.ship_same_path(p, timeout=120), peers))
+            self.assertEqual(len(out), 5)
+        for p in peers:
+            d = os.path.join(self.tmp, "peers", p.replace("@", "_"))
+            self.assertEqual(len(os.listdir(d)), 20, os.listdir(d))
+        self.assertEqual(sorted(os.listdir(self.src)), sorted(["pkg%d" % d for d in range(20)] + [".bench_cache"]))
+        self.assertEqual(os.listdir(os.path.join(self.src, ".bench_cache")), [])  # no token left behind
+
+    def test_a_failed_copy_is_tried_again(self):
+        calls = []
+        real = self.onsite._tar_once
+
+        def flaky(peer, args, timeout):
+            calls.append(peer)
+            return (255, 0, "Connection reset", "") if len(calls) == 1 else real(peer, args, timeout)
+
+        self.onsite._tar_once = flaky
+        self.addCleanup(setattr, self.onsite, "_tar_once", real)
+        self.onsite.ship_same_path("root@10.0.0.9", timeout=120)
+        self.assertEqual(len(calls), 2)
