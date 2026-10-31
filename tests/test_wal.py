@@ -30,9 +30,11 @@ class WalTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
         self.log = os.path.join(self.d, "t.log")
 
+    MODE = {}  # unset: the calibration decides
+
     def run_drv(self, *args, env=None, ok=True):
         r = subprocess.run([self.drv, *map(str, args)], capture_output=True, text=True, timeout=300,
-                           env=dict(os.environ, ROCEPOOL_LOG_PREFILL_MIB="4", **(env or {})))
+                           env={**os.environ, "ROCEPOOL_LOG_PREFILL_MIB": "4", **self.MODE, **(env or {})})
         if ok:
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         return r
@@ -60,10 +62,11 @@ class WalTests(unittest.TestCase):
         st = self.run_drv("write", self.log, 16, 300).stdout
         f = dict(zip(st.split()[::2], map(int, st.split()[1::2])))
         self.assertEqual(f["records"], 16 * 300)
-        self.assertEqual(f["pipeline"], 4)
-        self.assertEqual(f["direct"], 1, st)          # this file system takes direct I/O
-        self.assertGreater(f["inflight_max"], 1, st)   # commits overlapped
-        self.assertGreater(f["prefill"], 0, st)
+        if self.MODE.get("ROCEPOOL_LOG_PIPELINE") == "4":
+            self.assertGreater(f["inflight_max"], 1, st)   # commits overlapped
+        if self.MODE.get("ROCEPOOL_LOG_DIRECT") == "1":
+            self.assertEqual(f["direct"], 1, st)          # this file system takes direct I/O
+            self.assertGreater(f["prefill"], 0, st)
         self.check_records(self.dump(), 16, 300)
         # a second life appends after the first one's records
         self.run_drv("write", self.log, 4, 100)
@@ -71,7 +74,7 @@ class WalTests(unittest.TestCase):
         self.assertEqual(len(lines), 16 * 300 + 4 * 100)
 
     def test_without_direct_io_and_one_commit_at_a_time(self):
-        for env in ({"ROCEPOOL_LOG_DIRECT": "0"}, {"ROCEPOOL_LOG_PIPELINE": "1"}):
+        for env in ({"ROCEPOOL_LOG_DIRECT": "0", "ROCEPOOL_LOG_PIPELINE": "4"}, {"ROCEPOOL_LOG_PIPELINE": "1"}):
             os.path.exists(self.log) and os.remove(self.log)
             st = self.run_drv("write", self.log, 8, 200, env=env).stdout
             self.assertIn("records 1600", st)
@@ -117,15 +120,37 @@ class WalTests(unittest.TestCase):
         size = os.path.getsize(self.log)
         with open(self.log, "rb") as f:
             data = f.read()
-        end = len(data.rstrip(b"\0"))  # the last byte of the last record
-        with open(self.log, "r+b") as f:  # a record cut in half, garbage after it
-            f.seek(end - 100)
-            f.write(os.urandom(100))
+        pos, last = 0, None  # the last record that is not a pad
+        while pos + 8 <= len(data):
+            ln, crc = int.from_bytes(data[pos:pos + 4], "little"), int.from_bytes(data[pos + 4:pos + 8], "little")
+            if ln == 0 and crc == 0:
+                break
+            if not ln & 0x80000000:
+                last = (pos, ln)
+            pos += 8 + (ln & 0x7fffffff)
+        at, ln = last
+        with open(self.log, "r+b") as f:  # its second half garbage: a commit torn by a crash
+            f.seek(at + 8 + ln // 2)
+            f.write(os.urandom(ln - ln // 2))
         lines = self.dump()
         self.assertEqual(len(lines), n - 1)
         self.assertEqual(os.path.getsize(self.log), size)  # the zeros ahead stay
         self.run_drv("write", self.log, 2, 10)
         self.assertEqual(len(self.dump()), n - 1 + 20)
+
+    def test_the_drive_decides_the_commit(self):
+        """unset, the mode is measured on the log's drive and reported; set,
+        it is as told"""
+        if self.MODE:
+            self.skipTest("the calibration: WalTests itself")
+        r = self.run_drv("write", self.log, 4, 50)
+        self.assertIn("commits/s measured here", r.stderr)
+        self.assertRegex(r.stderr, r"-> (direct writes|appends), [14] in flight")
+        self.assertFalse(os.path.exists(self.log + ".calibrate"))
+        self.check_records(self.dump(), 4, 50)
+        r = self.run_drv("write", self.log, 4, 50, env={"ROCEPOOL_LOG_PIPELINE": "2", "ROCEPOOL_LOG_DIRECT": "0"})
+        self.assertNotIn("measured here", r.stderr)
+        self.assertIn("direct 0 pipeline 2", r.stdout)
 
     def test_every_pad_size_around_a_block(self):
         """a commit is padded to its block: an 8-byte pad (empty payload),
@@ -152,6 +177,18 @@ class WalTests(unittest.TestCase):
         st = self.run_drv("write", self.log, 8, 100).stdout
         self.assertIn("records 800", st)
         self.check_records(self.dump(), 8, 100)
+
+
+class WalAppendTests(WalTests):
+    MODE = {"ROCEPOOL_LOG_DIRECT": "0", "ROCEPOOL_LOG_PIPELINE": "1"}
+
+
+class WalDirectTests(WalTests):
+    MODE = {"ROCEPOOL_LOG_DIRECT": "1", "ROCEPOOL_LOG_PIPELINE": "1"}
+
+
+class WalDirectPipelinedTests(WalTests):
+    MODE = {"ROCEPOOL_LOG_DIRECT": "1", "ROCEPOOL_LOG_PIPELINE": "4"}
 
 
 if __name__ == "__main__":

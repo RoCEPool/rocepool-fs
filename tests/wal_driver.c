@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
         }
         uint64_t gap = (uint64_t)atoll(argv[3]);
         int cnt = atoi(argv[4]);
-        uint64_t at = ((end + 4095) & ~4095ull) + gap;
+        uint64_t at = end + gap;  /* the log's own end: a block in direct mode, anywhere after appends */
         int fd = open(path, O_WRONLY);
         for (int i = 0; i < cnt; i++) {
             uint8_t rec[64];
@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
             at += 8 + (uint64_t)len;
         }
         fdatasync(fd);
-        printf("stale at %llu..%llu\n", (unsigned long long)(((end + 4095) & ~4095ull) + gap), (unsigned long long)at);
+        printf("stale at %llu..%llu\n", (unsigned long long)(end + gap), (unsigned long long)at);
         fflush(stdout);
         _exit(0);  /* a crash: no clean shutdown */
     }

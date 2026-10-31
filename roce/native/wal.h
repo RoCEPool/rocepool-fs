@@ -7,21 +7,21 @@
  * state in RAM; with a log, every change that a reply acknowledges is in
  * the log (and the OST's object bytes on its tier) and fdatasync'd first.
  *
- * Group commit, pipelined: a request appends its record (a memcpy under a
- * mutex) and waits for -- or has its transport wait for -- the log to be
- * durable up to it. Flusher threads (ROCEPOOL_LOG_PIPELINE, default 4)
- * each take what is appended (whole records, up to 256 KiB), sync the
- * tier files registered with wal_add_sync() and write it; several commits
- * are in flight at once, and the log is durable up to the end of the
- * longest prefix of finished ones. On 6 x i3en one commit at a time of
- * ~150 us each bounded every MDT to ~73 k changes/s (11 per commit).
+ * Group commit, optionally pipelined: a request appends its record (a
+ * memcpy under a mutex) and waits for -- or has its transport wait for --
+ * the log to be durable up to it. Flusher threads each take what is
+ * appended (whole records, up to 256 KiB), sync the tier files registered
+ * with wal_add_sync() and write it; with a pipeline (ROCEPOOL_LOG_PIPELINE)
+ * several commits are in flight at once, and the log is durable up to the
+ * end of the longest prefix of finished ones. On 6 x i3en one commit at a
+ * time of ~150 us each bounded every MDT to ~73 k changes/s.
  *
- * Each commit starts on a 4 KiB block (a pad record fills the last one)
- * and goes to the drive by a direct, synchronous write into zeros written
- * beforehand (ROCEPOOL_LOG_DIRECT, ROCEPOOL_LOG_PREFILL_MIB): no file
- * system metadata changes, so no journal commit behind it -- appending
- * made every fdatasync two writes in a row. Where direct I/O is refused
- * (tmpfs), pwrite + fdatasync.
+ * A commit is either an append + fdatasync, or a direct, synchronous write
+ * (starting on a 4 KiB block; a pad record fills the last one) into zeros
+ * written beforehand (ROCEPOOL_LOG_PREFILL_MIB): no file system metadata
+ * changes, so no journal commit behind it. wal_open runs each way for a
+ * moment on the log's drive (ROCEPOOL_LOG_CALIBRATE_MS) and takes the
+ * fastest (ROCEPOOL_LOG_DIRECT / ROCEPOOL_LOG_PIPELINE override).
  *
  * Record on disk: u32 LE payload length (high bit: a pad record), u32 LE
  * CRC-32 of the payload, the payload; zeros end the log. Replay stops at
@@ -71,6 +71,14 @@ void wal_stats(wal_t *w, uint64_t *records, uint64_t *commits, uint64_t *bytes, 
  * fdatasync (0), flusher threads, most commits ever in flight, bytes of
  * zeros written ahead */
 void wal_stats_more(wal_t *w, int *direct, int *pipeline, uint64_t *inflight_max, uint64_t *prefill_bytes);
+
+/* what wal_open measured on the log's drive, records/s committed by
+ * appends, by direct writes, by direct writes 4 at once (0: not run) */
+void wal_calibration(wal_t *w, double *append, double *direct, double *direct4);
+
+/* stops the log's threads and frees it (everything appended and waited
+ * for is durable already) */
+void wal_close(wal_t *w);
 
 /* "{n}" in spec replaced by n (one log per server in a process) */
 void wal_path(const char *spec, int n, char *out, size_t out_len);
