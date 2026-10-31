@@ -2286,7 +2286,16 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
         if (!rc && w) {
             uint64_t recs, commits, bytes, sync_ns;
             wal_stats(w, &recs, &commits, &bytes, &sync_ns);
-            rc = buf_printf(&b, ", \"log\": {\"records\": %llu, \"commits\": %llu, \"bytes\": %llu, \"sync_ns\": %llu, "
+            int direct, pipe;
+            uint64_t infl, prefill;
+            double cal_d, cal_a, cal_g;
+            wal_stats_more(w, &direct, &pipe, &infl, &prefill);
+            wal_calibration(w, &cal_d, &cal_a, &cal_g);  /* append, direct, direct x4 */
+            rc = buf_printf(&b, ", \"log\": {\"direct\": %s, \"pipeline\": %d, \"inflight_max\": %llu, "
+                            "\"prefill_bytes\": %llu, \"calibration_records_s\": {\"append\": %.0f, \"direct\": %.0f, "
+                            "\"direct_4\": %.0f}, ", direct ? "true" : "false", pipe, (unsigned long long)infl,
+                            (unsigned long long)prefill, cal_d, cal_a, cal_g);
+            if (!rc) rc = buf_printf(&b, "\"records\": %llu, \"commits\": %llu, \"bytes\": %llu, \"sync_ns\": %llu, "
                             "\"append_failures\": %llu, \"replies_held\": %llu, \"handler_waits\": %llu}",
                             (unsigned long long)recs, (unsigned long long)commits, (unsigned long long)bytes,
                             (unsigned long long)sync_ns,
