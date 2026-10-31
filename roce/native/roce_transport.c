@@ -1959,3 +1959,10 @@ void roce_server_stop(roce_server_t *server) {
     gate_release(g);  /* freed once the last live connection also lets go */
     free(server);
 }
+
+/* replies are sent by each connection's own thread as the handler returns:
+ * it waits (see roce_transport.h) */
+int roce_server_defer_reply(roce_reply_ready_fn ready, void *obj, uint64_t token, size_t reply_len) {
+    (void)ready; (void)obj; (void)token; (void)reply_len;
+    return -1;
+}

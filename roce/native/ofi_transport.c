@@ -1518,6 +1518,9 @@ struct worker {
      * reads, and for a synchronous reply its completion); waiting for a
      * reply to complete; async replies; times every async slot was busy */
     uint64_t st_reqs, st_queue_ns, st_busy_ns, st_txwait_ns, st_async, st_ring_full;
+    /* replies held until their change was durable (roce_server_defer_reply);
+     * times all DEFER_MAX were held (the handler waited instead) */
+    uint64_t st_deferred, st_defer_full;
     /* where busy goes: admitting the client, the handler, posting the
      * reply (fi_send), reposting the receive (fi_recv) */
     uint64_t st_admit_ns, st_handler_ns, st_send_ns, st_repost_ns;
@@ -1547,6 +1550,29 @@ struct txring {
     uint64_t sent, waited;  /* async sends; times all slots were busy */
 };
 static __thread struct txring *tl_tx;
+
+/* This thread's replies held back until ready() (roce_server_defer_reply):
+ * a write acknowledged once the server's log is synced. EFA serves an
+ * endpoint with one thread, so a thread blocked in each commit ran one
+ * commit per request per thread (12 per server on i3en.12xlarge); held
+ * here, the thread takes the next requests while the log commits them all
+ * at once. Every held reply keeps its peer admitted until it is sent. */
+#define DEFER_MAX 256
+struct deferred {
+    fi_addr_t to;
+    uint64_t tag, token;
+    roce_reply_ready_fn ready;
+    void *obj;
+    size_t len;
+    uint8_t buf[];
+};
+static __thread struct deferred *tl_dq[DEFER_MAX];
+static __thread int tl_dq_n;
+/* set by the handler (roce_server_defer_reply) for the reply it returns */
+static __thread roce_reply_ready_fn tl_defer_fn;
+static __thread void *tl_defer_obj;
+static __thread uint64_t tl_defer_token;
+static __thread struct worker *tl_defer_ok;  /* this thread's worker: it can hold replies */
 
 struct roce_server {
     roce_request_handler handler;
@@ -1720,6 +1746,37 @@ static void peer_release(struct roce_server *s, fi_addr_t a) {
 
 static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *hp, fi_addr_t to, int local);
 
+int roce_server_defer_reply(roce_reply_ready_fn ready, void *obj, uint64_t token, size_t reply_len) {
+    if (!tl_defer_ok || !tl_tx || reply_len + REP_HDR > SMALL_FRAME) return -1;
+    if (tl_dq_n >= DEFER_MAX) { __atomic_add_fetch(&tl_defer_ok->st_defer_full, 1, __ATOMIC_RELAXED); return -1; }
+    tl_defer_fn = ready;
+    tl_defer_obj = obj;
+    tl_defer_token = token;
+    return 0;
+}
+
+/* send the held replies whose change is durable now (status 1 -- the
+ * server could not handle it -- when it never will be); with `all`, wait
+ * for every one (the worker stopping) */
+static void defer_reap(struct worker *w, int all) {
+    long end = all ? now_ms() + 2000 : 0;
+    for (;;) {
+        int k = 0;
+        for (int i = 0; i < tl_dq_n; i++) {
+            struct deferred *d = tl_dq[i];
+            int r = d->ready(d->obj, d->token, all);
+            if (!r && all && now_ms() > end) r = -1;
+            if (!r) { tl_dq[k++] = d; continue; }
+            send_reply(w, d->to, d->tag, r > 0 ? 0 : 1, d->buf, d->len);
+            free(d);
+        }
+        tl_dq_n = k;
+        if (!all || !tl_dq_n) return;
+        ep_wait(w->e, 1, -1);
+        tx_reap(w);
+    }
+}
+
 static void handle_slot(struct worker *w, int i) {
     struct ofi_ep *e = w->e;
     struct op *slot = &e->slots[i];
@@ -1795,12 +1852,31 @@ static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *
     }
     size_t rlen = 0;
     tl_reply_pool = w->pool;
+    tl_defer_fn = NULL;
     uint64_t t_h = now_ns();
     uint8_t *resp = w->s->handler(frame, h.total_len, &rlen, w->s->user);
     __atomic_add_fetch(&w->st_handler_ns, now_ns() - t_h, __ATOMIC_RELAXED);
     tl_reply_pool = NULL;
     if (fb) pool_put(w->pool, fb);
+    roce_reply_ready_fn hold = tl_defer_fn;
+    tl_defer_fn = NULL;
     if (!resp) { send_reply(w, to, h.tag, 1, NULL, 0); return; }
+    if (hold && rlen + REP_HDR <= SMALL_FRAME && tl_dq_n < DEFER_MAX) {
+        struct deferred *d = malloc(sizeof(*d) + rlen);
+        if (d) {
+            *d = (struct deferred){.to = to, .tag = h.tag, .token = tl_defer_token, .ready = hold,
+                                   .obj = tl_defer_obj, .len = rlen};
+            memcpy(d->buf, resp, rlen);
+            roce_reply_free(resp);
+            tl_dq[tl_dq_n++] = d;
+            __atomic_add_fetch(&w->st_deferred, 1, __ATOMIC_RELAXED);
+            return;
+        }
+        /* out of memory: wait for it here */
+        int r;
+        r = hold(tl_defer_obj, tl_defer_token, 1);
+        if (r < 0) { roce_reply_free(resp); send_reply(w, to, h.tag, 1, NULL, 0); return; }
+    }
     if (rlen > w->s->max_frame) {
         fprintf(stderr, "ofi_transport: handler response_len %zu exceeds max_frame_bytes %zu\n", rlen, w->s->max_frame);
         send_reply(w, to, h.tag, 4, NULL, 0);
@@ -1838,8 +1914,10 @@ static void *worker_main(void *arg) {
         }
     }
     tl_tx = ring;
+    tl_defer_ok = w;
     while (!atomic_load(&w->s->stopping)) {
         tx_reap(w);
+        if (tl_dq_n) defer_reap(w, 0);
         /* the oldest arrived request nobody has claimed */
         int best = -1;
         pthread_mutex_lock(&w->pick);
@@ -1848,7 +1926,21 @@ static void *worker_main(void *arg) {
                 (best < 0 || e->slots[i].seq < e->slots[best].seq)) best = i;
         if (best >= 0) w->claimed[best] = 1;
         pthread_mutex_unlock(&w->pick);
-        if (best < 0) { ep_wait(e, 50, -1); continue; }
+        if (best < 0) {
+            /* replies held and nothing new: a short poll for a request,
+             * then wait for the oldest one's commit -- spinning took the
+             * cores the commit and the clients need (2-core host: every
+             * fdatasync 3x longer) */
+            if (tl_dq_n) {
+                if (ep_wait(e, 0, -1) == 0 && tl_dq_n) {
+                    struct deferred *d = tl_dq[0];
+                    d->ready(d->obj, d->token, 1);
+                }
+            } else {
+                ep_wait(e, 50, -1);
+            }
+            continue;
+        }
         uint64_t t_pick = now_ns();
         __atomic_add_fetch(&w->st_queue_ns, t_pick - e->slots[best].t_ns, __ATOMIC_RELAXED);
         handle_slot(w, best);
@@ -1865,6 +1957,8 @@ static void *worker_main(void *arg) {
             break;
         }
     }
+    defer_reap(w, 1);
+    tl_defer_ok = NULL;
     if (ring) {  /* let the replies in flight finish before their buffers go */
         long end = now_ms() + 2000;
         while (ring->nbusy && now_ms() < end) { ep_wait(e, 10, -1); tx_reap(w); }
@@ -2235,7 +2329,7 @@ fail:
 }
 
 size_t roce_server_stats_json(roce_server_t *s, char *out, size_t out_len) {
-    uint64_t r = 0, q = 0, b = 0, tw = 0, as = 0, rf = 0, up = 0, ad = 0, hd = 0, sd = 0, rp = 0, rmin = UINT64_MAX, rmax = 0;
+    uint64_t r = 0, q = 0, b = 0, tw = 0, as = 0, rf = 0, df = 0, dff = 0, up = 0, ad = 0, hd = 0, sd = 0, rp = 0, rmin = UINT64_MAX, rmax = 0;
     uint64_t pn[2] = {0, 0}, pns[2] = {0, 0}, pb[2] = {0, 0};
     int threads = 0;
     uint64_t now = now_ns();
@@ -2259,6 +2353,8 @@ size_t roce_server_stats_json(roce_server_t *s, char *out, size_t out_len) {
         tw += __atomic_load_n(&w->st_txwait_ns, __ATOMIC_RELAXED);
         as += __atomic_load_n(&w->st_async, __ATOMIC_RELAXED);
         rf += __atomic_load_n(&w->st_ring_full, __ATOMIC_RELAXED);
+        df += __atomic_load_n(&w->st_deferred, __ATOMIC_RELAXED);
+        dff += __atomic_load_n(&w->st_defer_full, __ATOMIC_RELAXED);
         up += (now - w->st_t0) * (uint64_t)w->nthreads;
         threads += w->nthreads;
     }
@@ -2268,13 +2364,15 @@ size_t roce_server_stats_json(roce_server_t *s, char *out, size_t out_len) {
                      "\"admit_ns\": %llu, \"handler_ns\": %llu, \"send_ns\": %llu, \"repost_ns\": %llu, "
                      "\"ep_reqs_min\": %llu, \"ep_reqs_max\": %llu, "
                      "\"pull_local_n\": %llu, \"pull_local_ns\": %llu, \"pull_local_bytes\": %llu, "
-                     "\"pull_remote_n\": %llu, \"pull_remote_ns\": %llu, \"pull_remote_bytes\": %llu",
+                     "\"pull_remote_n\": %llu, \"pull_remote_ns\": %llu, \"pull_remote_bytes\": %llu, "
+                     "\"deferred_replies\": %llu, \"defer_full\": %llu",
                      s->nw, threads, (unsigned long long)r, (unsigned long long)q, (unsigned long long)b,
                      (unsigned long long)tw, (unsigned long long)as, (unsigned long long)rf, (unsigned long long)up,
                      (unsigned long long)ad, (unsigned long long)hd, (unsigned long long)sd, (unsigned long long)rp,
                      (unsigned long long)(s->nw ? rmin : 0), (unsigned long long)rmax,
                      (unsigned long long)pn[0], (unsigned long long)pns[0], (unsigned long long)pb[0],
-                     (unsigned long long)pn[1], (unsigned long long)pns[1], (unsigned long long)pb[1]);
+                     (unsigned long long)pn[1], (unsigned long long)pns[1], (unsigned long long)pb[1],
+                     (unsigned long long)df, (unsigned long long)dff);
     return n > 0 && (size_t)n < out_len ? (size_t)n : 0;
 }
 

@@ -25,6 +25,10 @@ struct wal {
     uint64_t durable_lsn;      /* written and synced up to here */
     int flushing;              /* a leader is writing + syncing */
     int err;                   /* first failure: every later wait fails */
+    int kicked;                /* wal_kick: the flusher thread should commit */
+    int flusher;               /* the flusher thread is running */
+    _Atomic uint64_t durable_pub;  /* durable_lsn, for wal_ready without the lock */
+    _Atomic int err_pub;
     int sync_fd[WAL_MAX_SYNC];
     int nsync;
     atomic_ullong records, commits, bytes, sync_ns;
@@ -70,6 +74,7 @@ wal_t *wal_open(const char *path, char *err, size_t err_len) {
     pthread_mutex_init(&w->lk, NULL);
     pthread_cond_init(&w->cv, NULL);
     w->next_lsn = w->durable_lsn = (uint64_t)st.st_size;
+    atomic_store(&w->durable_pub, w->durable_lsn);
     /* the directory entry of a new log file must survive a crash too */
     char dir[4096];
     snprintf(dir, sizeof(dir), "%s", path);
@@ -122,51 +127,104 @@ uint64_t wal_append(wal_t *w, const void *a, size_t alen, const void *b, size_t 
     return lsn;
 }
 
+/* one commit: write + sync everything appended so far. Called with w->lk
+ * held and !w->flushing; drops the lock meanwhile, holds it on return. */
+static void flush_round(wal_t *w) {
+    w->flushing = 1;
+    uint8_t *buf = w->buf;
+    size_t len = w->len, cap = w->cap;
+    w->buf = w->spare;
+    w->cap = w->spare_cap;
+    w->len = 0;
+    uint64_t target = w->next_lsn;
+    int nsync = w->nsync, fds[WAL_MAX_SYNC];
+    memcpy(fds, w->sync_fd, sizeof(fds));
+    pthread_mutex_unlock(&w->lk);
+    uint64_t t0 = mono_ns();
+    int rc = 0;
+    /* the data the records point at first (an OST's tier file) */
+    for (int i = 0; i < nsync && !rc; i++)
+        if (fdatasync(fds[i])) rc = -errno;
+    for (size_t off = 0; off < len && !rc;) {
+        ssize_t k = write(w->fd, buf + off, len - off);
+        if (k < 0) { if (errno == EINTR) continue; rc = -errno; break; }
+        off += (size_t)k;
+    }
+    if (!rc && len && fdatasync(w->fd)) rc = -errno;
+    atomic_fetch_add(&w->sync_ns, mono_ns() - t0);
+    atomic_fetch_add(&w->commits, 1);
+    atomic_fetch_add(&w->bytes, len);
+    pthread_mutex_lock(&w->lk);
+    w->spare = buf;
+    w->spare_cap = cap;
+    if (rc) {
+        if (!w->err) fprintf(stderr, "rocepool: writing the log failed: %s -- nothing more is acknowledged\n",
+                             strerror(-rc));
+        w->err = rc;
+        atomic_store(&w->err_pub, rc);
+    } else {
+        w->durable_lsn = target;
+        atomic_store(&w->durable_pub, target);
+    }
+    w->flushing = 0;
+    pthread_cond_broadcast(&w->cv);
+}
+
 int wal_wait(wal_t *w, uint64_t lsn) {
     pthread_mutex_lock(&w->lk);
     while (w->durable_lsn < lsn && !w->err) {
         if (w->flushing) { pthread_cond_wait(&w->cv, &w->lk); continue; }
-        /* leader: take what is appended so far, write and sync it unlocked */
-        w->flushing = 1;
-        uint8_t *buf = w->buf;
-        size_t len = w->len, cap = w->cap;
-        w->buf = w->spare;
-        w->cap = w->spare_cap;
-        w->len = 0;
-        uint64_t target = w->next_lsn;
-        int nsync = w->nsync, fds[WAL_MAX_SYNC];
-        memcpy(fds, w->sync_fd, sizeof(fds));
-        pthread_mutex_unlock(&w->lk);
-        uint64_t t0 = mono_ns();
-        int rc = 0;
-        /* the data the records point at first (an OST's tier file) */
-        for (int i = 0; i < nsync && !rc; i++)
-            if (fdatasync(fds[i])) rc = -errno;
-        for (size_t off = 0; off < len && !rc;) {
-            ssize_t k = write(w->fd, buf + off, len - off);
-            if (k < 0) { if (errno == EINTR) continue; rc = -errno; break; }
-            off += (size_t)k;
-        }
-        if (!rc && len && fdatasync(w->fd)) rc = -errno;
-        atomic_fetch_add(&w->sync_ns, mono_ns() - t0);
-        atomic_fetch_add(&w->commits, 1);
-        atomic_fetch_add(&w->bytes, len);
-        pthread_mutex_lock(&w->lk);
-        w->spare = buf;
-        w->spare_cap = cap;
-        if (rc) {
-            if (!w->err) fprintf(stderr, "rocepool: writing the log failed: %s -- nothing more is acknowledged\n",
-                                 strerror(-rc));
-            w->err = rc;
-        } else {
-            w->durable_lsn = target;
-        }
-        w->flushing = 0;
-        pthread_cond_broadcast(&w->cv);
+        flush_round(w);  /* leader: commit what is appended so far */
     }
     int rc = w->durable_lsn >= lsn ? 0 : w->err;
     pthread_mutex_unlock(&w->lk);
     return rc;
+}
+
+int wal_ready(wal_t *w, uint64_t lsn) {
+    if (atomic_load_explicit(&w->durable_pub, memory_order_acquire) >= lsn) return 1;
+    int e = atomic_load_explicit(&w->err_pub, memory_order_acquire);
+    return e ? e : 0;
+}
+
+/* Commits for the requests whose replies wait in their transport
+ * (wal_kick): nobody blocks in wal_wait for them, so this thread does.
+ * While it syncs, the next batch accumulates. */
+static void *flusher_main(void *arg) {
+    wal_t *w = arg;
+    pthread_setname_np(pthread_self(), "rp-wal");
+    pthread_mutex_lock(&w->lk);
+    for (;;) {
+        if (w->kicked && !w->flushing && !w->err) {
+            w->kicked = 0;
+            if (w->len) flush_round(w);
+            continue;
+        }
+        pthread_cond_wait(&w->cv, &w->lk);
+    }
+    return NULL;
+}
+
+void wal_kick(wal_t *w) {
+    pthread_mutex_lock(&w->lk);
+    w->kicked = 1;
+    if (!w->flusher) {
+        pthread_t t;
+        pthread_attr_t a;
+        pthread_attr_init(&a);
+        pthread_attr_setdetachstate(&a, PTHREAD_CREATE_DETACHED);
+        if (!pthread_create(&t, &a, flusher_main, w)) w->flusher = 1;
+        pthread_attr_destroy(&a);
+        if (!w->flusher) {  /* no thread: commit here */
+            uint64_t want = w->next_lsn;
+            while (w->durable_lsn < want && !w->err) {
+                if (w->flushing) pthread_cond_wait(&w->cv, &w->lk);
+                else flush_round(w);
+            }
+        }
+    }
+    if (!w->flushing) pthread_cond_broadcast(&w->cv);
+    pthread_mutex_unlock(&w->lk);
 }
 
 long wal_replay(const char *path, int (*cb)(void *user, const uint8_t *rec, size_t len), void *user) {

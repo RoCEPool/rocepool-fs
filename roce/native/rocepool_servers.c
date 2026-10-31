@@ -2175,6 +2175,8 @@ struct rocepool_native {
      * requests and bytes each way, CPU spent inside the handler (the
      * server's own work, excluding the transport), and per-op counts */
     atomic_ullong reqs, cpu_ns, wall_ns, bytes_in, bytes_out, inflight, inflight_max;
+    /* durable changes: replies the transport held until committed / handler waits */
+    atomic_ullong log_deferred, log_waited;
     atomic_ullong ost_by_op[64];
 };
 
@@ -2273,10 +2275,12 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
             uint64_t recs, commits, bytes, sync_ns;
             wal_stats(w, &recs, &commits, &bytes, &sync_ns);
             rc = buf_printf(&b, ", \"log\": {\"records\": %llu, \"commits\": %llu, \"bytes\": %llu, \"sync_ns\": %llu, "
-                            "\"append_failures\": %llu}",
+                            "\"append_failures\": %llu, \"replies_held\": %llu, \"handler_waits\": %llu}",
                             (unsigned long long)recs, (unsigned long long)commits, (unsigned long long)bytes,
                             (unsigned long long)sync_ns,
-                            (unsigned long long)atomic_load(n->ost ? &n->ost->log_fail : &n->mdt->log_fail));
+                            (unsigned long long)atomic_load(n->ost ? &n->ost->log_fail : &n->mdt->log_fail),
+                            (unsigned long long)atomic_load(&n->log_deferred),
+                            (unsigned long long)atomic_load(&n->log_waited));
         }
     }
     if (!rc && n->server) {  /* where a request's time goes outside the handler */
@@ -2287,6 +2291,18 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
     uint8_t *out = rc ? NULL : frame_simple(OP_STATS_OK, f, b.p, b.len, out_len);
     free(b.p);
     return out;
+}
+
+static int wal_reply_ready(void *obj, uint64_t lsn, int block) {
+    if (!block) return wal_ready(obj, lsn);
+    int rc = wal_wait(obj, lsn);
+    return rc ? rc : 1;
+}
+/* ROCEPOOL_LOG_DEFER=0: every handler waits for its commit (as before) */
+static int defer_allowed(void) {
+    static int v = -1;
+    if (v < 0) { const char *e = getenv("ROCEPOOL_LOG_DEFER"); v = !(e && !strcmp(e, "0")); }
+    return v;
 }
 
 static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_len, void *user) {
@@ -2306,7 +2322,17 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
     tl_wal = NULL;
     uint8_t *out = n->kind == ROCEPOOL_NATIVE_OST ? ost_handle(n->ost, &f, resp_len) : mdt_handle(n->mdt, &f, resp_len);
     if (tl_wal_lsn) {  /* the change is acknowledged only once it is durable */
-        int wrc = tl_wal_lsn == UINT64_MAX ? -EIO : wal_wait(tl_wal, tl_wal_lsn);
+        int wrc = 0;
+        /* the transport holds the reply until the log's commit covers it,
+         * and this thread takes the next request meanwhile; else wait */
+        if (out && tl_wal_lsn != UINT64_MAX && defer_allowed() &&
+            roce_server_defer_reply(wal_reply_ready, tl_wal, tl_wal_lsn, *resp_len) == 0) {
+            wal_kick(tl_wal);
+            atomic_fetch_add(&n->log_deferred, 1);
+        } else {
+            wrc = tl_wal_lsn == UINT64_MAX ? -EIO : wal_wait(tl_wal, tl_wal_lsn);
+            atomic_fetch_add(&n->log_waited, 1);
+        }
         if (wrc) {
             roce_reply_free(out);
             out = frame_error(&f, "STORAGE_ERROR", "log write failed: the change is not durable", resp_len);

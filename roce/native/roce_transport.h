@@ -223,6 +223,18 @@ typedef uint8_t *(*roce_request_handler)(const uint8_t *request, size_t request_
  * dispatching every request to `handler`. Returns NULL and sets
  * roce_last_error() on failure to bind/listen. Mirrors
  * roce.transport_base.Transport.serve()'s non-blocking contract. */
+/* Called by a handler, about the reply it is about to return: hold that
+ * reply back until ready(obj, token, 0) is nonzero (> 0: send it; < 0:
+ * send a failure status instead) while this thread goes on with the next
+ * request; with nothing else to do, the thread calls ready(obj, token, 1),
+ * which blocks until the answer is nonzero (no spinning on a core the
+ * commit needs). 0 = the transport will; -1 = it cannot (no support, the reply
+ * is too big, too many held already) and the handler must wait itself.
+ * For a write acknowledged only once it is durable (rocepool_servers.c:
+ * the log's group commit) without a server thread idle in each fsync. */
+typedef int (*roce_reply_ready_fn)(void *obj, uint64_t token, int block);
+int roce_server_defer_reply(roce_reply_ready_fn ready, void *obj, uint64_t token, size_t reply_len);
+
 roce_server_t *roce_server_start(const char *bind_address, roce_request_handler handler,
                                   void *user_data, size_t max_frame_bytes);
 

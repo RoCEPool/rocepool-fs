@@ -136,6 +136,14 @@ os.close(fd)
         st = [_stats(self.lib, a) for a in self.srv.mdts.split(",") + self.srv.osts.split(",")]
         self.assertTrue(all(s["durable"] for s in st), st)
         self.assertTrue(all(s["log"]["commits"] > 0 and s["log"]["append_failures"] == 0 for s in st), st)
+        # the OFI transport (EFA) holds a durable write's reply until its
+        # commit while the thread goes on; the RC transport's handler waits
+        from roce.native.build_lib import backend
+        held = [s["log"]["replies_held"] for s in st]
+        if backend() == "ofi":
+            self.assertTrue(all(h > 0 for h in held), held)
+        else:
+            self.assertEqual(held, [0] * len(st))
 
         self.srv.kill()
         self.srv.start()
