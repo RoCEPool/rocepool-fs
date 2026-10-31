@@ -282,3 +282,47 @@ with open(P + "/c/grow", "ab") as f: f.write(b"g" * (2 << 20))
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(shutil.which("gcc") and os.geteuid() == 0, "needs gcc and root (a small tmpfs)")
+class FullTierTests(unittest.TestCase):
+    """A full tier (or log) is ENOSPC for the program, like a full disk --
+    it used to be EIO, and a test that ran out of disk failed as 'tier
+    write failed' with no reason given"""
+    port = 24400
+
+    @classmethod
+    def setUpClass(cls):
+        from roce.native.build_lib import ensure_intercept_lib, ensure_softverbs_lib
+        cls.lib = ensure_softverbs_lib()
+        cls.icp = ensure_intercept_lib()
+
+    def check(self, durable: bool):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        subprocess.run(["mount", "-t", "tmpfs", "-o", "size=8m", "tmpfs", d], check=True)
+        self.addCleanup(subprocess.run, ["umount", "-l", d])
+        srv = _Servers(self.lib, d, self.port + (10 if durable else 0), nm=1, no=1, durable=durable)
+        srv.start()
+        self.addCleanup(srv.stop)
+        code = f"""
+import os
+fd = os.open({d!r} + "/rp/big", os.O_WRONLY | os.O_CREAT, 0o644)
+try:
+    os.write(fd, b"x" * (32 << 20))
+    os.close(fd)
+    print("no error")
+except OSError as x:
+    print(x.errno)
+"""
+        e = dict(os.environ, ROCE_TRANSPORT_LIB=self.lib, PYTHONPATH=ROOT, LD_PRELOAD=self.icp,
+                 ROCEPOOL_PREFIX=d + "/rp", ROCEPOOL_MDTS=srv.mdts, ROCEPOOL_OSTS=srv.osts)
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=e, timeout=120)
+        import errno
+        self.assertEqual(out.stdout.strip(), str(errno.ENOSPC), out.stdout + out.stderr)
+
+    def test_full_tier_is_enospc(self):
+        self.check(durable=False)
+
+    def test_full_tier_is_enospc_when_durable(self):
+        self.check(durable=True)

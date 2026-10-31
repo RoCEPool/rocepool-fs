@@ -311,6 +311,7 @@ static int err_of(const rp_resp_t *r) {
     if (r->op != RP_ERROR) return -EIO;
     if (!strcmp(r->code, "NOT_FOUND")) return -ENOENT;
     if (!strcmp(r->code, "VERSION_CONFLICT")) return -EAGAIN;
+    if (!strcmp(r->code, "NO_SPACE")) return -ENOSPC;  /* the OST's tier is full */
     return -EIO;
 }
 
