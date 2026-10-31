@@ -1764,7 +1764,7 @@ static void defer_reap(struct worker *w, int all) {
         int k = 0;
         for (int i = 0; i < tl_dq_n; i++) {
             struct deferred *d = tl_dq[i];
-            int r = d->ready(d->obj, d->token);
+            int r = d->ready(d->obj, d->token, all);
             if (!r && all && now_ms() > end) r = -1;
             if (!r) { tl_dq[k++] = d; continue; }
             send_reply(w, d->to, d->tag, r > 0 ? 0 : 1, d->buf, d->len);
@@ -1874,7 +1874,7 @@ static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *
         }
         /* out of memory: wait for it here */
         int r;
-        while (!(r = hold(tl_defer_obj, tl_defer_token))) sched_yield();
+        r = hold(tl_defer_obj, tl_defer_token, 1);
         if (r < 0) { roce_reply_free(resp); send_reply(w, to, h.tag, 1, NULL, 0); return; }
     }
     if (rlen > w->s->max_frame) {
@@ -1927,9 +1927,18 @@ static void *worker_main(void *arg) {
         if (best >= 0) w->claimed[best] = 1;
         pthread_mutex_unlock(&w->pick);
         if (best < 0) {
-            /* replies held: look again soon (the log commits in ~100 us) */
-            if (tl_dq_n) { ep_wait(e, 0, -1); sched_yield(); }
-            else ep_wait(e, 50, -1);
+            /* replies held and nothing new: a short poll for a request,
+             * then wait for the oldest one's commit -- spinning took the
+             * cores the commit and the clients need (2-core host: every
+             * fdatasync 3x longer) */
+            if (tl_dq_n) {
+                if (ep_wait(e, 0, -1) == 0 && tl_dq_n) {
+                    struct deferred *d = tl_dq[0];
+                    d->ready(d->obj, d->token, 1);
+                }
+            } else {
+                ep_wait(e, 50, -1);
+            }
             continue;
         }
         uint64_t t_pick = now_ns();

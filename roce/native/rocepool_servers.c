@@ -2293,7 +2293,11 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
     return out;
 }
 
-static int wal_reply_ready(void *obj, uint64_t lsn) { return wal_ready(obj, lsn); }
+static int wal_reply_ready(void *obj, uint64_t lsn, int block) {
+    if (!block) return wal_ready(obj, lsn);
+    int rc = wal_wait(obj, lsn);
+    return rc ? rc : 1;
+}
 /* ROCEPOOL_LOG_DEFER=0: every handler waits for its commit (as before) */
 static int defer_allowed(void) {
     static int v = -1;
