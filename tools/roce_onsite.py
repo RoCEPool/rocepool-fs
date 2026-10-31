@@ -580,6 +580,20 @@ def cluster_step(args, ip: str, lib: str, fuse_client: str, intercept_lib: str, 
             problems += [f"why: {d}" for d in v.get("diagnosis", [])]
             if (rep.get("client_probe") or {}).get("all_failed"):
                 problems.append("every client probe failed: the client was not chosen by measurement")
+            if name == "io500-valid":  # what an IO500 submission of this run would lack
+                sb = rep.get("submission") or {}
+                if sb.get("error"):
+                    problems.append(f"submission bundle: {sb['error']}")
+                elif not sb.get("io500_pristine"):
+                    problems.append("submission: the IO500 app is not the list's release, unmodified (rule 1): "
+                                    f"{(rep.get('io500_build') or {}).get('why', '?')}")
+                elif not sb.get("verify_ok"):
+                    problems.append(f"submission: io500-verify did not pass: {sb.get('verify_tail', '')[-300:]}")
+                if not (rep.get("durable") or {}).get("on"):
+                    problems.append("submission: durability was off -- not valid under IO500 rule 6")
+                if sb and not sb.get("error") and not sb.get("system_information"):
+                    problems.append("submission: system-information.json not made (IO500's schema tools need "
+                                    "vi4io.org); the form takes the same facts from rocepool-system.json")
         except (OSError, ValueError):
             pass
         if problems:

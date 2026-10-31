@@ -22,12 +22,20 @@ class DepsTests(unittest.TestCase):
                 dest = os.path.join(tmp, name)
                 self.assertTrue(deps.extract(name, dest))
                 self.assertTrue(os.path.exists(os.path.join(dest, marker)), (name, marker))
+            # IO500 as the list's tag releases it (rules 1, 2): its git
+            # checkout, no local change, IOR / pfind at prepare.sh's pins,
+            # their remotes on themselves (prepare.sh's git fetch, offline)
             io = os.path.join(tmp, "io500")
-            for d in ("build/ior/configure", "build/pfind/lz4", "build/cdcl-schema-tools", "schema-tools"):
+            for d in ("build/ior/.git", "build/pfind/.git", "build/pfind/lz4", "build/cdcl-schema-tools/.git"):
                 self.assertTrue(os.path.exists(os.path.join(io, d)), d)
-            prep = open(os.path.join(io, "prepare.sh")).read()
-            self.assertIn('[ -d "$BUILD/$ior_dir" ]', prep)
-            self.assertIn("[ -x configure ] || ./bootstrap", prep)
+            from tools.io500_run import IO500_TAG, io500_build_info
+            info = io500_build_info(io)
+            self.assertTrue(info["pristine"], info)
+            self.assertTrue(info["version"].startswith(IO500_TAG + "_v"), info)
+            for r in ("build/ior", "build/pfind"):
+                url = subprocess.run(["git", "remote", "get-url", "origin"], cwd=os.path.join(io, r),
+                                     capture_output=True, text=True).stdout.strip()
+                self.assertEqual(url, ".", r)
             self.assertFalse(os.path.exists(os.path.join(tmp, "mpich", "modules", "yaksa")))
         finally:
             shutil.rmtree(tmp, ignore_errors=True)

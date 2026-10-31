@@ -452,3 +452,122 @@ class HeadViaSshTests(unittest.TestCase):
         self.assertEqual(cmd[0], "ssh")
         self.assertIn("root@10.0.0.1", cmd)
         self.assertIn("roce_env.sh", cmd[-1])
+
+
+def _git(*a, cwd):
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=cwd, check=True,
+                   capture_output=True)
+
+
+class Io500BuildCheckTests(unittest.TestCase):
+    """rules 1 and 2: the IO500 app must be the list's release, unmodified,
+    with the IOR / pfind its prepare.sh pins (io500_build_info); a stand-in
+    repository tagged like the release"""
+
+    def setUp(self):
+        from tools.io500_run import IO500_TAG
+        self.tag = IO500_TAG
+        self.d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+        sub = {}
+        for name in ("ior", "pfind"):
+            r = os.path.join(self.d, "build", name)
+            os.makedirs(r)
+            _git("init", "-q", cwd=r)
+            open(os.path.join(r, "f.c"), "w").write(name)
+            _git("add", ".", cwd=r)
+            _git("commit", "-qm", name, cwd=r)
+            sub[name] = subprocess.run(["git", "rev-parse", "HEAD"], cwd=r, capture_output=True, text=True).stdout.strip()
+        open(os.path.join(self.d, ".gitignore"), "w").write("build/\n")
+        os.makedirs(os.path.join(self.d, "src"))
+        open(os.path.join(self.d, "src", "main.c"), "w").write("int main(){}\n")
+        open(os.path.join(self.d, "prepare.sh"), "w").write(
+            f"IOR_HASH={sub['ior'][:23]}\nPFIND_HASH={sub['pfind'][:7]}\n")
+        _git("init", "-q", cwd=self.d)
+        _git("add", ".", cwd=self.d)
+        _git("commit", "-qm", "release", cwd=self.d)
+        _git("tag", "-a", "-m", "release", self.tag, cwd=self.d)  # annotated, as IO500's are
+        _git("tag", "-a", "-m", "release", self.tag + "_v4", cwd=self.d)
+
+    def info(self):
+        from tools.io500_run import io500_build_info
+        return io500_build_info(self.d)
+
+    def test_the_release_as_is(self):
+        i = self.info()
+        self.assertTrue(i["pristine"], i)
+        self.assertEqual(i["version"], self.tag + "_v4")
+
+    def test_a_changed_source_file(self):
+        open(os.path.join(self.d, "src", "main.c"), "a").write("// tuned\n")
+        i = self.info()
+        self.assertFalse(i["pristine"])
+        self.assertIn("modified", i["why"])
+
+    def test_a_changed_prepare_script_or_ior(self):
+        open(os.path.join(self.d, "prepare.sh"), "a").write("# patched\n")
+        self.assertFalse(self.info()["pristine"])
+        _git("checkout", "-q", "prepare.sh", cwd=self.d)
+        r = os.path.join(self.d, "build", "ior")
+        open(os.path.join(r, "f.c"), "w").write("other")
+        _git("commit", "-qam", "other", cwd=r)
+        i = self.info()
+        self.assertFalse(i["pristine"])
+        self.assertIn("ior", i["why"])
+
+    def test_another_commit_or_no_git(self):
+        open(os.path.join(self.d, "README"), "w").write("x")
+        _git("add", ".", cwd=self.d)
+        _git("commit", "-qm", "later", cwd=self.d)
+        self.assertIn("is not tag", self.info()["why"])
+        shutil.rmtree(os.path.join(self.d, ".git"))
+        self.assertIn("not a git checkout", self.info()["why"])
+
+
+class SubmissionBundleTests(unittest.TestCase):
+    """io500_run.submission_bundle: what an IO500 submission uploads, from a
+    run's work directory, verified by the app's own io500-verify"""
+
+    def test_bundle(self):
+        import tarfile
+        from unittest import mock
+        from tools import io500_run
+        w = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, w, ignore_errors=True)
+        os.makedirs(os.path.join(w, "results"))
+        for n, t in (("result.txt", "[run]\nscore-hash = 1\n"), ("result_summary.txt", "[SCORE ] x\n"),
+                     ("ior-easy-write.txt", IOR_TXT)):
+            open(os.path.join(w, "results", n), "w").write(t)
+        open(os.path.join(w, "config.ini"), "w").write("[global]\ndatadir = /mnt/x\n")
+        open(os.path.join(w, "io500.out"), "w").write("[SCORE ] ...\n")
+        src = os.path.join(w, "io500src")
+        os.makedirs(src)
+        ver = os.path.join(src, "io500-verify")
+        open(ver, "w").write("#!/bin/sh\necho \"checking $1 $2\"; test -f \"$1\" && test -f \"$2\" && echo '[OK]'\n")
+        os.chmod(ver, 0o755)
+        build = {"tag": "io500-sc26", "version": "io500-sc26_v4", "pristine": True}
+        report = {"nodes": 6, "ranks": 192, "client": "intercept", "durable": {"on": True, "logs": 12},
+                  "io500_build": build, "config": {"attr_ttl_s": 3.0}}
+        servers = [{"kind": "mdt", "node": 0, "env": {"ROCEPOOL_MDT_LOG": "/x/mdt.log", "AWS_SECRET_ACCESS_KEY": "s"}}]
+        with mock.patch.object(io500_run, "IO500_SRC", src):
+            sb = io500_run.submission_bundle(w, os.path.join(w, "config.ini"), report, servers, {})
+        self.assertTrue(sb["verify_ok"], sb)
+        self.assertTrue(sb["io500_pristine"])
+        self.assertFalse(sb["system_information"])  # no schema tools here
+        with tarfile.open(sb["tarball"]) as t:
+            names = set(t.getnames())
+        for n in ("results/result.txt", "results/result_summary.txt", "config.ini", "io500.out", "io500-verify.txt",
+                  "io500_build.json", "rocepool-system.json", "SHA256SUMS"):
+            self.assertIn("io500-submission/" + n, names)
+        system = json.load(open(os.path.join(sb["dir"], "rocepool-system.json")))
+        self.assertEqual(system["durability"]["on"], True)
+        self.assertEqual(system["servers"][0]["env"], {"ROCEPOOL_MDT_LOG": "/x/mdt.log"})  # only known settings
+        self.assertNotIn("AWS_SECRET", open(os.path.join(sb["dir"], "rocepool-system.json")).read())
+        sums = open(os.path.join(sb["dir"], "SHA256SUMS")).read()
+        self.assertIn("results/result.txt", sums)
+        # a run IO500 calls invalid: hashes fine, exit 1 -> not verify_ok
+        open(ver, "w").write("#!/bin/sh\necho '[OK] But this is an invalid run!'; exit 1\n")
+        with mock.patch.object(io500_run, "IO500_SRC", src):
+            sb = io500_run.submission_bundle(w, os.path.join(w, "config.ini"), report, servers, {})
+        self.assertFalse(sb["verify_ok"])
+        self.assertTrue(sb["verify_hashes_ok"])

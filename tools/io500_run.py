@@ -22,6 +22,7 @@ import json
 import os
 import re
 import select
+import shutil
 import signal
 import subprocess
 import sys
@@ -33,6 +34,9 @@ sys.path.insert(0, ROOT)
 from tools.bench_ior import CACHE, ensure_mpi  # noqa: E402
 from tools.cluster import Cluster  # noqa: E402
 
+# The IO500 version of the list being submitted to (its call for submissions
+# names the tag); built unmodified with its own prepare.sh (rule 1)
+IO500_TAG = "io500-sc26"
 IO500_SRC = os.path.join(CACHE, "io500_src")
 MNT = "/mnt/rocepool_io500"
 PHASES = ["ior-easy-write", "mdtest-easy-write", "ior-hard-write", "mdtest-hard-write", "find",
@@ -44,17 +48,69 @@ PHASES = ["ior-easy-write", "mdtest-easy-write", "ior-hard-write", "mdtest-hard-
 WEKA_AFTON = {"score": 105.94, "bw_gib_s": 33.28, "md_kiops": 337.29}
 
 
+def io500_build_info(src: str = IO500_SRC) -> dict:
+    """What the IO500 app here was built from, for the report and the
+    submission (rules 1 and 2: the list's version, unmodified): the tag's
+    commit, the version string the Makefile compiles in (git describe; it
+    appends "-<n>" for changed lines under src/), and the IOR and pfind
+    commits prepare.sh pins. pristine = all of that holds."""
+    def git(*a, cwd=src):
+        r = subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    info = {"tag": IO500_TAG, "pristine": False}
+    if not os.path.isdir(os.path.join(src, ".git")):
+        info["why"] = "not a git checkout of github.com/IO500/io500: its version cannot be checked"
+        return info
+    info["commit"] = git("rev-parse", "HEAD")
+    info["version"] = git("describe", "--always", "--abbrev=12", "--match", "io500-*_v[0-9]*")
+    tag_commit = git("rev-parse", IO500_TAG + "^{commit}")
+    why = []
+    if not tag_commit or info["commit"] != tag_commit:
+        why.append(f"HEAD {info['commit'][:12]} is not tag {IO500_TAG} ({tag_commit[:12] or 'tag missing'})")
+    if git("status", "--porcelain", "--untracked-files=no"):
+        why.append("IO500's own files are modified")
+    try:
+        prep = open(os.path.join(src, "prepare.sh")).read()
+    except OSError:
+        prep = ""
+    for name, var in (("ior", "IOR_HASH"), ("pfind", "PFIND_HASH")):
+        m = re.search(rf"^{var}=(\w+)", prep, re.M)
+        d = os.path.join(src, "build", name)
+        head = git("rev-parse", "HEAD", cwd=d) if os.path.isdir(d) else ""
+        info[name] = head
+        if not m or not head.startswith(m.group(1)):
+            why.append(f"{name} {head[:12] or 'missing'} is not prepare.sh's {var} {m.group(1) if m else '?'}")
+        elif git("status", "--porcelain", "--untracked-files=no", cwd=d):
+            why.append(f"{name}'s files are modified")
+    info["pristine"] = not why
+    if why:
+        info["why"] = "; ".join(why)
+    return info
+
+
 def ensure_io500(mpi_bin: str) -> str:
-    """Official IO500 app + its pinned IOR/mdtest/pfind, built once."""
+    """The official IO500 app, tag IO500_TAG, with the IOR/mdtest/pfind its
+    prepare.sh pins -- unmodified, built by that prepare.sh, once. Source:
+    deps/io500-<tag>.tar.xz (the tag's git checkouts; works without a
+    network), else a clone of the tag. A build that is not that (an older
+    tag, a patched tree) is rebuilt."""
     exe = os.path.join(IO500_SRC, "io500")
-    if os.path.exists(exe):
+    if os.path.exists(exe) and io500_build_info()["pristine"]:
         return exe
+    if os.path.exists(IO500_SRC):
+        print(f"[io500] rebuilding: {io500_build_info().get('why', 'stale build')}", flush=True)
+        shutil.rmtree(IO500_SRC)
     from tools import deps
-    if not os.path.exists(IO500_SRC) and not deps.extract("io500", IO500_SRC):
+    if not deps.extract("io500", IO500_SRC):
         deps.check_download("IO500")
-        subprocess.run(["git", "clone", "--depth", "1", "https://github.com/IO500/io500.git", IO500_SRC], check=True)
+        subprocess.run(["git", "clone", "-q", "--depth", "1", "--branch", IO500_TAG,
+                        "https://github.com/IO500/io500.git", IO500_SRC], check=True)
     env = dict(os.environ, PATH=f"{mpi_bin}:{os.environ['PATH']}")
     subprocess.run(["./prepare.sh"], cwd=IO500_SRC, env=env, check=True, stdout=subprocess.DEVNULL)
+    info = io500_build_info()
+    if not info["pristine"]:
+        raise RuntimeError(f"the IO500 build is not {IO500_TAG} as released: {info['why']}")
+    print(f"[io500] built {info['version']} (IOR {info['ior'][:12]}, pfind {info['pfind'][:12]})", flush=True)
     return exe
 
 
@@ -297,6 +353,123 @@ def phase_ops(resdir: str, phase: str) -> float | None:
     m = re.search(rf"^{kind}\s+([\d.]+)\s+[\d.]+\s+[\d.]+\s+[\d.]+\s+[\d.]+\s+[\d.]+\s+([\d.]+)\s+[\d.]+\s+([\d.]+)",
                   text, re.M)
     return float(m.group(1)) * 2**20 * float(m.group(3)) if m else None  # bw(MiB/s) x total(s)
+
+
+def _rocepool_commit() -> str:
+    r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True)
+    if r.returncode == 0:
+        return r.stdout.strip()
+    for name in ("COMMIT", "VERSION"):  # a shipped tree without .git: what tools/aws_cluster.pack wrote / the release
+        try:
+            return open(os.path.join(ROOT, name)).read().strip()
+        except OSError:
+            pass
+    return ""
+
+
+def submission_bundle(work: str, ini: str, report: dict, servers: list, env: dict) -> dict:
+    """What an IO500 submission uploads (io500.org/submission), in
+    <work>/submission/ and <work>/submission.tgz:
+      results/                 IO500's result directory as the run left it
+                               (result.txt, result_summary.txt, every phase's
+                               output and CSV)
+      config.ini               the configuration the run used
+      io500.out                the app's console output
+      io500-verify.txt         io500-verify config.ini results/result.txt
+                               (the app's own check of the result's hashes)
+      io500_build.json         the app's tag, compiled-in version, IOR and
+                               pfind commits, whether all are as released
+      system-information.json  the CDCL system description from IO500's
+                               schema tools (OS, CPU, memory of the head
+                               node + the results), where they can run
+      rocepool-system.json     the storage system: nodes, servers, client,
+                               durability, software commit, settings
+      SHA256SUMS
+    Nothing secret is in it: no keys, no cluster file, no host addresses
+    beyond the private ones the servers bound."""
+    import hashlib
+    import tarfile
+    sub = os.path.join(work, "submission")
+    shutil.rmtree(sub, ignore_errors=True)
+    os.makedirs(sub)
+    shutil.copytree(os.path.join(work, "results"), os.path.join(sub, "results"))
+    shutil.copy(ini, os.path.join(sub, "config.ini"))
+    if os.path.exists(os.path.join(work, "io500.out")):
+        shutil.copy(os.path.join(work, "io500.out"), os.path.join(sub, "io500.out"))
+    build = report.get("io500_build") or io500_build_info()
+    with open(os.path.join(sub, "io500_build.json"), "w") as f:
+        json.dump(build, f, indent=1)
+    # the app's own verification, on the copy that is submitted
+    verifier = os.path.join(IO500_SRC, "io500-verify")
+    vr = subprocess.run([verifier, "config.ini", "results/result.txt"], cwd=sub, capture_output=True, text=True,
+                        timeout=300) if os.path.exists(verifier) else None
+    vtext = (vr.stdout + vr.stderr) if vr else f"{verifier} not found"
+    with open(os.path.join(sub, "io500-verify.txt"), "w") as f:
+        f.write(vtext + (f"\nexit code {vr.returncode}\n" if vr else ""))
+    # "[OK]" = the result file matches its config and hashes; exit 0 = and
+    # the run is valid (a debug run says "[OK] But this is an invalid run!")
+    verify_hashes_ok = bool(vr) and "[OK]" in vtext
+    verify_ok = bool(vr) and vr.returncode == 0 and verify_hashes_ok
+    # IO500's schema tools (prepare.sh puts them in schema-tools/): the CDCL
+    # description of this system; they download the schema from vi4io.org,
+    # so this is best effort. An empty ip.html stops cdcl_add_osinfo from
+    # asking a web service where this machine's public address is.
+    schema_ok = False
+    tools_dir = os.path.join(IO500_SRC, "schema-tools")
+    if os.path.isdir(tools_dir):
+        open(os.path.join(sub, "ip.html"), "w").close()
+        steps = [[sys.executable, os.path.join(tools_dir, "cdcl_add_osinfo.py"), "system-information.json"],
+                 [sys.executable, os.path.join(tools_dir, "cdcl_add_io500_results.py"), "system-information.json",
+                  "results"]]
+        try:
+            schema_ok = all(subprocess.run(c, cwd=sub, capture_output=True, text=True, timeout=180,
+                                           env=dict(os.environ, PYTHONPATH=tools_dir)).returncode == 0 for c in steps)
+        except (subprocess.SubprocessError, OSError):
+            schema_ok = False
+        for junk in ("ip.html", "schema-io500.json", "site-io500.json"):
+            try:
+                os.remove(os.path.join(sub, junk))
+            except OSError:
+                pass
+        if not schema_ok and os.path.exists(os.path.join(sub, "system-information.json")):
+            os.remove(os.path.join(sub, "system-information.json"))
+    keep_env = ("ROCEPOOL_MDT_LOG", "ROCEPOOL_OST_LOG", "ROCEPOOL_OST_TIER", "ROCEPOOL_OST_RAM_CACHE_MIB",
+                "ROCEPOOL_MDT_SLOTS")
+    system = {
+        "file_system": "RoCEPool", "software": "https://github.com/RoCEPool/rocepool-fs",
+        "license": "Apache-2.0", "commit": _rocepool_commit(),
+        "cluster": report.get("cluster"), "client_nodes": report.get("nodes"),
+        "storage_nodes": report.get("nodes"), "servers_on_client_nodes": True,
+        "ranks": report.get("ranks"), "ranks_per_node": report.get("ranks_per_node"),
+        "mdts": report.get("mdts"), "osts": report.get("osts"),
+        "client": {"kind": report.get("client"),
+                   "how": "LD_PRELOAD interception library (POSIX calls of the unmodified IO500 app)"
+                   if report.get("client") == "intercept" else "FUSE mount",
+                   "one_sided_reads": report.get("direct_read")},
+        "durability": report.get("durable"),
+        "consistency": "close-to-open: a close returns after the file's data and size are on the servers; "
+                       "an open revalidates against the MDT",
+        "settings": report.get("config"), "node_facts": report.get("node_facts"),
+        "servers": [{"kind": s.get("kind"), "node": s.get("node"),
+                     "env": {k: v for k, v in (s.get("env") or {}).items() if k in keep_env}} for s in servers],
+        "io500_build": build,
+    }
+    with open(os.path.join(sub, "rocepool-system.json"), "w") as f:
+        json.dump(system, f, indent=1)
+    sums = []
+    for top, _, files in os.walk(sub):
+        for name in sorted(files):
+            p = os.path.join(top, name)
+            sums.append(f"{hashlib.sha256(open(p, 'rb').read()).hexdigest()}  {os.path.relpath(p, sub)}")
+    with open(os.path.join(sub, "SHA256SUMS"), "w") as f:
+        f.write("\n".join(sorted(sums, key=lambda l: l.split("  ", 1)[1])) + "\n")
+    tarball = os.path.join(work, "submission.tgz")
+    with tarfile.open(tarball, "w:gz") as t:
+        t.add(sub, arcname="io500-submission")
+    return {"dir": sub, "tarball": tarball, "verify_ok": verify_ok, "verify_hashes_ok": verify_hashes_ok,
+            "verify_tail": vtext.strip()[-600:],
+            "system_information": schema_ok, "io500_version": build.get("version"),
+            "io500_pristine": build.get("pristine")}
 
 
 def io500_validity(text: str, resdir: str, stonewall: int, capacity: dict | None) -> dict:
@@ -584,7 +757,7 @@ def main() -> int:
               "nodes": n, "ranks": ranks, "ranks_per_node": args.ranks_per_node,
               "mdts": n * args.mdts_per_node, "osts": n * args.osts_per_node, "stonewall_s": stonewall,
               "valid_procedure": args.valid, "cpu_cores_here": os.cpu_count(),
-              "reference": {"WEKA_Afton_10node": WEKA_AFTON}}
+              "reference": {"WEKA_Afton_10node": WEKA_AFTON}, "io500_build": io500_build_info()}
     servers, fuse = [], []
     try:
         cluster.up()
@@ -1148,6 +1321,16 @@ def main() -> int:
             prof = io500_model.load_profile(args.project)
         report["node_facts"] = facts
         report["analysis"] = io500_model.analyze(report, prof)
+        try:
+            sb = report["submission"] = submission_bundle(work, ini, report, servers, env)
+            print(f"== submission bundle: {sb['tarball']} -- IO500 {sb['io500_version']}"
+                  f"{'' if sb['io500_pristine'] else ' (NOT as released)'}, io500-verify "
+                  f"{'OK (valid)' if sb['verify_ok'] else 'hashes OK, run invalid' if sb['verify_hashes_ok'] else 'FAILED: ' + sb['verify_tail'][-200:]}"
+                  f", system-information.json {'made' if sb['system_information'] else 'not made (schema tools)'}",
+                  flush=True)
+        except Exception as exc:  # noqa: BLE001 -- the run's report matters more
+            report["submission"] = {"error": f"{type(exc).__name__}: {exc}"}
+            print(f"== submission bundle failed: {exc}", flush=True)
     finally:
         for i in range(n):
             try:
