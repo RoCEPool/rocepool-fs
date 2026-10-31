@@ -587,3 +587,20 @@ class SubmissionBundleTests(unittest.TestCase):
             sb = io500_run.submission_bundle(w, os.path.join(w, "config.ini"), report, servers, {})
         self.assertFalse(sb["verify_ok"])
         self.assertTrue(sb["verify_hashes_ok"])
+
+
+class UnscoredPhaseTests(unittest.TestCase):
+    """ior-rnd4K-easy-read is printed "[      ]" (not in the score) but must
+    be valid too: the report keeps it (it used to drop it)"""
+
+    def test_parse(self):
+        from tools.io500_run import _parse_unscored
+        text = ("[RESULT]       ior-easy-write       16.355855 GiB/s : time 367.232 seconds\n"
+                "[      ]            timestamp        0.000000 kIOPS : time 0.000 seconds\n"
+                "[      ]  ior-rnd4K-easy-read        1.343610 GiB/s : time 328.546 seconds\n"
+                "[      ]  ior-rnd4K-easy-read2       1.0 GiB/s : time 3.0 seconds [INVALID]\n")
+        got = _parse_unscored(text)
+        self.assertEqual(set(got), {"ior-rnd4K-easy-read", "ior-rnd4K-easy-read2"})
+        self.assertEqual(got["ior-rnd4K-easy-read"], {"value": 1.34361, "unit": "GiB/s", "time_s": 328.546,
+                                                      "invalid": False})
+        self.assertTrue(got["ior-rnd4K-easy-read2"]["invalid"])
