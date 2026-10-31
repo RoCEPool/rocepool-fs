@@ -1,0 +1,239 @@
+== rocepool 20261017a run Sat Oct 31 11:28:44 UTC 2026 ==
+== 1/4 依赖
+== 2/4 编译 + 自检
+   模拟器版库、FUSE 客户端、拦截库、KV 库：已编译
+== 集群节点：root 免密登录、主机名
+   本机：<this host>；其余 5 台
+   节点就绪：root@172.31.12.91=172.31.12.91,root@172.31.8.207=172.31.8.207,root@172.31.6.55=172.31.6.55,root@172.31.10.68=172.31.10.68,root@172.31.6.64=172.31.6.64
+== 3/4 运行
+   节点：本机 + root@172.31.12.91=172.31.12.91,root@172.31.8.207=172.31.8.207,root@172.31.6.55=172.31.6.55,root@172.31.10.68=172.31.10.68,root@172.31.6.64=172.31.6.64
+   网卡：RoCE -> verbs 传输后端
+[PASS]   kernel   7.0.0-1014-aws: fork() is safe with registered memory
+[PASS]   memlock  locked-memory limit 47834 MiB >= 2560 MiB needed
+[PASS]   power    governor n/a, no deep idle states enabled
+[PASS]   device   1 AWS EFA device(s): rdmap0s27 -- the ofi (libfabric) transport backend
+[PASS]   ip       172.31.0.124: the bootstrap/control address (data goes over rdmap0s27)
+[PASS]   libfabric libfabric's efa provider is up (fi_info -p efa -t FI_EP_RDM)
+[WARN]   rdma_read i3en.12xlarge: not known to do EFA RDMA read in hardware (Nitro v4+ does); libfabric emulates reads with the target's CPU -- correct, slower one-sided reads; the client probe in tools/io500_run.py decides between one-sided and RPC reads
+[PASS]   lossless EFA's SRD transport is reliable over AWS's lossy fabric: no PFC/DSCP to configure
+[PASS]   tuning   48 CPUs: completion busy-poll 20 us before sleeping (ROCE_POLL_SPIN_US=20; tools/roce_onsite.py then measures the best value on this NIC)
+[WARN] preflight  rdmap0s27 port None (None) ip 172.31.0.124; env: {'ROCE_BACKEND': 'ofi', 'ROCE_OFI_PROVIDER': 'efa', 'ROCE_POLL_SPIN_US': '20'}; fixes: ['disabled 48 deep idle states (exit latency > 20 us) (until reboot)']
+[ ... ] peers      checking root@172.31.12.91, root@172.31.8.207, root@172.31.6.55, root@172.31.10.68, root@172.31.6.64 (SSH, root, RoCE IP, hostname)
+[PASS] peers      local: ip-172-31-0-124 172.31.0.124; root@172.31.12.91: ip-172-31-12-91 172.31.12.91; root@172.31.8.207: ip-172-31-8-207 172.31.8.207; root@172.31.6.55: ip-172-31-6-55 172.31.6.55; root@172.31.10.68: ip-172-31-10-68 172.31.10.68; root@172.31.6.64: ip-172-31-6-64 172.31.6.64
+[PASS] build      [build] transport backend: ofi / [build] using libfabric at /opt/amazon/efa / [build] OST tier: kernel backend only (set SPDK_DIR=<built spdk tree> for the SPDK backend) / [build] built /root/rocepool/roce/native/libroce_transport.so / [build] built /root/rocepool/roce/native/rocepool-fuse (native FUSE client) / [build] built /root/rocepool/roce/native/librocepool_kv.so (native KV client API) and rocepool-kv-bench / [build] built /root/rocepool/roce/native/librocepool_intercept.so (LD_PRELOAD interception client) / [build] built /root/rocepool/roce/native/librocepool_cufile.so and cufile/libcufile.so.0 (GPUDirect Storage, cuFile API)
+[PASS] transport  pooling, stale-connection recovery, drain, SRQ back-pressure, bounded registration, native OST/MDT parity + CAS atomicity over 172.31.0.124 (91.4s)
+[ ... ] spin       measuring the completion busy-poll on this NIC (about 30 s)
+[PASS] spin       ROCE_POLL_SPIN_US=50 (measured: 0 us: 1 thr 16168/s p50 61 us, 8 thr 29130/s; 20 us: 1 thr 12254/s p50 82 us, 8 thr 23326/s; 50 us: 1 thr 24344/s p50 40 us, 8 thr 35036/s; 100 us: 1 thr 24478/s p50 40 us, 8 thr 36791/s; 200 us: 1 thr 24234/s p50 40 us, 8 thr 36772/s; 400 us: 1 thr 24153/s p50 40 us, 8 thr 36574/s)
+[ ... ] peer       copying this tree to root@172.31.12.91:/tmp/rocepool_onsite, then its preflight and build
+[WARN] peer       root@172.31.12.91: rdmap0s27 172.31.12.91; env {'ROCE_BACKEND': 'ofi', 'ROCE_OFI_PROVIDER': 'efa', 'ROCE_POLL_SPIN_US': '20'}; failing: none
+[PASS] peer-build /opt/amazon/efa
+[build] OST tier: kernel backend only (set SPDK_DIR=<built spdk tree> for the SPDK backend)
+[build] built /tmp/rocepool_onsite/roce/native/libroce_transport.so
+[build] built /tmp/rocepool_onsite/roce/native/rocepool-fuse (native FUSE client)
+[build] built /tmp/rocepool_onsite/roce/native/librocepool_kv.so (native KV client API) and rocepool-kv-bench
+[build] built /tmp/rocepool_onsite/roce/native/librocepool_intercept.so (LD_PRELOAD interception client)
+[build] built /tmp/rocepool_onsite/roce/native/librocepool_cufile.so and cufile/libcufile.so.0 (GPUDirect Storage, cuFile API)
+[ ... ] functional smoke / pool / mpi / hpc / stream phases over RoCE (a few minutes)
+[PASS] functional [PASS] smoke [PASS] pool [PASS] mpi [PASS] hpc [PASS] stream
+[ ... ] bench      concurrency ladder 1,10,50,100,200,500 clients (md, md_shared, data)
+[PASS] bench      N=   1 md        ok/s=  6882.3 err=  0.0% p99max=     0.3ms srv_threads=  14 srv_fds=    8 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N=  10 md        ok/s= 10795.4 err=  0.0% p99max=     1.7ms srv_threads=  14 srv_fds=   17 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N=  50 md        ok/s= 40283.1 err=  0.0% p99max=     3.3ms srv_threads=  14 srv_fds=   57 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N= 100 md        ok/s= 61300.3 err=  0.0% p99max=     3.4ms srv_threads=  14 srv_fds=  107 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N= 200 md        ok/s= 76439.9 err=  0.0% p99max=     5.8ms srv_threads=  14 srv_fds=  207 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N= 500 md        ok/s= 80079.6 err=  0.0% p99max=    18.5ms srv_threads=  14 srv_fds=  507 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N=   1 md_shared ok/s=  6779.9 err=  0.0% p99max=     0.3ms srv_threads=  14 srv_fds=    8 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N=  10 md_shared ok/s= 10523.9 err=  0.0% p99max=     1.8ms srv_threads=  14 srv_fds=   17 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N=  50 md_shared ok/s= 40055.2 err=  0.0% p99max=     3.4ms srv_threads=  14 srv_fds=   57 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N= 100 md_shared ok/s= 63692.2 err=  0.0% p99max=     3.6ms srv_threads=  14 srv_fds=  107 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N= 200 md_shared ok/s= 83450.4 err=  0.0% p99max=     5.4ms srv_threads=  14 srv_fds=  207 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N= 500 md_shared ok/s= 92530.6 err=  0.0% p99max=    16.9ms srv_threads=  14 srv_fds=  507 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N=   1 data      ok/s=   501.1 err=  0.0% p99max=     3.9ms srv_threads=  14 srv_fds=    8 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N=  10 data      ok/s=  1365.6 err=  0.0% p99max=    19.0ms srv_threads=  14 srv_fds=   17 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N=  50 data      ok/s=  4806.6 err=  0.0% p99max=    28.3ms srv_threads=  14 srv_fds=   57 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N= 100 data      ok/s=  7491.9 err=  0.0% p99max=    37.3ms srv_threads=  14 srv_fds=  107 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N= 200 data      ok/s=  9316.0 err=  0.0% p99max=    69.8ms srv_threads=  14 srv_fds=  207 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+N= 500 data      ok/s=  9071.2 err=  0.0% p99max=   219.7ms srv_threads=  14 srv_fds=  507 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+[ ... ] ior        IOR + mdtest through the native FUSE client (builds MPI/IOR from deps/ the first time)
+[PASS] ior        [deps] mpich: unpacked the bundled mpich-4.2.3-ch3.tar.xz
+[deps] ior: unpacked the bundled ior-49b11cc.tar.xz
+[PASS] shared_1m        write    47.29 MiB/s ( 1048.35 IOPS)   read  1213.94 MiB/s ( 1397.34 IOPS)
+[PASS] shared_64k       write   329.81 MiB/s (  7794.0 IOPS)   read   1003.0 MiB/s ( 18028.0 IOPS)
+[PASS] fpp_1m           write   966.65 MiB/s (  4509.0 IOPS)   read  1796.18 MiB/s ( 1915.75 IOPS)
+[PASS] shared_4m_large  write   832.35 MiB/s (  208.66 IOPS)   read  1563.88 MiB/s (  449.82 IOPS)
+[PASS] fpp_256k         write   470.45 MiB/s (  9101.0 IOPS)   read   1488.1 MiB/s (  6217.0 IOPS)
+[PASS] mdtest           File creation=5,799/s  File stat=1,015,570/s  File read=85,125/s  File removal=13,532/s  Tree creation=2,486/s  Tree removal=3,022/s
+[ ... ] ior_hard   IO500's hard pair: ior-hard + mdtest-hard
+[PASS] ior_hard   [PASS] ior_hard         write   154.01 MiB/s (  7715.0 IOPS)   read   235.61 MiB/s (  5523.0 IOPS)
+[PASS] mdtest           File creation=4,979/s  File stat=322,577/s  File read=20,539/s  File removal=13,209/s  Tree creation=3,086/s  Tree removal=2,689/s
+[ ... ] kv         native KV API vs the Python client
+[PASS] kv         {"client": "native", "mode": "get", "threads": 1, "value_bytes": 64, "ops_per_s": 13187.2, "p50_us": 55.6, "p99_us": 203.4, "rpcs": 132872}
+{"client": "python", "mode": "get", "threads": 1, "value_bytes": 64, "ops_per_s": 13251.0, "p50_us": 67.44200004504819, "p99_us": 157.7770001404133}
+{"client": "native", "mode": "put", "threads": 1, "value_bytes": 64, "ops_per_s": 18084.3, "p50_us": 52.8, "p99_us": 136.8, "rpcs": 181843}
+{"client": "python", "mode": "put", "threads": 1, "value_bytes": 64, "ops_per_s": 13999.5, "p50_us": 68.11000002926448, "p99_us": 156.4029998917249}
+{"client": "native", "mode": "get", "threads": 16, "value_bytes": 64, "ops_per_s": 22205.0, "p50_us": 72.8, "p99_us": 22779.6, "rpcs": 238050}
+{"client": "python", "mode": "get", "threads": 16, "value_bytes": 64, "ops_per_s": 17523.0, "p50_us": 908.0979998543626, "p99_us": 1774.7899998994399}
+{"client": "native", "mode": "put", "threads": 16, "value_bytes": 64, "ops_per_s": 21896.8, "p50_us": 74.1, "p99_us": 22748.1, "rpcs": 234968}
+{"client": "python", "mode": "put", "threads": 16, "value_bytes": 64, "ops_per_s": 17382.5, "p50_us": 915.3979999609874, "p99_us": 1784.042999815938}
+{"client": "native", "mode": "mget64", "threads": 16, "value_bytes": 64, "ops_per_s": 238284.8, "p50_us": 3563.3, "p99_us": 9425.0, "rpcs": 164928}
+{"client": "native", "mode": "get", "threads": 1, "value_bytes": 4096, "ops_per_s": 17058.0, "p50_us": 56.5, "p99_us": 138.6, "rpcs": 171580}
+{"client": "python", "mode": "get", "threads": 1, "value_bytes": 4096, "ops_per_s": 13726.0, "p50_us": 70.3670000348211, "p99_us": 156.10800005561032}
+{"client": "native", "mode": "put", "threads": 1, "value_bytes": 4096, "ops_per_s": 16994.5, "p50_us": 56.8, "p99_us": 138.2, "rpcs": 170945}
+{"client": "python", "mode": "put", "threads": 1, "value_bytes": 4096, "ops_per_s": 12997.3, "p50_us": 73.78599980256695, "p99_us": 160.24000001380045}
+{"client": "native", "mode": "get", "threads": 16, "value_bytes": 4096, "ops_per_s": 20680.0, "p50_us": 78.7, "p99_us": 23627.4, "rpcs": 222800}
+{"client": "python", "mode": "get", "threads": 16, "value_bytes": 4096, "ops_per_s": 16673.2, "p50_us": 955.1050000027317, "p99_us": 1838.9189999652444}
+{"client": "native", "mode": "put", "threads": 16, "value_bytes": 4096, "ops_per_s": 20584.9, "p50_us": 80.2, "p99_us": 23973.7, "rpcs": 221849}
+{"client": "python", "mode": "put", "threads": 16, "value_bytes": 4096, "ops_per_s": 16577.7, "p50_us": 960.0119999504386, "p99_us": 1856.2469999778841}
+{"client": "native", "mode": "mget64", "threads": 16, "value_bytes": 4096, "ops_per_s": 128953.6, "p50_us": 7167.8, "p99_us": 14808.5, "rpcs": 96596}
+[ ... ] gds        GPUs and GPUDirect Storage streaming into GPU memory
+[PASS] gds        no NVIDIA GPU on this host: nothing to stream into (GPUDirect path covered by tests/test_gds.py)
+[ ... ] kvcache    KV-cache reuse: prefix lookup + load into GPU memory, TTFT
+[PASS] kvcache    llama3-70b, 6144 of 8192 tokens cached (1920 MiB KV): host load p50 3544.7 ms (2.1 GB/s, block keys) -> TTFT 5398.4 ms vs 7414.8 ms recomputed (x1.37, prefill estimated)
+[ ... ] cluster-prep MPI + IO500 (built from deps/ the first time: ~10 min), then this tree and those builds to every peer, their preflight and build
+[deps] io500: unpacked the bundled io500-sc26.tar.xz
+HEAD is now at e4e4578 Revert "Do not report bandwidth from a byte count known to be short (#552)" (#560)
+HEAD is now at 2742734 Fixed warning for UID type checks.
+autoreconf: export WARNINGS=
+autoreconf: Entering directory '.'
+autoreconf: configure.ac: not using Gettext
+autoreconf: running: aclocal --force -I config
+autoreconf: configure.ac: tracing
+autoreconf: configure.ac: not using Libtool
+autoreconf: configure.ac: not using Intltool
+autoreconf: configure.ac: not using Gtkdoc
+autoreconf: running: /usr/bin/autoconf --force
+autoreconf: running: /usr/bin/autoheader --force
+autoreconf: running: automake --add-missing --copy --force-missing
+configure.ac:36: installing 'config/compile'
+configure.ac:15: installing 'config/config.guess'
+configure.ac:15: installing 'config/config.sub'
+configure.ac:18: installing 'config/install-sh'
+configure.ac:18: installing 'config/missing'
+contrib/Makefile.am: installing 'config/depcomp'
+parallel-tests: installing 'config/test-driver'
+autoreconf: Leaving directory '.'
+mdtest.c: In function ‘phase_prepare’:
+mdtest.c:286:5: warning: ignoring return value of ‘system’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  286 |     system(o.prologue);
+      |     ^~~~~~~~~~~~~~~~~~
+mdtest.c: In function ‘phase_end’:
+mdtest.c:302:5: warning: ignoring return value of ‘system’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  302 |     system(o.epilogue);
+      |     ^~~~~~~~~~~~~~~~~~
+ior.c: In function ‘GetPlatformName’:
+ior.c:591:37: warning: ‘)’ directive writing 1 byte into a region of size between 0 and 1023 [-Wformat-overflow=]
+  591 |         sprintf(platformName, "%s(%s)", nodeName, sysName);
+      |                                     ^
+In file included from /usr/include/stdio.h:980,
+                 from ior.c:15:
+In function ‘sprintf’,
+    inlined from ‘GetPlatformName’ at ior.c:591:9:
+/usr/include/x86_64-linux-gnu/bits/stdio2.h:30:10: note: ‘__builtin___sprintf_chk’ output 3 or more bytes (assuming 1026) into a destination of size 1024
+   30 |   return __builtin___sprintf_chk (__s, __USE_FORTIFY_LEVEL - 1,
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   31 |                                   __glibc_objsize (__s), __fmt,
+      |                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   32 |                                   __va_arg_pack ());
+      |                                   ~~~~~~~~~~~~~~~~~
+ar: `u' modifier ignored since `D' is the default (see `U')
+fatal: destination path 'lz4' already exists and is not an empty directory.
+[io500] built io500-sc26_v4 (IOR e4e457852b2f, pfind 27427343bb66)
+[WARN] cluster-prep root@172.31.12.91: copied to /root/rocepool (+ .bench_cache/mpich, .bench_cache/io500_src/io500, .bench_cache/io500_src/bin); preflight WARN (rdmap0s27 172.31.12.91)
+root@172.31.8.207: copied to /root/rocepool (+ .bench_cache/mpich, .bench_cache/io500_src/io500, .bench_cache/io500_src/bin); preflight WARN (rdmap0s27 172.31.8.207)
+root@172.31.6.55: copied to /root/rocepool (+ .bench_cache/mpich, .bench_cache/io500_src/io500, .bench_cache/io500_src/bin); preflight WARN (rdmap0s27 172.31.6.55)
+root@172.31.10.68: copied to /root/rocepool (+ .bench_cache/mpich, .bench_cache/io500_src/io500, .bench_cache/io500_src/bin); preflight WARN (rdmap0s27 172.31.10.68)
+root@172.31.6.64: copied to /root/rocepool (+ .bench_cache/mpich, .bench_cache/io500_src/io500, .bench_cache/io500_src/bin); preflight WARN (rdmap0s27 172.31.6.64)
+[PASS] nvme-preflight local: tier file:/nvmedata/rocepool_ost_{n}.tier:21921 (O_DIRECT write 2280 MiB/s); P2P memory none
+root@172.31.12.91: tier file:/nvmedata/rocepool_ost_{n}.tier:21921 (O_DIRECT write 2494 MiB/s); P2P memory none
+root@172.31.8.207: tier file:/nvmedata/rocepool_ost_{n}.tier:21921 (O_DIRECT write 2459 MiB/s); P2P memory none
+root@172.31.6.55: tier file:/nvmedata/rocepool_ost_{n}.tier:21921 (O_DIRECT write 2179 MiB/s); P2P memory none
+root@172.31.10.68: tier file:/nvmedata/rocepool_ost_{n}.tier:21921 (O_DIRECT write 2471 MiB/s); P2P memory none
+root@172.31.6.64: tier file:/nvmedata/rocepool_ost_{n}.tier:21921 (O_DIRECT write 2365 MiB/s); P2P memory none
+[ ... ] io500      official IO500 on 172.31.0.124, 172.31.12.91, 172.31.8.207, 172.31.6.55, 172.31.10.68, 172.31.6.64 (about 15-30 min)
+[PASS] io500         [  129.3s] phase timestamp
+   [  130.0s] phase ior-hard-write
+   [  191.6s] phase mdtest-hard-write
+   [  255.3s] phase find
+   [  267.7s] phase ior-easy-read
+   [  313.1s] phase mdtest-easy-stat
+   [  344.5s] phase ior-hard-read
+   [  363.3s] phase mdtest-hard-stat
+   [  377.7s] phase mdtest-easy-delete
+   [  439.2s] phase mdtest-hard-read
+   [  453.7s] phase mdtest-hard-delete
+   [  481.1s] phase ior-rnd4K-easy-read
+== IO500 says the result is INVALID; find matched 376221 files
+== submission bundle: /root/rocepool/.bench_cache/io500_run/submission.tgz -- IO500 io500-sc26_v4, io500-verify hashes OK, run invalid, system-information.json not made (schema tools)
+IO500 on real RoCE: 6 hosts 172.31.0.124, 172.31.12.91, 172.31.8.207, 172.31.6.55, 172.31.10.68, 172.31.6.64
+  measured score: {'bw_gib_s': 15.1755, 'md_kiops': 665.704276, 'score': 100.510673}
+  phase                      measured  emu%    rpc/op  hot MDT   projected  bottleneck
+  ior-easy-write          16.362 GiB/s    0      2.14      26%    53.62 GiB/s  per-rank latency (ranks x round trips)
+  ior-easy-read           23.421 GiB/s    0      2.01      27%    39.50 GiB/s  per-rank latency (ranks x round trips)
+  ior-hard-write           6.419 GiB/s    0      1.05      99%    12.96 GiB/s  per-rank latency (ranks x round trips)
+  ior-hard-read           21.560 GiB/s    0      1.04     100%    39.78 GiB/s  per-rank latency (ranks x round trips)
+  mdtest-easy-write      436.186 kIOPS    0      1.00      17%  1096.17 kIOPS  per-rank latency (ranks x round trips)
+  mdtest-easy-stat       921.896 kIOPS    0      1.00      17%  1474.69 kIOPS  per-rank latency (ranks x round trips)
+  mdtest-easy-delete     453.227 kIOPS    0      1.00      17%  1199.90 kIOPS  per-rank latency (ranks x round trips)
+  mdtest-hard-write      182.563 kIOPS    0      2.00      17%   504.65 kIOPS  per-rank latency (ranks x round trips)
+  mdtest-hard-stat       914.634 kIOPS    0      1.00      17%  1473.21 kIOPS  per-rank latency (ranks x round trips)
+  mdtest-hard-read       871.645 kIOPS    0      1.00      17%  1361.34 kIOPS  per-rank latency (ranks x round trips)
+  mdtest-hard-delete     446.315 kIOPS    0      1.00      17%  1191.27 kIOPS  per-rank latency (ranks x round trips)
+  find                  3257.920 kIOPS    0      0.03      18%  3453.14 kIOPS  per-rank latency (ranks x round trips)
+  projected on these hosts (6 nodes x 48 cores, 100 GbE): bw 32.32 GiB/s, md 1298.4 kIOPS, score 204.86
+  score range over the estimated inputs: 119.3 .. 258.2
+  vs WEKA Afton (score 105.94): 0.52x (bw 1.03x, md 0.26x; >1 = WEKA ahead)
+  what the fixes are worth (cumulative):
+      204.9  (bw  32.32 GiB/s, md  1298.4 kIOPS)  as measured, valid 300 s run
+      204.9  (bw  32.32 GiB/s, md  1298.4 kIOPS)  + one directory's entries spread over all MDTs (name hash), finer MDT locks (done: ROCEPOOL_DIR_STRIPE=1 + MD_BUCKETS; a no-op on a run that already has them)
+      204.9  (bw  32.32 GiB/s, md  1298.4 kIOPS)  + FOPEN_PARALLEL_DIRECT_WRITES: no per-node inode lock on a shared file
+      204.9  (bw  32.32 GiB/s, md  1298.4 kIOPS)  + FUSE over io_uring (per-core queues, Linux 6.14+): ~3x per-mount rate, less wake-up cost (implemented: io500_run.py probes it against /dev/fuse on the hosts and uses the faster; a no-op on a run that already used it)
+      204.9  (bw  32.32 GiB/s, md  1298.4 kIOPS)  + the LD_PRELOAD interception library in every rank (no FUSE channel, no kernel on the I/O path; implemented: io500_run.py --client auto probes it against FUSE and uses the faster; a no-op on a run that already used it)
+      204.9  (bw  32.32 GiB/s, md  1298.4 kIOPS)  + one-sided reads and lookups (client RDMA READs stripes and MDT entries; implemented: io500_run.py --direct-read auto probes it; a no-op on a run that already used it -- its effect is in the measured per-op server CPU)
+      204.9  (bw  32.32 GiB/s, md  1298.4 kIOPS)  + the OST's NVMe tier for the 300 s write phases (implemented: roce/native/ost_tier.c, io500_run.py --ost-tier auto; a no-op on a run that already had it -- its limits are then the drives' capacity and write bandwidth)
+[ ... ] io500-valid official IO500 on 172.31.0.124, 172.31.12.91, 172.31.8.207, 172.31.6.55, 172.31.10.68, 172.31.6.64 (300 s per phase: about an hour)
+[WARN] io500-valid submission: system-information.json not made (IO500's schema tools need vi4io.org); the form takes the same facts from rocepool-system.json
+   [  313.0s] phase mdtest-easy-write
+   [  621.4s] phase timestamp
+   [  621.9s] phase ior-hard-write
+   [  922.0s] phase mdtest-hard-write
+   [ 1232.6s] phase find
+   [ 1295.7s] phase ior-easy-read
+   [ 1522.7s] phase mdtest-easy-stat
+   [ 1670.8s] phase ior-hard-read
+   [ 1858.6s] phase mdtest-hard-stat
+   [ 1920.7s] phase mdtest-easy-delete
+   [ 2219.0s] phase mdtest-hard-read
+   [ 2283.4s] phase mdtest-hard-delete
+== IO500 says the result is VALID; find matched 2335275 files
+== submission bundle: /root/rocepool/.bench_cache/io500_run/submission.tgz -- IO500 io500-sc26_v4, io500-verify OK (valid), system-information.json not made (schema tools)
+IO500 on real RoCE: 6 hosts 172.31.0.124, 172.31.12.91, 172.31.8.207, 172.31.6.55, 172.31.10.68, 172.31.6.64
+  measured score: {'bw_gib_s': 12.497493, 'md_kiops': 660.379508, 'score': 90.846508}
+  phase                      measured  emu%    rpc/op  hot MDT   projected  bottleneck
+  ior-easy-write          16.322 GiB/s    0      2.13      27%    54.31 GiB/s  per-rank latency (ranks x round trips)
+  ior-easy-read           22.355 GiB/s    0      2.00      27%    36.81 GiB/s  per-rank latency (ranks x round trips)
+  ior-hard-write           6.460 GiB/s    0      1.04     100%    12.98 GiB/s  per-rank latency (ranks x round trips)
+  ior-hard-read           10.349 GiB/s    0      1.04     100%    29.32 GiB/s  per-rank latency (ranks x round trips)
+  mdtest-easy-write      437.850 kIOPS    0      1.00      17%  1092.11 kIOPS  per-rank latency (ranks x round trips)
+  mdtest-easy-stat       914.426 kIOPS    0      1.00      17%  1469.71 kIOPS  per-rank latency (ranks x round trips)
+  mdtest-easy-delete     453.990 kIOPS    0      1.00      17%  1198.83 kIOPS  per-rank latency (ranks x round trips)
+  mdtest-hard-write      181.947 kIOPS    0      2.00      17%   499.62 kIOPS  per-rank latency (ranks x round trips)
+  mdtest-hard-stat       915.438 kIOPS    0      1.00      17%  1473.26 kIOPS  per-rank latency (ranks x round trips)
+  mdtest-hard-read       873.229 kIOPS    0      1.00      17%  1365.61 kIOPS  per-rank latency (ranks x round trips)
+  mdtest-hard-delete     450.703 kIOPS    0      2.91      17%  2810.54 kIOPS  per-rank latency (ranks x round trips)
+  find                  3035.535 kIOPS    0      0.03      18%  3300.91 kIOPS  per-rank latency (ranks x round trips)
+  projected on these hosts (6 nodes x 48 cores, 100 GbE): bw 29.53 GiB/s, md 1434.6 kIOPS, score 205.83
+  score range over the estimated inputs: 119.0 .. 261.5
+  vs WEKA Afton (score 105.94): 0.51x (bw 1.13x, md 0.24x; >1 = WEKA ahead)
+  what the fixes are worth (cumulative):
+      205.8  (bw  29.53 GiB/s, md  1434.6 kIOPS)  as measured, valid 300 s run
+      205.8  (bw  29.53 GiB/s, md  1434.6 kIOPS)  + one directory's entries spread over all MDTs (name hash), finer MDT locks (done: ROCEPOOL_DIR_STRIPE=1 + MD_BUCKETS; a no-op on a run that already has them)
+      205.8  (bw  29.53 GiB/s, md  1434.6 kIOPS)  + FOPEN_PARALLEL_DIRECT_WRITES: no per-node inode lock on a shared file
+      205.8  (bw  29.53 GiB/s, md  1434.6 kIOPS)  + FUSE over io_uring (per-core queues, Linux 6.14+): ~3x per-mount rate, less wake-up cost (implemented: io500_run.py probes it against /dev/fuse on the hosts and uses the faster; a no-op on a run that already used it)
+      205.8  (bw  29.53 GiB/s, md  1434.6 kIOPS)  + the LD_PRELOAD interception library in every rank (no FUSE channel, no kernel on the I/O path; implemented: io500_run.py --client auto probes it against FUSE and uses the faster; a no-op on a run that already used it)
+      205.8  (bw  29.53 GiB/s, md  1434.6 kIOPS)  + one-sided reads and lookups (client RDMA READs stripes and MDT entries; implemented: io500_run.py --direct-read auto probes it; a no-op on a run that already used it -- its effect is in the measured per-op server CPU)
+      205.8  (bw  29.53 GiB/s, md  1434.6 kIOPS)  + the OST's NVMe tier for the 300 s write phases (implemented: roce/native/ost_tier.c, io500_run.py --ost-tier auto; a no-op on a run that already had it -- its limits are then the drives' capacity and write bandwidth)
+
+verdict: WARN   report: onsite_report.json
+== 4/4 完成（rc=0）：onsite_io500.json onsite_io500_valid.json onsite_report.json 
+   正式分数: 90.846508  带宽 GiB/s: 12.497493  元数据 kIOPS: 660.379508  (WEKA Afton 105.94 / 33.28 / 337.29)
+== 结果包：/root/rocepool/rocepool-results-ip-172-31-0-124-20261031-131104.tar.gz（把这个文件发回来即可）
