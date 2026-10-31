@@ -186,21 +186,37 @@ class ValidityTests(unittest.TestCase):
         self.assertIsNone(tier_dir("spdk:0000:00:1f.0"))
         self.assertIsNone(tier_dir(None))
         ran = []
+        fs = {"/a": "xfs", "/b": "xfs", "/dev": "devtmpfs", "/var/lib/rocepool": "ext2/ext3"}
 
         class C:
             def run(self, i, argv, env=None, **kw):
                 ran.append((i, argv))
+                out = fs.get(argv[-1], "") + "\n" if argv[:2] == ["stat", "-f"] else ""
+                return subprocess.CompletedProcess(argv, 0, out, "")
         servers = [{"kind": "mdt", "node": 0}, {"kind": "mdt", "node": 1}, {"kind": "ost", "node": 0},
                    {"kind": "ost", "node": 1, "env": {"ROCEPOOL_OST_TIER": "file:/b/o.tier:9"}}]
         tiers = {0: {"ROCEPOOL_OST_TIER": "file:/a/rocepool_ost_{n}.tier:9"}, 1: {"ROCEPOOL_OST_TIER": "file:/b/o.tier:9"}}
         os.environ.pop("ROCEPOOL_DURABLE", None)
         rep = durable_logs(servers, tiers, C(), {})
-        self.assertEqual(rep, {"on": True, "logs": 4, "nodes_without_tier": []})
+        self.assertEqual({k: rep[k] for k in ("on", "logs", "nodes_without_tier")},
+                         {"on": True, "logs": 4, "nodes_without_tier": []})
+        self.assertNotIn("moved", rep)
         self.assertEqual([s["env"].get("ROCEPOOL_MDT_LOG") or s["env"].get("ROCEPOOL_OST_LOG") for s in servers],
                          ["/a/rocepool_mdt_0.log", "/b/rocepool_mdt_1.log", "/a/rocepool_ost_0.log", "/b/rocepool_ost_1.log"])
         self.assertIn((0, ["rm", "-f", "/a/rocepool_mdt_0.log"]), ran)
         rep = durable_logs([{"kind": "mdt", "node": 2}], tiers, C(), {})
         self.assertEqual((rep["on"], rep["nodes_without_tier"]), (False, [2]))
+        # a raw namespace: its "directory" is /dev, in RAM -- the logs go to
+        # the root file system; with that volatile too, the node is not durable
+        raw = {0: {"ROCEPOOL_OST_TIER": "file:/dev/nvme1n1"}}
+        srv = [{"kind": "mdt", "node": 0}]
+        rep = durable_logs(srv, raw, C(), {})
+        self.assertTrue(rep["on"])
+        self.assertEqual(srv[0]["env"]["ROCEPOOL_MDT_LOG"], "/var/lib/rocepool/rocepool_mdt_0.log")
+        self.assertIn("devtmpfs", rep["moved"][0])
+        fs["/var/lib/rocepool"] = "tmpfs"
+        rep = durable_logs([{"kind": "mdt", "node": 0}], raw, C(), {})
+        self.assertEqual((rep["on"], rep["nodes_without_tier"]), (False, [0]))
         os.environ["ROCEPOOL_DURABLE"] = "0"
         self.addCleanup(os.environ.pop, "ROCEPOOL_DURABLE", None)
         self.assertFalse(durable_logs(servers, tiers, C(), {})["on"])

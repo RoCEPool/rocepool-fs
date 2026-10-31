@@ -168,6 +168,10 @@ def tier_dir(spec: str | None) -> str | None:
     return os.path.dirname(path) or None
 
 
+# file systems that keep their data in RAM (stat -f %T names)
+VOLATILE_FS = {"tmpfs", "ramfs", "devtmpfs", "rootfs", "proc", "sysfs"}
+
+
 def durable_logs(servers: list[dict], tier_env: dict, cluster, env: dict) -> dict:
     """IO500 rule 6: every change a server acknowledges must be on persistent
     storage. Each MDT and OST gets a log (roce/native/wal.c) next to its
@@ -179,6 +183,26 @@ def durable_logs(servers: list[dict], tier_env: dict, cluster, env: dict) -> dic
               flush=True)
         return {"on": False, "reason": "ROCEPOOL_DURABLE=0"}
     dirs = {node: tier_dir(e.get("ROCEPOOL_OST_TIER")) for node, e in tier_env.items()}
+    # the log must be on a file system that survives a power cut: a raw
+    # namespace's "directory" is /dev (devtmpfs, RAM). Such a node's logs go
+    # to /var/lib/rocepool on its root file system instead, if that one is.
+    moved, fs_of = {}, {}
+    for node, d in list(dirs.items()):
+        if not d:
+            continue
+        for cand in (d, "/var/lib/rocepool"):
+            cluster.run(node, ["mkdir", "-p", cand], env, net=False, capture_output=True, timeout=60)
+            r = cluster.run(node, ["stat", "-f", "-c", "%T", cand], env, net=False, capture_output=True, text=True,
+                            timeout=60)
+            fs = (r.stdout or "").strip()
+            if r.returncode == 0 and fs and fs not in VOLATILE_FS:
+                if cand != d:
+                    moved[node] = f"{d} is {fs_of.get(node, '?')}: logs in {cand} ({fs})"
+                dirs[node] = cand
+                break
+            fs_of[node] = fs or "unknown"
+        else:
+            dirs[node] = None
     missing = sorted({s["node"] for s in servers if not dirs.get(s["node"])})
     logs = []
     for kind in ("mdt", "ost"):
@@ -191,10 +215,13 @@ def durable_logs(servers: list[dict], tier_env: dict, cluster, env: dict) -> dic
             s.setdefault("env", {})["ROCEPOOL_MDT_LOG" if kind == "mdt" else "ROCEPOOL_OST_LOG"] = path
             logs.append(path)
     on = not missing
+    for why in moved.values():
+        print(f"== durability: {why}", flush=True)
     print(f"== durability {'ON' if on else 'PARTIAL'}: {len(logs)} server logs next to the file tiers"
           + ("" if on else f"; nodes {missing} have no file tier: their servers keep acknowledged state in RAM "
                            "(not valid under IO500 rule 6)"), flush=True)
-    return {"on": on, "logs": len(logs), "nodes_without_tier": missing}
+    return {"on": on, "logs": len(logs), "nodes_without_tier": missing, "log_dirs": {str(k): v for k, v in dirs.items()},
+            **({"moved": moved} if moved else {})}
 
 
 def write_ini(path: str, *, datadir: str, resdir: str, pause_dir: str | None, stonewall: int, ior_easy_block_mib: int,
