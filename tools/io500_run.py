@@ -341,6 +341,18 @@ def auto_profile(facts: list[dict], n: int, args) -> dict:
     return p
 
 
+def _parse_unscored(text: str) -> dict:
+    """phases IO500 runs but leaves out of the score, printed "[      ]"
+    (ior-rnd4K-easy-read): still required to be valid -- a phase that is
+    not optional makes the whole run invalid when it is"""
+    out = {}
+    for m in re.finditer(r"^\[\s+\]\s+(\S+)\s+([\d.]+)\s+(\S+)\s*:\s*time\s+([\d.]+)\s+seconds(.*)$", text, re.M):
+        if m.group(1) != "timestamp":
+            out[m.group(1)] = {"value": float(m.group(2)), "unit": m.group(3), "time_s": float(m.group(4)),
+                               "invalid": "[INVALID]" in m.group(5)}
+    return out
+
+
 def _parse_results(text: str) -> tuple[dict, dict]:
     phases, score = {}, {}
     for line in text.splitlines():
@@ -1332,7 +1344,8 @@ def main() -> int:
             print(f"   invalid: {r}", flush=True)
         for d in v["diagnosis"]:
             print(f"   why: {d}", flush=True)
-        report.update(returncode=mpi.returncode, phases=phases, score=score, wall_s=round(time.monotonic() - t0, 1),
+        report.update(returncode=mpi.returncode, phases=phases, unscored_phases=_parse_unscored(text), score=score,
+                      wall_s=round(time.monotonic() - t0, 1),
                       io500_output_tail=text.splitlines()[-60:],
                       config={"paused_between_phases": pause is not None,
                               "ior_easy_block_mib_per_rank": easy_block, "ior_hard_segments_per_rank": hard_segs,
