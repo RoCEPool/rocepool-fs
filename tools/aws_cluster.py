@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures as cf
+import io
 import json
 import os
 import shlex
@@ -382,6 +383,16 @@ class Run:
             return None if any(p in EXCLUDE for p in parts[1:]) or ti.name.endswith((".pyc", ".log")) else ti
         with tarfile.open(out, "w:gz") as t:
             t.add(ROOT, arcname="rocepool", filter=keep)
+            # the commit the hosts run (no .git there): the IO500 submission
+            # names it (io500_run.submission_bundle)
+            r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True)
+            dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT,
+                                   capture_output=True, text=True).stdout.strip()
+            if r.returncode == 0:
+                data = (r.stdout.strip() + ("-dirty" if dirty else "") + "\n").encode()
+                ti = tarfile.TarInfo("rocepool/COMMIT")
+                ti.size, ti.mtime = len(data), int(time.time())
+                t.addfile(ti, io.BytesIO(data))
         return out
 
     def run_bench(self) -> int:
@@ -457,6 +468,15 @@ class Run:
             got.append("io500_logs.tar.gz")
         except RuntimeError:
             pass
+        # what an IO500 submission uploads (io500_run.submission_bundle): the
+        # result directory, config, io500-verify, system description -- the
+        # official run's, and the quick run's next to it when there is one
+        for name, src in (("io500_submission.tgz", "io500_run"), ("io500_submission_quick.tgz", "io500_run_prev")):
+            try:
+                self.scp(f"root@{head}:/root/rocepool/.bench_cache/{src}/submission.tgz", os.path.join(self.dir, name))
+                got.append(name)
+            except RuntimeError:
+                pass
         log(f"reports in {os.path.relpath(self.dir, ROOT)}/: {', '.join(got) or 'none'}")
         valid = os.path.join(self.dir, "onsite_io500_valid.json")
         if os.path.exists(valid):

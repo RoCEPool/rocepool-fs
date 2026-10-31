@@ -2,8 +2,9 @@
 builds everything from the package itself.
 
     deps/mpich-4.2.3-ch3.tar.xz     MPICH (ch3:sock; the parts other devices need removed)
-    deps/io500-<hash>.tar.xz        the official IO500 app with its pinned IOR, pfind (+lz4)
-                                    and schema tools, IOR pre-bootstrapped (no autotools needed)
+    deps/io500-<tag>.tar.xz         the official IO500 app at the list's tag (tools/io500_run.IO500_TAG),
+                                    unmodified, with its pinned IOR, pfind (+lz4), schema tools, as git
+                                    checkouts (its own prepare.sh builds it; needs autotools for IOR)
     deps/ior-<hash>.tar.xz          upstream IOR/mdtest (tools/bench_ior.py), pre-bootstrapped
     deps/libfabric-2.1.0.tar.xz     libfabric (the ofi/EFA backend where /opt/amazon/efa is absent)
     deps/rdma-core-59.2.tar.xz      rdma-core (roce/native/build.sh where no dev package installs)
