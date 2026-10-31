@@ -836,6 +836,18 @@ static int cmp_entry_key(const void *a, const void *b) {
     return c ? c : (x->key_len > y->key_len) - (x->key_len < y->key_len);
 }
 
+/* a tier error for the reply: which errno (a full file system and a dead
+ * drive used to read the same) */
+static uint8_t *tier_error(const frame_t *f, const char *what, int rc, size_t *out_len) {
+    char msg[160];
+    if (rc == -ENOSPC) {  /* its own code: the client returns ENOSPC, not EIO */
+        snprintf(msg, sizeof(msg), "tier full (the OST's file system or drive has no room left)");
+        return frame_error(f, "NO_SPACE", msg, out_len);
+    }
+    snprintf(msg, sizeof(msg), "tier %s failed: %s", what, strerror(rc < 0 ? -rc : rc));
+    return frame_error(f, "STORAGE_ERROR", msg, out_len);
+}
+
 static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
     atomic_fetch_add(&s->ops, 1);
     uint64_t h = fnv1a(f->key, f->key_len);
@@ -910,7 +922,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         uint64_t version = e->version;
         pthread_mutex_unlock(&st->lock);
         ent_free_data(s, old, old_cap);
-        if (rc) return frame_error(f, "STORAGE_ERROR", "tier write failed", out_len);
+        if (rc) return tier_error(f, "write", rc, out_len);
         atomic_fetch_add(&s->bytes, dlen);
         atomic_fetch_sub(&s->bytes, old_size);
         ost_evict(s);
@@ -931,7 +943,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         if (v && e->data) { memcpy(v, e->data, e->size); if (s->tier) lru_touch(s, e); }
         else if (v && e->size) { rc = ost_tier_read(s->tier, &e->ext, 0, v, e->size); atomic_fetch_add(&s->tier_reads, 1); }
         pthread_mutex_unlock(&st->lock);
-        if (rc) { roce_reply_free(out); return frame_error(f, "STORAGE_ERROR", "tier read failed", out_len); }
+        if (rc) { roce_reply_free(out); return tier_error(f, "read", rc, out_len); }
         return out;
     }
     case OP_STAT: {
@@ -1103,7 +1115,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         }
         if (rc) {
             pthread_mutex_unlock(&st->lock);
-            return frame_error(f, "STORAGE_ERROR", rc == -ENOSPC ? "tier full" : "tier write failed", out_len);
+            return tier_error(f, "write", rc, out_len);
         }
         e->size = new_size;
         e->version++;
@@ -1148,7 +1160,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
             else if (n) { rc = ost_tier_read(s->tier, &e->ext, from, v + 8, n); atomic_fetch_add(&s->tier_reads, 1); }
         }
         pthread_mutex_unlock(&st->lock);
-        if (rc) { roce_reply_free(out); return frame_error(f, "STORAGE_ERROR", "tier read failed", out_len); }
+        if (rc) { roce_reply_free(out); return tier_error(f, "read", rc, out_len); }
         return out;
     }
     case OP_TRUNCATE: {
@@ -2335,7 +2347,8 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
         }
         if (wrc) {
             roce_reply_free(out);
-            out = frame_error(&f, "STORAGE_ERROR", "log write failed: the change is not durable", resp_len);
+            out = wrc == -ENOSPC ? frame_error(&f, "NO_SPACE", "log full: the change is not durable", resp_len)
+                                 : frame_error(&f, "STORAGE_ERROR", "log write failed: the change is not durable", resp_len);
         }
         tl_wal_lsn = 0;
     }

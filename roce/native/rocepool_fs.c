@@ -142,6 +142,7 @@ static size_t decode_entry(const uint8_t *b, size_t n, attr_t *a) {
 /* maps MDT error codes to errno */
 static int mdt_errno(const char *code) {
     if (!strcmp(code, "NOT_FOUND")) return -ENOENT;
+    if (!strcmp(code, "NO_SPACE")) return -ENOSPC;  /* the server's log (or tier) is full */
     if (!strcmp(code, "EXISTS")) return -EEXIST;
     if (!strcmp(code, "IS_DIR")) return -EISDIR;
     if (!strcmp(code, "NOT_DIR")) return -ENOTDIR;
@@ -988,7 +989,10 @@ static void batch_task(void *arg) {
         uint32_t vl;
         char code[32];
         while (rp_batch_next(&r, &pos, &op, &v, &vl, code, sizeof(code)) == 0)
-            if (op == RP_ERROR && !(t->ok_missing && !strcmp(code, "NOT_FOUND"))) { rc = -EIO; break; }
+            if (op == RP_ERROR && !(t->ok_missing && !strcmp(code, "NOT_FOUND"))) {
+                rc = !strcmp(code, "NO_SPACE") ? -ENOSPC : -EIO;  /* a full tier is ENOSPC, as on a disk */
+                break;
+            }
         rp_resp_free(&r);
     }
     group_done(t->g, rc);
