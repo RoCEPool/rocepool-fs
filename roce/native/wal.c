@@ -14,24 +14,56 @@
 #include <unistd.h>
 
 #define WAL_MAX_SYNC 8
+#define WAL_BLOCK 4096u                 /* every commit starts on a block: O_DIRECT */
+#define WAL_PAD 0x80000000u             /* length flag: a pad record, skipped by replay */
+#define WAL_MAX_RECORD (2u << 20)       /* larger records are refused */
+#define WAL_BATCH (256u << 10)          /* a commit takes up to this much (whole records) */
+#define WAL_MAX_PIPE 8                  /* commits in flight at most */
+/* After a crash, commits that were in flight may have reached the drive
+ * out of order: the replay stops at the first one that did not, and the
+ * ones after it -- never acknowledged -- must not be read as part of the
+ * log once new records fill the gap. They lie within (pipeline - 1) x the
+ * largest commit of the end; the replay clears everything up to a run of
+ * this many zero bytes. */
+#define WAL_CLEAR_RUN ((size_t)(WAL_MAX_PIPE * (WAL_MAX_RECORD + WAL_BATCH)))
+
+struct inflight { uint64_t start, end, seq_end; int done; };
 
 struct wal {
-    int fd;
+    int fd;                    /* buffered: prefill, fallback writes, fdatasync */
+    int dfd;                   /* O_DIRECT | O_DSYNC, -1: none (tmpfs, ...) */
     pthread_mutex_t lk;
-    pthread_cond_t cv;
-    uint8_t *buf, *spare;      /* appended, not yet written / the leader's previous buffer */
-    size_t len, cap, spare_cap;
-    uint64_t next_lsn;         /* log length including everything appended */
-    uint64_t durable_lsn;      /* written and synced up to here */
-    int flushing;              /* a leader is writing + syncing */
-    int err;                   /* first failure: every later wait fails */
-    int kicked;                /* wal_kick: the flusher thread should commit */
-    int flusher;               /* the flusher thread is running */
-    _Atomic uint64_t durable_pub;  /* durable_lsn, for wal_ready without the lock */
-    _Atomic int err_pub;
+    pthread_cond_t cv;         /* waiters and flushers */
+    uint8_t *buf;              /* records appended, not yet taken by a flusher */
+    size_t len, cap;
+    uint64_t buf_start;        /* the file offset buf[0] goes to */
+    uint64_t next_lsn;         /* buf_start + len: how far the prefill must stay ahead */
+    /* An LSN is a record's sequence number (1, 2, ...), not a file offset:
+     * a commit that takes part of what is appended pads to a block, which
+     * moves the records after it -- an offset handed out at append time
+     * would then be passed before they are written (an early reply) */
+    uint64_t next_seq;         /* records appended */
+    uint64_t buf_seq;          /* records taken by flushers (buf[0] is the next) */
+    uint64_t durable_lsn;      /* records 1..durable_lsn are on the drive */
+    int want;                  /* a waiter / kick wants what is appended committed */
+    int err;
+    struct inflight fl[WAL_MAX_PIPE];
+    int nfl;                   /* commits in flight, in log order */
+    int pipe;                  /* flusher threads */
+    int stop;
+    /* zeros written and synced up to here (dfd mode): a direct write below
+     * it changes no file system metadata -- one drive write, no journal */
+    uint64_t prefilled;
+    uint64_t chunk;            /* prefill step */
+    pthread_mutex_t ext_lk;
+    pthread_cond_t ext_cv;     /* the prefill thread */
     int sync_fd[WAL_MAX_SYNC];
     int nsync;
-    atomic_ullong records, commits, bytes, sync_ns;
+    _Atomic uint64_t durable_pub;
+    _Atomic int err_pub;
+    atomic_ullong records, commits, bytes, sync_ns, inflight_max, prefill_bytes;
+    pthread_t th[WAL_MAX_PIPE + 1];
+    int nth;
 };
 
 static uint32_t crc_table[256];
@@ -48,12 +80,47 @@ static uint32_t crc32_of(uint32_t crc, const uint8_t *p, size_t n) {
     while (n--) crc = crc_table[(crc ^ *p++) & 0xff] ^ (crc >> 8);
     return ~crc;
 }
+static uint32_t crc32_zeros(size_t n) {
+    uint32_t crc = ~0u;
+    while (n--) crc = crc_table[crc & 0xff] ^ (crc >> 8);
+    return ~crc;
+}
 static void put_u32(uint8_t *p, uint32_t v) { for (int i = 0; i < 4; i++) p[i] = (uint8_t)(v >> (8 * i)); }
 static uint32_t get_u32(const uint8_t *p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
 static uint64_t mono_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+static uint64_t align_up(uint64_t v) { return (v + WAL_BLOCK - 1) & ~(uint64_t)(WAL_BLOCK - 1); }
+
+static int pwrite_all(int fd, const void *buf, size_t len, uint64_t off) {
+    const uint8_t *p = buf;
+    while (len) {
+        ssize_t k = pwrite(fd, p, len, (off_t)off);
+        if (k < 0) { if (errno == EINTR) continue; return -errno; }
+        p += k; len -= (size_t)k; off += (uint64_t)k;
+    }
+    return 0;
+}
+
+/* a pad record of exactly n (>= 8) bytes at p: header + zeros */
+static void put_pad(uint8_t *p, size_t n) {
+    memset(p, 0, n);
+    put_u32(p, (uint32_t)(n - 8) | WAL_PAD);
+    put_u32(p + 4, crc32_zeros(n - 8));
+}
+/* bytes to append so that `len` ends on a block: 0, or a pad of >= 8 */
+static size_t pad_for(uint64_t end) {
+    size_t r = (size_t)(align_up(end) - end);
+    if (r && r < 8) r += WAL_BLOCK;
+    return r;
+}
+
+static int env_int(const char *name, int dflt, int lo, int hi) {
+    const char *e = getenv(name);
+    int v = e && *e ? atoi(e) : dflt;
+    return v < lo ? lo : v > hi ? hi : v;
 }
 
 void wal_path(const char *spec, int n, char *out, size_t out_len) {
@@ -62,27 +129,337 @@ void wal_path(const char *spec, int n, char *out, size_t out_len) {
     else snprintf(out, out_len, "%s", spec);
 }
 
+/* ------------------------------------------------------------ replay */
+/* Scans the log: every whole record in order to cb (not pad records);
+ * stops at a zero header (the end), a short or corrupt record, or when cb
+ * says so. *good = where the next record goes. */
+static long scan(int fd, int (*cb)(void *, const uint8_t *, size_t), void *user, uint64_t *good, int *torn) {
+    FILE *f = fdopen(dup(fd), "rb");
+    if (!f) return -errno;
+    long n = 0;
+    uint64_t pos = 0;
+    uint8_t hdr[8], *rec = NULL;
+    size_t cap = 0;
+    *torn = 0;
+    for (;;) {
+        size_t h = fread(hdr, 1, 8, f);
+        if (h == 0) break;                                  /* end of file */
+        if (h < 8) { *torn = 1; break; }
+        uint32_t lf = get_u32(hdr), crc = get_u32(hdr + 4);
+        if (lf == 0 && crc == 0) break;                     /* zeros: the end */
+        int pad = (lf & WAL_PAD) != 0;
+        uint32_t len = lf & ~WAL_PAD;
+        /* a record has a payload; a pad may not (exactly 8 bytes to the block) */
+        if ((len == 0 && !pad) || len > WAL_MAX_RECORD || (pad && len > 2 * WAL_BLOCK)) { *torn = 1; break; }
+        if (len > cap || !rec) {
+            uint8_t *r = realloc(rec, len ? len : 1);
+            if (!r) { free(rec); fclose(f); return -ENOMEM; }
+            rec = r;
+            cap = len ? len : 1;
+        }
+        if (fread(rec, 1, len, f) != len || crc32_of(0, rec, len) != crc) { *torn = 1; break; }
+        if (pad && (pos + 8 + len) % WAL_BLOCK) { *torn = 1; break; }  /* a pad always ends a block */
+        pos += 8 + (uint64_t)len;
+        if (pad) continue;
+        n++;
+        if (cb && cb(user, rec, len)) break;
+    }
+    free(rec);
+    fclose(f);
+    *good = pos;
+    return n;
+}
+
+/* Everything after `good` up to a long run of zeros: what a crash left of
+ * commits that were never acknowledged. Cleared, so new records that fill
+ * the gap are never followed by them. Returns the bytes found non-zero. */
+static int clear_after(int fd, uint64_t good, uint64_t *nonzero) {
+    struct stat st;
+    if (fstat(fd, &st)) return -errno;
+    uint64_t size = (uint64_t)st.st_size, pos = good, zrun = 0, last_nz = good;
+    static uint8_t zero[1 << 16];
+    uint8_t *b = malloc(1 << 16);
+    if (!b) return -ENOMEM;
+    while (pos < size && zrun < WAL_CLEAR_RUN) {
+        size_t want = size - pos < (1 << 16) ? (size_t)(size - pos) : (1 << 16);
+        ssize_t k = pread(fd, b, want, (off_t)pos);
+        if (k <= 0) break;
+        for (ssize_t i = 0; i < k; i++) {
+            if (b[i]) { zrun = 0; last_nz = pos + (uint64_t)i + 1; }
+            else zrun++;
+        }
+        pos += (uint64_t)k;
+    }
+    free(b);
+    *nonzero = last_nz - good;
+    for (uint64_t o = good; o < last_nz;) {
+        size_t n = last_nz - o < sizeof(zero) ? (size_t)(last_nz - o) : sizeof(zero);
+        int rc = pwrite_all(fd, zero, n, o);
+        if (rc) return rc;
+        o += n;
+    }
+    return last_nz > good && fdatasync(fd) ? -errno : 0;
+}
+
+/* the end each replay found, for the wal_open that follows it */
+static pthread_mutex_t ends_lk = PTHREAD_MUTEX_INITIALIZER;
+static struct { char path[1024]; uint64_t end; } ends[64];
+static int nends;
+
+static long replay_fd(int fd, const char *path, int (*cb)(void *, const uint8_t *, size_t), void *user,
+                      uint64_t *end) {
+    pthread_once(&crc_once, crc_init);
+    uint64_t good = 0;
+    int torn = 0;
+    long n = scan(fd, cb, user, &good, &torn);
+    if (n < 0) return n;
+    uint64_t nz = 0;
+    int rc = clear_after(fd, good, &nz);
+    if (rc) return rc;
+    if (nz)
+        fprintf(stderr, "rocepool: log %s: %llu bytes after the last whole record cleared (commits a crash cut %s)\n",
+                path, (unsigned long long)nz, torn ? "short" : "off");
+    /* the next commit starts on a block: a pad record up to it */
+    uint64_t start = align_up(good);
+    size_t pad = pad_for(good);
+    if (pad) {
+        uint8_t p[2 * WAL_BLOCK];
+        put_pad(p, pad);
+        if ((rc = pwrite_all(fd, p, pad, good)) || fdatasync(fd)) return rc ? rc : -errno;
+        start = good + pad;
+    }
+    *end = start;
+    return n;
+}
+
+long wal_replay(const char *path, int (*cb)(void *user, const uint8_t *rec, size_t len), void *user) {
+    int fd = open(path, O_RDWR | O_CLOEXEC);
+    if (fd < 0) return errno == ENOENT ? 0 : -errno;
+    uint64_t end = 0;
+    long n = replay_fd(fd, path, cb, user, &end);
+    close(fd);
+    if (n >= 0) {
+        pthread_mutex_lock(&ends_lk);
+        int i = 0;
+        while (i < nends && strcmp(ends[i].path, path)) i++;
+        if (i == nends && nends < 64) nends++;
+        if (i < 64) { snprintf(ends[i].path, sizeof(ends[i].path), "%s", path); ends[i].end = end; }
+        pthread_mutex_unlock(&ends_lk);
+    }
+    return n;
+}
+
+/* ----------------------------------------------------------- prefill */
+/* zeros from w->prefilled to at least `upto`, synced (ext_lk held) */
+static int extend_locked(wal_t *w, uint64_t upto) {
+    static uint8_t zero[1 << 20];
+    while (w->prefilled < upto) {
+        uint64_t from = w->prefilled, to = from + w->chunk;
+        for (uint64_t o = from; o < to; o += sizeof(zero)) {
+            int rc = pwrite_all(w->fd, zero, sizeof(zero), o);
+            if (rc) return rc;
+        }
+        if (fdatasync(w->fd)) return -errno;
+        atomic_fetch_add(&w->prefill_bytes, to - from);
+        __atomic_store_n(&w->prefilled, to, __ATOMIC_RELEASE);
+    }
+    return 0;
+}
+
+/* keeps the zeros two chunks ahead of the log, off the commit path */
+static void *prefill_main(void *arg) {
+    wal_t *w = arg;
+    pthread_setname_np(pthread_self(), "rp-wal-fill");
+    pthread_mutex_lock(&w->ext_lk);
+    while (!w->stop) {
+        uint64_t want = align_up(__atomic_load_n(&w->next_lsn, __ATOMIC_RELAXED)) + 2 * w->chunk;
+        if (w->prefilled < want) {
+            if (extend_locked(w, want)) {
+                fprintf(stderr, "rocepool: log prefill failed: %s -- commits extend it themselves\n", strerror(errno));
+                break;
+            }
+            continue;
+        }
+        pthread_cond_wait(&w->ext_cv, &w->ext_lk);
+    }
+    pthread_mutex_unlock(&w->ext_lk);
+    return NULL;
+}
+
+/* ------------------------------------------------------------ commit */
+static void fail_locked(wal_t *w, int rc) {
+    if (!w->err) {
+        fprintf(stderr, "rocepool: writing the log failed: %s -- nothing more is acknowledged\n", strerror(-rc));
+        w->err = rc;
+        atomic_store(&w->err_pub, rc);
+    }
+}
+
+/* How much of buf one commit takes: whole records, up to WAL_BATCH (one
+ * record at least). */
+static size_t take_len(const wal_t *w, uint64_t *nrec) {
+    size_t off = 0;
+    *nrec = 0;
+    while (off + 8 <= w->len) {
+        size_t r = 8 + (get_u32(w->buf + off) & ~WAL_PAD);
+        if (off && off + r > WAL_BATCH) break;
+        off += r;
+        ++*nrec;
+    }
+    return off;
+}
+
+static int grow(uint8_t **buf, size_t *cap, size_t need, size_t keep) {
+    if (need <= *cap) return 0;
+    size_t nc = *cap ? *cap : 1 << 16;
+    while (nc < need) nc *= 2;
+    void *nb;
+    if (posix_memalign(&nb, WAL_BLOCK, nc)) return -ENOMEM;
+    if (keep) memcpy(nb, *buf, keep);
+    free(*buf);
+    *buf = nb;
+    *cap = nc;
+    return 0;
+}
+
+static void *flusher_main(void *arg) {
+    wal_t *w = arg;
+    pthread_setname_np(pthread_self(), "rp-wal");
+    uint8_t *mine = NULL;  /* the buffer this thread writes from */
+    size_t mine_cap = 0;
+    pthread_mutex_lock(&w->lk);
+    for (;;) {
+        while (!w->stop && !(w->want && w->len && !w->err && w->nfl < w->pipe)) pthread_cond_wait(&w->cv, &w->lk);
+        if (w->stop) break;
+        /* take whole records off the front, pad to a block */
+        uint64_t nrec;
+        size_t n = take_len(w, &nrec), pad = pad_for(w->buf_start + n);
+        if (grow(&mine, &mine_cap, n + pad, 0)) { fail_locked(w, -ENOMEM); pthread_cond_broadcast(&w->cv); continue; }
+        memcpy(mine, w->buf, n);
+        if (pad) put_pad(mine + n, pad);
+        memmove(w->buf, w->buf + n, w->len - n);
+        w->len -= n;
+        uint64_t start = w->buf_start, end = start + n + pad;
+        w->buf_start = end;
+        __atomic_store_n(&w->next_lsn, end + w->len, __ATOMIC_RELAXED);
+        if (!w->len) w->want = 0;
+        w->buf_seq += nrec;
+        struct inflight *me = &w->fl[w->nfl++];
+        *me = (struct inflight){start, end, w->buf_seq, 0};
+        if ((unsigned long long)w->nfl > atomic_load(&w->inflight_max)) atomic_store(&w->inflight_max, (unsigned long long)w->nfl);
+        int nsync = w->nsync, fds[WAL_MAX_SYNC];
+        memcpy(fds, w->sync_fd, sizeof(fds));
+        int dfd = w->dfd;
+        pthread_mutex_unlock(&w->lk);
+
+        uint64_t t0 = mono_ns();
+        int rc = 0;
+        /* the data the records point at first (an OST's tier file) */
+        for (int i = 0; i < nsync && !rc; i++)
+            if (fdatasync(fds[i])) rc = -errno;
+        if (!rc && dfd >= 0 && __atomic_load_n(&w->prefilled, __ATOMIC_ACQUIRE) < end) {
+            pthread_mutex_lock(&w->ext_lk);  /* the prefill fell behind: extend here */
+            rc = extend_locked(w, end);
+            pthread_mutex_unlock(&w->ext_lk);
+        }
+        if (!rc && dfd >= 0) {
+            rc = pwrite_all(dfd, mine, end - start, start);  /* O_DSYNC: on the drive when it returns */
+            if (rc == -EINVAL) {  /* the file system refused direct I/O after all */
+                pthread_mutex_lock(&w->lk);
+                w->dfd = -1;
+                pthread_mutex_unlock(&w->lk);
+                dfd = -1;
+                rc = 0;
+            }
+        }
+        if (!rc && dfd < 0) {
+            rc = pwrite_all(w->fd, mine, end - start, start);
+            if (!rc && fdatasync(w->fd)) rc = -errno;
+        }
+        atomic_fetch_add(&w->sync_ns, mono_ns() - t0);
+        atomic_fetch_add(&w->commits, 1);
+        atomic_fetch_add(&w->bytes, end - start);
+
+        pthread_mutex_lock(&w->lk);
+        if (rc) fail_locked(w, rc);
+        for (int i = 0; i < w->nfl; i++) if (w->fl[i].start == start) w->fl[i].done = 1;
+        /* durable: the longest prefix of finished commits */
+        int k = 0;
+        while (k < w->nfl && w->fl[k].done) w->durable_lsn = w->fl[k++].seq_end;
+        if (k) {
+            memmove(w->fl, w->fl + k, (size_t)(w->nfl - k) * sizeof(w->fl[0]));
+            w->nfl -= k;
+            atomic_store_explicit(&w->durable_pub, w->durable_lsn, memory_order_release);
+        }
+        pthread_cond_broadcast(&w->cv);
+        /* wake the prefill (busy already when its lock is held: never wait
+         * for it -- it holds the lock through a whole chunk of zeros) */
+        if (w->dfd >= 0 && !pthread_mutex_trylock(&w->ext_lk)) {
+            pthread_cond_signal(&w->ext_cv);
+            pthread_mutex_unlock(&w->ext_lk);
+        }
+    }
+    pthread_mutex_unlock(&w->lk);
+    free(mine);
+    return NULL;
+}
+
+/* -------------------------------------------------------------- open */
 wal_t *wal_open(const char *path, char *err, size_t err_len) {
     pthread_once(&crc_once, crc_init);
-    int fd = open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
+    int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
     if (fd < 0) { snprintf(err, err_len, "log %s: %s", path, strerror(errno)); return NULL; }
-    struct stat st;
-    if (fstat(fd, &st)) { snprintf(err, err_len, "log %s: fstat: %s", path, strerror(errno)); close(fd); return NULL; }
+    /* where the log ends: the replay that just ran says; else scan it now */
+    uint64_t end = 0;
+    int known = 0;
+    pthread_mutex_lock(&ends_lk);
+    for (int i = 0; i < nends; i++)
+        if (!strcmp(ends[i].path, path)) { end = ends[i].end; known = 1; ends[i] = ends[--nends]; break; }
+    pthread_mutex_unlock(&ends_lk);
+    if (!known) {
+        long n = replay_fd(fd, path, NULL, NULL, &end);
+        if (n < 0) { snprintf(err, err_len, "log %s: %s", path, strerror((int)-n)); close(fd); return NULL; }
+    }
     wal_t *w = calloc(1, sizeof(*w));
     if (!w) { snprintf(err, err_len, "log: out of memory"); close(fd); return NULL; }
     w->fd = fd;
     pthread_mutex_init(&w->lk, NULL);
     pthread_cond_init(&w->cv, NULL);
-    w->next_lsn = w->durable_lsn = (uint64_t)st.st_size;
-    atomic_store(&w->durable_pub, w->durable_lsn);
+    pthread_mutex_init(&w->ext_lk, NULL);
+    pthread_cond_init(&w->ext_cv, NULL);
+    w->buf_start = w->next_lsn = end;
+    w->next_seq = w->buf_seq = w->durable_lsn = 0;
+    atomic_store(&w->durable_pub, 0);
+    w->pipe = env_int("ROCEPOOL_LOG_PIPELINE", 4, 1, WAL_MAX_PIPE);
+    w->chunk = (uint64_t)env_int("ROCEPOOL_LOG_PREFILL_MIB", 32, 1, 4096) << 20;
+    /* direct, synchronous writes into zeros written beforehand: a commit is
+     * one drive write -- appending made every fdatasync also commit the
+     * file system's journal (the file grew), two writes in a row */
+    w->dfd = env_int("ROCEPOOL_LOG_DIRECT", 1, 0, 1) ? open(path, O_RDWR | O_DIRECT | O_DSYNC | O_CLOEXEC) : -1;
+    struct stat st;
+    if (!fstat(fd, &st)) w->prefilled = (uint64_t)st.st_size & ~(uint64_t)(WAL_BLOCK - 1);
+    if (w->prefilled < end) w->prefilled = end;
+    if (w->dfd >= 0) {
+        pthread_mutex_lock(&w->ext_lk);
+        int rc = extend_locked(w, end + w->chunk);
+        pthread_mutex_unlock(&w->ext_lk);
+        if (rc) { close(w->dfd); w->dfd = -1; }  /* no room for zeros: append as before */
+    }
     /* the directory entry of a new log file must survive a crash too */
     char dir[4096];
     snprintf(dir, sizeof(dir), "%s", path);
     char *slash = strrchr(dir, '/');
     if (slash) {
         if (slash == dir) slash[1] = 0; else *slash = 0;
-        int dfd = open(dir, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-        if (dfd >= 0) { fsync(dfd); close(dfd); }
+        int dfdir = open(dir, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        if (dfdir >= 0) { fsync(dfdir); close(dfdir); }
+    }
+    for (int i = 0; i < w->pipe; i++)
+        if (!pthread_create(&w->th[w->nth], NULL, flusher_main, w)) w->nth++;
+    if (!w->nth) { snprintf(err, err_len, "log: no flusher thread"); close(fd); free(w); return NULL; }
+    if (w->dfd >= 0) {
+        pthread_t t;
+        if (!pthread_create(&t, NULL, prefill_main, w)) w->th[w->nth++] = t;
     }
     return w;
 }
@@ -99,20 +476,12 @@ int wal_add_sync(wal_t *w, int fd) {
 
 uint64_t wal_append(wal_t *w, const void *a, size_t alen, const void *b, size_t blen, const void *c, size_t clen) {
     size_t n = alen + blen + clen;
-    if (n > UINT32_MAX) return 0;
+    if (n == 0 || n > WAL_MAX_RECORD) return 0;
     uint32_t crc = crc32_of(0, a, alen);
     if (blen) crc = crc32_of(crc, b, blen);
     if (clen) crc = crc32_of(crc, c, clen);
     pthread_mutex_lock(&w->lk);
-    if (w->err) { pthread_mutex_unlock(&w->lk); return 0; }
-    if (w->len + 8 + n > w->cap) {
-        size_t nc = w->cap ? w->cap : 1 << 16;
-        while (nc < w->len + 8 + n) nc *= 2;
-        uint8_t *nb = realloc(w->buf, nc);
-        if (!nb) { pthread_mutex_unlock(&w->lk); return 0; }
-        w->buf = nb;
-        w->cap = nc;
-    }
+    if (w->err || grow(&w->buf, &w->cap, w->len + 8 + n, w->len)) { pthread_mutex_unlock(&w->lk); return 0; }
     uint8_t *p = w->buf + w->len;
     put_u32(p, (uint32_t)n);
     put_u32(p + 4, crc);
@@ -120,61 +489,19 @@ uint64_t wal_append(wal_t *w, const void *a, size_t alen, const void *b, size_t 
     if (blen) memcpy(p + 8 + alen, b, blen);
     if (clen) memcpy(p + 8 + alen + blen, c, clen);
     w->len += 8 + n;
-    w->next_lsn += 8 + n;
-    uint64_t lsn = w->next_lsn;
+    __atomic_store_n(&w->next_lsn, w->buf_start + w->len, __ATOMIC_RELAXED);
+    uint64_t lsn = ++w->next_seq;
     pthread_mutex_unlock(&w->lk);
     atomic_fetch_add(&w->records, 1);
     return lsn;
 }
 
-/* one commit: write + sync everything appended so far. Called with w->lk
- * held and !w->flushing; drops the lock meanwhile, holds it on return. */
-static void flush_round(wal_t *w) {
-    w->flushing = 1;
-    uint8_t *buf = w->buf;
-    size_t len = w->len, cap = w->cap;
-    w->buf = w->spare;
-    w->cap = w->spare_cap;
-    w->len = 0;
-    uint64_t target = w->next_lsn;
-    int nsync = w->nsync, fds[WAL_MAX_SYNC];
-    memcpy(fds, w->sync_fd, sizeof(fds));
-    pthread_mutex_unlock(&w->lk);
-    uint64_t t0 = mono_ns();
-    int rc = 0;
-    /* the data the records point at first (an OST's tier file) */
-    for (int i = 0; i < nsync && !rc; i++)
-        if (fdatasync(fds[i])) rc = -errno;
-    for (size_t off = 0; off < len && !rc;) {
-        ssize_t k = write(w->fd, buf + off, len - off);
-        if (k < 0) { if (errno == EINTR) continue; rc = -errno; break; }
-        off += (size_t)k;
-    }
-    if (!rc && len && fdatasync(w->fd)) rc = -errno;
-    atomic_fetch_add(&w->sync_ns, mono_ns() - t0);
-    atomic_fetch_add(&w->commits, 1);
-    atomic_fetch_add(&w->bytes, len);
-    pthread_mutex_lock(&w->lk);
-    w->spare = buf;
-    w->spare_cap = cap;
-    if (rc) {
-        if (!w->err) fprintf(stderr, "rocepool: writing the log failed: %s -- nothing more is acknowledged\n",
-                             strerror(-rc));
-        w->err = rc;
-        atomic_store(&w->err_pub, rc);
-    } else {
-        w->durable_lsn = target;
-        atomic_store(&w->durable_pub, target);
-    }
-    w->flushing = 0;
-    pthread_cond_broadcast(&w->cv);
-}
-
 int wal_wait(wal_t *w, uint64_t lsn) {
     pthread_mutex_lock(&w->lk);
-    while (w->durable_lsn < lsn && !w->err) {
-        if (w->flushing) { pthread_cond_wait(&w->cv, &w->lk); continue; }
-        flush_round(w);  /* leader: commit what is appended so far */
+    if (w->durable_lsn < lsn && !w->err) {
+        w->want = 1;
+        pthread_cond_broadcast(&w->cv);
+        while (w->durable_lsn < lsn && !w->err) pthread_cond_wait(&w->cv, &w->lk);
     }
     int rc = w->durable_lsn >= lsn ? 0 : w->err;
     pthread_mutex_unlock(&w->lk);
@@ -187,83 +514,13 @@ int wal_ready(wal_t *w, uint64_t lsn) {
     return e ? e : 0;
 }
 
-/* Commits for the requests whose replies wait in their transport
- * (wal_kick): nobody blocks in wal_wait for them, so this thread does.
- * While it syncs, the next batch accumulates. */
-static void *flusher_main(void *arg) {
-    wal_t *w = arg;
-    pthread_setname_np(pthread_self(), "rp-wal");
-    pthread_mutex_lock(&w->lk);
-    for (;;) {
-        if (w->kicked && !w->flushing && !w->err) {
-            w->kicked = 0;
-            if (w->len) flush_round(w);
-            continue;
-        }
-        pthread_cond_wait(&w->cv, &w->lk);
-    }
-    return NULL;
-}
-
 void wal_kick(wal_t *w) {
     pthread_mutex_lock(&w->lk);
-    w->kicked = 1;
-    if (!w->flusher) {
-        pthread_t t;
-        pthread_attr_t a;
-        pthread_attr_init(&a);
-        pthread_attr_setdetachstate(&a, PTHREAD_CREATE_DETACHED);
-        if (!pthread_create(&t, &a, flusher_main, w)) w->flusher = 1;
-        pthread_attr_destroy(&a);
-        if (!w->flusher) {  /* no thread: commit here */
-            uint64_t want = w->next_lsn;
-            while (w->durable_lsn < want && !w->err) {
-                if (w->flushing) pthread_cond_wait(&w->cv, &w->lk);
-                else flush_round(w);
-            }
-        }
+    if (!w->want) {
+        w->want = 1;
+        pthread_cond_broadcast(&w->cv);
     }
-    if (!w->flushing) pthread_cond_broadcast(&w->cv);
     pthread_mutex_unlock(&w->lk);
-}
-
-long wal_replay(const char *path, int (*cb)(void *user, const uint8_t *rec, size_t len), void *user) {
-    pthread_once(&crc_once, crc_init);
-    int fd = open(path, O_RDWR | O_CLOEXEC);
-    if (fd < 0) return errno == ENOENT ? 0 : -errno;
-    FILE *f = fdopen(fd, "r+b");
-    if (!f) { int e = errno; close(fd); return -e; }
-    long n = 0;
-    uint64_t good = 0;
-    uint8_t hdr[8];
-    uint8_t *rec = NULL;
-    size_t cap = 0;
-    int stop = 0;
-    while (!stop && fread(hdr, 1, 8, f) == 8) {
-        uint32_t len = get_u32(hdr), crc = get_u32(hdr + 4);
-        if (len > cap) {
-            uint8_t *r = realloc(rec, len);
-            if (!r) { free(rec); fclose(f); return -ENOMEM; }
-            rec = r;
-            cap = len;
-        }
-        if (fread(rec, 1, len, f) != len || crc32_of(0, rec, len) != crc) break;  /* torn tail */
-        good += 8 + (uint64_t)len;
-        n++;
-        stop = cb(user, rec, len);
-    }
-    free(rec);
-    if (!stop) {  /* cut a torn tail, so new records follow the last good one */
-        fflush(f);
-        struct stat st;
-        if (!fstat(fd, &st) && (uint64_t)st.st_size > good) {
-            fprintf(stderr, "rocepool: log %s: %llu bytes after the last whole record dropped (a write torn by a crash)\n",
-                    path, (unsigned long long)((uint64_t)st.st_size - good));
-            if (ftruncate(fd, (off_t)good) == 0) fdatasync(fd);
-        }
-    }
-    fclose(f);
-    return n;
 }
 
 void wal_stats(wal_t *w, uint64_t *records, uint64_t *commits, uint64_t *bytes, uint64_t *sync_ns) {
@@ -271,4 +528,13 @@ void wal_stats(wal_t *w, uint64_t *records, uint64_t *commits, uint64_t *bytes, 
     *commits = atomic_load(&w->commits);
     *bytes = atomic_load(&w->bytes);
     *sync_ns = atomic_load(&w->sync_ns);
+}
+
+void wal_stats_more(wal_t *w, int *direct, int *pipeline, uint64_t *inflight_max, uint64_t *prefill_bytes) {
+    pthread_mutex_lock(&w->lk);
+    *direct = w->dfd >= 0;
+    *pipeline = w->pipe;
+    pthread_mutex_unlock(&w->lk);
+    *inflight_max = atomic_load(&w->inflight_max);
+    *prefill_bytes = atomic_load(&w->prefill_bytes);
 }
