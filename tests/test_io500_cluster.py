@@ -177,6 +177,34 @@ class ValidityTests(unittest.TestCase):
             self.assertIn(f"[{ph}]\nrun = FALSE", text)
         self.assertEqual(text.count("[find]"), 1)
 
+    def test_durable_logs_next_to_each_nodes_tier(self):
+        """IO500 rule 6: every MDT and OST gets a log beside its node's file
+        tier, emptied first; a node without one is reported, not hidden."""
+        from tools.io500_run import durable_logs, tier_dir
+        self.assertEqual(tier_dir("file:/nvmedata/rocepool_ost_{n}.tier:21921"), "/nvmedata")
+        self.assertEqual(tier_dir("file:/x/t.tier"), "/x")
+        self.assertIsNone(tier_dir("spdk:0000:00:1f.0"))
+        self.assertIsNone(tier_dir(None))
+        ran = []
+
+        class C:
+            def run(self, i, argv, env=None, **kw):
+                ran.append((i, argv))
+        servers = [{"kind": "mdt", "node": 0}, {"kind": "mdt", "node": 1}, {"kind": "ost", "node": 0},
+                   {"kind": "ost", "node": 1, "env": {"ROCEPOOL_OST_TIER": "file:/b/o.tier:9"}}]
+        tiers = {0: {"ROCEPOOL_OST_TIER": "file:/a/rocepool_ost_{n}.tier:9"}, 1: {"ROCEPOOL_OST_TIER": "file:/b/o.tier:9"}}
+        os.environ.pop("ROCEPOOL_DURABLE", None)
+        rep = durable_logs(servers, tiers, C(), {})
+        self.assertEqual(rep, {"on": True, "logs": 4, "nodes_without_tier": []})
+        self.assertEqual([s["env"].get("ROCEPOOL_MDT_LOG") or s["env"].get("ROCEPOOL_OST_LOG") for s in servers],
+                         ["/a/rocepool_mdt_0.log", "/b/rocepool_mdt_1.log", "/a/rocepool_ost_0.log", "/b/rocepool_ost_1.log"])
+        self.assertIn((0, ["rm", "-f", "/a/rocepool_mdt_0.log"]), ran)
+        rep = durable_logs([{"kind": "mdt", "node": 2}], tiers, C(), {})
+        self.assertEqual((rep["on"], rep["nodes_without_tier"]), (False, [2]))
+        os.environ["ROCEPOOL_DURABLE"] = "0"
+        self.addCleanup(os.environ.pop, "ROCEPOOL_DURABLE", None)
+        self.assertFalse(durable_logs(servers, tiers, C(), {})["on"])
+
     def test_find_splits_a_directory_among_ranks(self):
         """pfind -H 1: one rank reading mdtest-hard's whole directory kept
         find at ~1 M entries/s from 2 nodes to 4"""

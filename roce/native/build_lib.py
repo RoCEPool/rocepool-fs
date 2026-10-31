@@ -107,7 +107,7 @@ HEADERS = [os.path.join(NATIVE, "roce_transport.h"), os.path.join(NATIVE, "rocep
            os.path.join(NATIVE, "test_stubs", "infiniband", "verbs.h")]
 ALL_TRANSPORTS = [os.path.join(NATIVE, "roce_transport.c"), os.path.join(NATIVE, "ofi_transport.c"),
                   os.path.join(NATIVE, "softverbs", "softverbs.c")]
-SERVER_SOURCES = [os.path.join(NATIVE, "rocepool_servers.c"), os.path.join(NATIVE, "ost_tier.c")]
+SERVER_SOURCES = [os.path.join(NATIVE, "rocepool_servers.c"), os.path.join(NATIVE, "ost_tier.c"), os.path.join(NATIVE, "wal.c")]
 CC = ["gcc", "-O2", "-g", "-Wall", "-Wextra", "-Werror", "-pthread"]
 
 
