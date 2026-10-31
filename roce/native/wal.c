@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -423,7 +424,8 @@ static void *flusher_main(void *arg) {
 /* -------------------------------------------------------------- open */
 /* the log at path, its records ending at `end`, committed `direct`ly or by
  * appends, `pipe` commits at once at most */
-static wal_t *open_core(const char *path, int fd, uint64_t end, int direct, int pipe, char *err, size_t err_len) {
+static wal_t *open_core(const char *path, int fd, uint64_t end, int direct, int pipe, uint64_t chunk, char *err,
+                        size_t err_len) {
     wal_t *w = calloc(1, sizeof(*w));
     if (!w) { snprintf(err, err_len, "log: out of memory"); return NULL; }
     w->fd = fd;
@@ -434,7 +436,7 @@ static wal_t *open_core(const char *path, int fd, uint64_t end, int direct, int 
     pthread_cond_init(&w->ext_cv, NULL);
     w->buf_start = w->next_lsn = end;
     w->pipe = pipe;
-    w->chunk = (uint64_t)env_int("ROCEPOOL_LOG_PREFILL_MIB", 32, 1, 4096) << 20;
+    w->chunk = chunk;
     w->dfd = direct ? open(path, O_RDWR | O_DIRECT | O_DSYNC | O_CLOEXEC) : -1;
     struct stat st;
     if (!fstat(fd, &st)) w->prefilled = (uint64_t)st.st_size & ~(uint64_t)(WAL_BLOCK - 1);
@@ -497,7 +499,7 @@ static double cal_rate(const char *scratch, int direct, int pipe, int ms) {
     int fd = open(scratch, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
     if (fd < 0) return 0;
     char err[256];
-    wal_t *w = open_core(scratch, fd, 0, direct, pipe, err, sizeof(err));
+    wal_t *w = open_core(scratch, fd, 0, direct, pipe, 16u << 20, err, sizeof(err));
     if (!w) { close(fd); unlink(scratch); return 0; }
     if (direct && w->dfd < 0) { wal_close(w); unlink(scratch); return 0; }  /* no direct I/O here */
     struct cal_load c = {w, 0, 0};
@@ -516,6 +518,15 @@ static void calibrate(const char *path, int want_direct, int want_pipe, int *dir
     char scratch[1100];
     snprintf(scratch, sizeof(scratch), "%s.calibrate", path);
     int ms = env_int("ROCEPOOL_LOG_CALIBRATE_MS", 120, 10, 5000);
+    /* one calibration at a time per directory: servers starting together on
+     * a host (an MDT and an OST, or a test's five) measured each other's
+     * writes -- direct writes read 1 k records/s there, 30 k alone */
+    char lk[1100];
+    snprintf(lk, sizeof(lk), "%s", path);
+    char *sl = strrchr(lk, '/');
+    snprintf(sl ? sl + 1 : lk, sizeof(lk) - (size_t)(sl ? sl + 1 - lk : 0), ".rocepool_log_calibrate.lock");
+    int lfd = open(lk, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+    if (lfd >= 0) flock(lfd, LOCK_EX);
     static const int modes[3][2] = {{0, 1}, {1, 1}, {1, 4}};  /* append / direct, one at a time / 4 */
     int best = -1;
     for (int i = 0; i < 3; i++) {
@@ -526,6 +537,7 @@ static void calibrate(const char *path, int want_direct, int want_pipe, int *dir
         /* a candidate wins only by 10%: the simpler one otherwise */
         if (res[i] > 0 && (best < 0 || res[i] > 1.1 * res[best])) best = i;
     }
+    if (lfd >= 0) close(lfd);  /* releases the lock */
     if (best < 0) best = 0;
     *direct = modes[best][0];
     *pipe = want_pipe > 0 ? want_pipe : modes[best][1];
@@ -556,7 +568,8 @@ wal_t *wal_open(const char *path, char *err, size_t err_len) {
     int direct = want_direct > 0, pipe = want_pipe ? want_pipe : 1;
     double res[3] = {0, 0, 0};
     if (want_direct < 0 || !want_pipe) calibrate(path, want_direct, want_pipe, &direct, &pipe, res);
-    wal_t *w = open_core(path, fd, end, direct, pipe, err, err_len);
+    wal_t *w = open_core(path, fd, end, direct, pipe, (uint64_t)env_int("ROCEPOOL_LOG_PREFILL_MIB", 32, 1, 4096) << 20,
+                         err, err_len);
     if (!w) { close(fd); return NULL; }
     w->cal_append = res[0];
     w->cal_direct = res[1];
