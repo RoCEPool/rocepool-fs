@@ -36,6 +36,16 @@ uint64_t wal_append(wal_t *w, const void *a, size_t alen, const void *b, size_t 
  * (a failed write or sync fails every later wait too: the log is stuck) */
 int wal_wait(wal_t *w, uint64_t lsn);
 
+/* without blocking: 1 once everything up to lsn is durable, 0 not yet,
+ * -errno when the log failed (it never will be) */
+int wal_ready(wal_t *w, uint64_t lsn);
+/* have the log's flusher thread commit what is appended (started on the
+ * first kick): for a request whose reply waits in the transport until
+ * wal_ready, instead of its handler thread blocking in wal_wait -- the
+ * thread takes the next request meanwhile, and one commit covers the
+ * records of every request it took */
+void wal_kick(wal_t *w);
+
 /* every record of the log at path, in order; cb returns nonzero to stop.
  * Returns the number of records, or -errno; a torn tail is cut off. */
 long wal_replay(const char *path, int (*cb)(void *user, const uint8_t *rec, size_t len), void *user);
