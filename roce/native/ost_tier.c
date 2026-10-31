@@ -91,6 +91,58 @@ void ost_tier_free(ost_tier_t *t, const tier_ext_t *ext) {
     pthread_mutex_unlock(&t->lock);
 }
 
+int ost_tier_sync_fd(const ost_tier_t *t) { return strcmp(t->kind, "file") ? -1 : t->fd; }
+
+static int cmp_u64(const void *a, const void *b) {
+    uint64_t x = *(const uint64_t *)a, y = *(const uint64_t *)b;
+    return (x > y) - (x < y);
+}
+
+int ost_tier_restore(ost_tier_t *t, const tier_ext_t *used, size_t n) {
+    pthread_mutex_lock(&t->lock);
+    for (int c = 0; c < N_CLASSES; c++) t->free[c].n = 0;
+    t->used = 0;
+    t->next_zone = 0;
+    if (!n) { pthread_mutex_unlock(&t->lock); return 0; }
+    uint64_t nz = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (used[i].cls >= N_CLASSES || used[i].off + CLASS_BYTES[used[i].cls] > t->capacity) {
+            pthread_mutex_unlock(&t->lock);
+            return -EINVAL;
+        }
+        uint64_t z = used[i].off / ZONE_BYTES + 1;
+        if (z > nz) nz = z;
+    }
+    int8_t *zcls = malloc(nz);
+    uint64_t *offs = malloc(n * sizeof(*offs));
+    if (!zcls || !offs) { free(zcls); free(offs); pthread_mutex_unlock(&t->lock); return -ENOMEM; }
+    memset(zcls, -1, nz);
+    for (size_t i = 0; i < n; i++) {
+        uint64_t z = used[i].off / ZONE_BYTES;
+        if (zcls[z] >= 0 && zcls[z] != (int8_t)used[i].cls) { free(zcls); free(offs); pthread_mutex_unlock(&t->lock); return -EINVAL; }
+        zcls[z] = (int8_t)used[i].cls;
+        offs[i] = used[i].off;
+        t->used += CLASS_BYTES[used[i].cls];
+    }
+    qsort(offs, n, sizeof(*offs), cmp_u64);
+    /* every slab of a zone in use that no object holds goes back on its
+     * class's free list (in reverse: handed out front to back) */
+    for (uint64_t z = nz; z-- > 0;) {
+        if (zcls[z] < 0) continue;
+        size_t sb = CLASS_BYTES[(int)zcls[z]];
+        uint64_t base = z * ZONE_BYTES;
+        for (uint64_t off = base + ZONE_BYTES - sb; ; off -= sb) {
+            if (!bsearch(&off, offs, n, sizeof(*offs), cmp_u64)) fl_push(&t->free[(int)zcls[z]], off);
+            if (off == base) break;
+        }
+    }
+    t->next_zone = nz * ZONE_BYTES;
+    free(zcls);
+    free(offs);
+    pthread_mutex_unlock(&t->lock);
+    return 0;
+}
+
 const char *ost_tier_kind(const ost_tier_t *t) { return t->kind; }
 uint64_t ost_tier_capacity(const ost_tier_t *t) { return t->capacity; }
 uint64_t ost_tier_used(const ost_tier_t *t) { return t->used; }

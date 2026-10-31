@@ -23,6 +23,7 @@
 #define _GNU_SOURCE
 #include "rocepool_servers.h"
 #include "ost_tier.h"
+#include "wal.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -136,6 +137,17 @@ static uint8_t *frame_simple(uint8_t op, const frame_t *req, const void *val, si
     if (!v) return NULL;
     if (val_len) memcpy(v, val, val_len);
     return out;
+}
+
+/* Durability (wal.h): a request that changed a store with a log notes the
+ * log position its change ends at; native_handler waits for the log to be
+ * durable up to it before the reply goes out (one wait for a BATCH). */
+static __thread uint64_t tl_wal_lsn;
+static __thread wal_t *tl_wal;
+static void wal_note(wal_t *w, uint64_t lsn) {
+    tl_wal = w;
+    if (lsn > tl_wal_lsn) tl_wal_lsn = lsn;
+    if (!lsn) tl_wal_lsn = UINT64_MAX;  /* the append failed: the wait reports the log's error */
 }
 
 static double now_s(void) {
@@ -418,6 +430,11 @@ typedef struct {
     atomic_ullong inline_evictions;    /* requests that had to evict themselves (past the hard limit) */
     atomic_int writeback_failed;       /* a write-back failed (tier full?): WRITE_AT writes through again */
     obj_arena_t arena;              /* every RAM copy: registered, one-sided readable */
+    /* durability (ROCEPOOL_OST_LOG): every object's slab, size and version
+     * in a log, written through to the tier and synced before a reply */
+    wal_t *wal;
+    int durable;
+    atomic_ullong log_fail;
     roce_server_t *server;          /* for the arena chunks' rkeys (set once the server runs) */
     atomic_ullong leases, lease_misses;
     pthread_mutex_t lru_lock;
@@ -427,6 +444,7 @@ typedef struct {
 static void arena_tier_notify(void *base, size_t len, void *user) { ost_tier_notify_chunk(user, base, len); }
 
 static void *ost_evictor(void *arg);
+static int ost_open_log(ost_store *s, const char *spec, int n);
 static ost_store *ost_new(void) {
     ost_store *s = calloc(1, sizeof(*s));
     if (!s) return NULL;
@@ -439,14 +457,13 @@ static ost_store *ost_new(void) {
     pthread_mutex_init(&s->lru_lock, NULL);
     arena_init(&s->arena);
     const char *spec = getenv("ROCEPOOL_OST_TIER");
+    /* every OST needs a device or file (and log) of its own; "{n}" in a spec
+     * is this process's OST number (several OSTs in one process: tests) */
+    static atomic_int n_stores;
+    int my_n = atomic_fetch_add(&n_stores, 1);
     if (spec && *spec) {
-        /* every OST needs a device or file of its own; "{n}" in the spec is
-         * this process's OST number (several OSTs in one process: tests) */
-        static atomic_int n_stores;
         char expanded[1024], err[512];
-        const char *br = strstr(spec, "{n}");
-        if (br) snprintf(expanded, sizeof(expanded), "%.*s%d%s", (int)(br - spec), spec, atomic_fetch_add(&n_stores, 1), br + 3);
-        else snprintf(expanded, sizeof(expanded), "%s", spec);
+        wal_path(spec, my_n, expanded, sizeof(expanded));
         s->tier = ost_tier_open(expanded, err, sizeof(err));
         if (!s->tier) { fprintf(stderr, "rocepool OST: %s\n", err); free(s); return NULL; }
         const char *mib = getenv("ROCEPOOL_OST_RAM_CACHE_MIB");
@@ -465,6 +482,8 @@ static ost_store *ost_new(void) {
                 (unsigned long long)(ost_tier_capacity(s->tier) >> 30), ost_tier_direct(s->tier) ? "on" : "off",
                 (unsigned long long)(s->ram_budget >> 20));
     }
+    const char *lspec = getenv("ROCEPOOL_OST_LOG");
+    if (lspec && *lspec && ost_open_log(s, lspec, my_n)) return NULL;
     return s;
 }
 
@@ -694,6 +713,113 @@ static void kv_grow(kv_stripe *st) {
     st->nslots = n;
 }
 
+/* ---- the OST's log: where each object lives on the tier ----
+ * 'S' u32 key length, u64 slab offset, u32 slab class, u64 size, u64
+ * version, key: the object as it now is (its bytes are on the tier, synced
+ * in the same commit). 'D' u32 key length, key: deleted. Appended under the
+ * object's stripe lock, so a key's records are in the order of its changes. */
+static void ost_log_set(ost_store *s, const kv_entry *e) {
+    if (!s->wal) return;
+    uint8_t h[33];
+    h[0] = 'S';
+    wr_u32le(h + 1, (uint32_t)e->key_len);
+    wr_u64le(h + 5, e->ext.off);
+    wr_u32le(h + 13, e->ext.cls);
+    wr_u64le(h + 17, e->size);
+    wr_u64le(h + 25, e->version);
+    uint64_t lsn = wal_append(s->wal, h, 33, e->key, e->key_len, NULL, 0);
+    if (!lsn) atomic_fetch_add(&s->log_fail, 1);
+    wal_note(s->wal, lsn);
+}
+static void ost_log_del(ost_store *s, const char *key, size_t kl) {
+    if (!s->wal) return;
+    uint8_t h[5];
+    h[0] = 'D';
+    wr_u32le(h + 1, (uint32_t)kl);
+    uint64_t lsn = wal_append(s->wal, h, 5, key, kl, NULL, 0);
+    if (!lsn) atomic_fetch_add(&s->log_fail, 1);
+    wal_note(s->wal, lsn);
+}
+
+static int ost_replay_rec(void *user, const uint8_t *r, size_t len) {
+    ost_store *s = user;
+    if (len < 5) return 1;
+    size_t kl = rd_u32le(r + 1), hl = r[0] == 'S' ? 33 : 5;
+    if ((r[0] != 'S' && r[0] != 'D') || len != hl + kl) return 1;  /* not ours: stop, keep the rest */
+    const char *key = (const char *)r + hl;
+    uint64_t h = fnv1a(key, kl);
+    kv_stripe *st = ost_stripe(s, h);
+    kv_entry **pp = kv_find(st, h, key, kl);
+    kv_entry *e = *pp;
+    if (r[0] == 'D') {
+        if (e) {
+            *pp = e->next;
+            st->count--;
+            atomic_fetch_sub(&s->bytes, e->size);
+            atomic_fetch_sub(&s->objects, 1);
+            free(e->key);
+            free(e);
+        }
+        return 0;
+    }
+    if (!e) {
+        e = calloc(1, sizeof(*e));
+        char *k = malloc(kl ? kl : 1);
+        if (!e || !k) { free(e); free(k); return 1; }
+        memcpy(k, key, kl);
+        e->hash = h; e->key = k; e->key_len = kl;
+        e->created_at = now_s();
+        e->next = *pp;
+        *pp = e;
+        st->count++;
+        atomic_fetch_add(&s->objects, 1);
+        if (st->count > st->nslots * 2) kv_grow(st);
+    } else {
+        atomic_fetch_sub(&s->bytes, e->size);
+    }
+    e->ext.off = rd_u64le(r + 5);
+    e->ext.cls = rd_u32le(r + 13);
+    e->size = (size_t)rd_u64le(r + 17);
+    e->version = rd_u64le(r + 25);
+    e->updated_at = e->created_at;
+    e->on_tier = 1;
+    atomic_fetch_add(&s->bytes, e->size);
+    return 0;
+}
+
+static int ost_open_log(ost_store *s, const char *spec, int n) {
+    char path[1024], err[512];
+    wal_path(spec, n, path, sizeof(path));
+    if (!s->tier || ost_tier_sync_fd(s->tier) < 0) {
+        fprintf(stderr, "rocepool OST: a log (%s) needs a file tier (ROCEPOOL_OST_TIER=file:...): objects only in RAM "
+                "are never durable\n", path);
+        return -1;
+    }
+    uint64_t t0 = mono_ns();
+    long recs = wal_replay(path, ost_replay_rec, s);
+    if (recs < 0) { fprintf(stderr, "rocepool OST: replaying %s: %s\n", path, strerror((int)-recs)); return -1; }
+    if (recs > 0) {  /* the tier's allocator around the objects found */
+        size_t cap = (size_t)atomic_load(&s->objects) + 1, k = 0;
+        tier_ext_t *used = malloc(cap * sizeof(*used));
+        if (!used) return -1;
+        for (int i = 0; i < OST_STRIPES; i++)
+            for (size_t j = 0; j < s->stripes[i].nslots; j++)
+                for (kv_entry *e = s->stripes[i].slots[j]; e && k < cap; e = e->next) used[k++] = e->ext;
+        int rc = ost_tier_restore(s->tier, used, k);
+        free(used);
+        if (rc) { fprintf(stderr, "rocepool OST: %s does not fit this tier (%s)\n", path, strerror(-rc)); return -1; }
+        fprintf(stderr, "rocepool OST: %ld log records replayed in %.1f s: %llu objects, %llu bytes\n", recs,
+                (double)(mono_ns() - t0) / 1e9, (unsigned long long)atomic_load(&s->objects),
+                (unsigned long long)atomic_load(&s->bytes));
+    }
+    s->wal = wal_open(path, err, sizeof(err));
+    if (!s->wal) { fprintf(stderr, "rocepool OST: %s\n", err); return -1; }
+    wal_add_sync(s->wal, ost_tier_sync_fd(s->tier));
+    s->durable = 1;  /* every write goes through to the tier before its reply */
+    fprintf(stderr, "rocepool OST: durable: log %s, writes synced to the tier before the reply\n", path);
+    return 0;
+}
+
 static int stat_json(buf_t *b, const kv_entry *e, int with_key) {
     if (buf_put(b, "{", 1)) return -1;
     if (with_key) {
@@ -780,6 +906,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
             if (old) atomic_fetch_sub(&s->ram_bytes, cap_mem(old_cap));
             if (data) { atomic_fetch_add(&s->ram_bytes, cap_mem(cap)); lru_touch(s, e); } else lru_drop(s, e);
         }
+        if (!rc) ost_log_set(s, e);
         uint64_t version = e->version;
         pthread_mutex_unlock(&st->lock);
         ent_free_data(s, old, old_cap);
@@ -826,6 +953,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         *pp = e->next;
         st->count--;
         if (*wm < e->version + 1) *wm = e->version + 1;
+        ost_log_del(s, e->key, e->key_len);
         pthread_mutex_unlock(&st->lock);
         atomic_fetch_sub(&s->bytes, e->size);
         atomic_fetch_sub(&s->objects, 1);
@@ -954,7 +1082,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
                 memcpy(e->data + off, src, dlen);
                 e->size = new_size;
                 obj_publish(&s->arena, e->data, new_size);
-                if (s->tier && !atomic_load(&s->writeback_failed)) {
+                if (s->tier && !s->durable && !atomic_load(&s->writeback_failed)) {
                     /* write-back: the tier copy is brought up to date
                      * when the object leaves RAM, one whole-object write
                      * instead of one per piece (IOR hard: ~22 per stripe,
@@ -980,6 +1108,11 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         e->size = new_size;
         e->version++;
         e->updated_at = t;
+        if (s->durable && !e->on_tier) {  /* durable: never acknowledged from RAM alone */
+            pthread_mutex_unlock(&st->lock);
+            return frame_error(f, "STORAGE_ERROR", "object not on the tier", out_len);
+        }
+        ost_log_set(s, e);
         uint64_t version = e->version;
         pthread_mutex_unlock(&st->lock);
         atomic_fetch_add(&s->bytes, new_size - old_size);
@@ -1034,6 +1167,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
                 e->version++;
                 e->updated_at = now_s();
                 if (e->data) { obj_begin(e->data); obj_publish(&s->arena, e->data, e->size); }
+                ost_log_set(s, e);
             }
             version = e->version;
             cur = e->size;
@@ -1251,8 +1385,13 @@ typedef struct {
     /* readdir: entries copied out of the buckets (snapshot builds) and
      * snapshots built; a listing of N entries costs ~N, not N x pages */
     atomic_ullong rd_copied, rd_snaps;
+    /* durability (ROCEPOOL_MDT_LOG): every change a reply acknowledges --
+     * the request itself -- in a log, synced before the reply */
+    wal_t *wal;
+    atomic_ullong log_fail;
 } mdt_store;
 
+static int mdt_open_log(mdt_store *m, const char *spec);
 static mdt_store *mdt_new(void) {
     mdt_store *m = calloc(1, sizeof(*m));
     if (!m) return NULL;
@@ -1268,6 +1407,8 @@ static mdt_store *mdt_new(void) {
     if (m->tab.base == MAP_FAILED) { m->tab.base = NULL; m->tab.nslots = 0; }
     else m->tab.mem = roce_mem_register(m->tab.base, n * MD_SLOT);
     for (int i = 0; i < MD_SLOT_LOCKS; i++) pthread_mutex_init(&m->tab.lk[i], NULL);
+    const char *lspec = getenv("ROCEPOOL_MDT_LOG");
+    if (lspec && *lspec && mdt_open_log(m, lspec)) return NULL;
     return m;
 }
 
@@ -1971,6 +2112,16 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         md_entry *e = op == 4 ? NULL : *md_find(bk, name, name_len, nh);
         if (op == 4 || e) md_slot_sync(m, path, pl, e);
     }
+    if (m->wal && out && out[4] == OP_MDT_OK && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10)) {
+        /* the request as it came, appended while the name's bucket is still
+         * held: a name's records are in the order of its changes */
+        uint8_t hdr[8];  /* u32 LE key length, u32 LE value length, key, value */
+        wr_u32le(hdr, f->key_len);
+        wr_u32le(hdr + 4, f->val_len);
+        uint64_t lsn = wal_append(m->wal, hdr, 8, f->key, f->key_len, f->val, f->val_len);
+        if (!lsn) atomic_fetch_add(&m->log_fail, 1);
+        wal_note(m->wal, lsn);
+    }
     if (bk) {
         uint64_t tu = mono_ns();
         pthread_mutex_unlock(&bk->lock);
@@ -1979,6 +2130,37 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
     }
     free(path);
     return out;
+}
+
+/* replay one logged MDT request (the same handler, with no log attached) */
+static int mdt_replay_rec(void *user, const uint8_t *r, size_t len) {
+    mdt_store *m = user;
+    if (len < 8) return 1;
+    size_t kl = rd_u32le(r), vl = rd_u32le(r + 4);
+    if (8 + kl + vl != len || vl < 1) return 1;
+    frame_t f = {.op = OP_MDT, .req_id = 0, .key = (const char *)r + 8, .key_len = (uint32_t)kl,
+                 .val = r + 8 + kl, .val_len = (uint32_t)vl};
+    size_t ol = 0;
+    uint8_t *out = mdt_handle(m, &f, &ol);
+    roce_reply_free(out);
+    return 0;
+}
+
+static int mdt_open_log(mdt_store *m, const char *spec) {
+    static atomic_int n_mdts;
+    char path[1024], err[512];
+    wal_path(spec, atomic_fetch_add(&n_mdts, 1), path, sizeof(path));
+    uint64_t t0 = mono_ns();
+    long recs = wal_replay(path, mdt_replay_rec, m);
+    tl_wal_lsn = 0;
+    tl_wal = NULL;
+    if (recs < 0) { fprintf(stderr, "rocepool MDT: replaying %s: %s\n", path, strerror((int)-recs)); return -1; }
+    if (recs > 0)
+        fprintf(stderr, "rocepool MDT: %ld log records replayed in %.1f s\n", recs, (double)(mono_ns() - t0) / 1e9);
+    m->wal = wal_open(path, err, sizeof(err));
+    if (!m->wal) { fprintf(stderr, "rocepool MDT: %s\n", err); return -1; }
+    fprintf(stderr, "rocepool MDT: durable: log %s, changes synced before the reply\n", path);
+    return 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -2084,6 +2266,19 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
         }
         if (!rc) rc = buf_put(&b, "}", 1);
     }
+    {   /* durability: the log's records, commits (fdatasync rounds) and their time */
+        wal_t *w = n->ost ? n->ost->wal : n->mdt ? n->mdt->wal : NULL;
+        if (!rc) rc = buf_printf(&b, ", \"durable\": %s", w ? "true" : "false");
+        if (!rc && w) {
+            uint64_t recs, commits, bytes, sync_ns;
+            wal_stats(w, &recs, &commits, &bytes, &sync_ns);
+            rc = buf_printf(&b, ", \"log\": {\"records\": %llu, \"commits\": %llu, \"bytes\": %llu, \"sync_ns\": %llu, "
+                            "\"append_failures\": %llu}",
+                            (unsigned long long)recs, (unsigned long long)commits, (unsigned long long)bytes,
+                            (unsigned long long)sync_ns,
+                            (unsigned long long)atomic_load(n->ost ? &n->ost->log_fail : &n->mdt->log_fail));
+        }
+    }
     if (!rc && n->server) {  /* where a request's time goes outside the handler */
         char tx[2048];
         if (roce_server_stats_json(n->server, tx, sizeof(tx)) > 0) rc = buf_printf(&b, ", \"transport\": {%s}", tx);
@@ -2107,7 +2302,17 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
     static long slow_ms = -1;
     if (slow_ms < 0) { const char *d = getenv("ROCEPOOL_TEST_OST_WRITE_DELAY_MS"); slow_ms = d ? atol(d) : 0; }
     if (slow_ms > 0 && n->kind == ROCEPOOL_NATIVE_OST && (f.op == OP_PUT || f.op == OP_WRITE_AT)) usleep(slow_ms * 1000);
+    tl_wal_lsn = 0;
+    tl_wal = NULL;
     uint8_t *out = n->kind == ROCEPOOL_NATIVE_OST ? ost_handle(n->ost, &f, resp_len) : mdt_handle(n->mdt, &f, resp_len);
+    if (tl_wal_lsn) {  /* the change is acknowledged only once it is durable */
+        int wrc = tl_wal_lsn == UINT64_MAX ? -EIO : wal_wait(tl_wal, tl_wal_lsn);
+        if (wrc) {
+            roce_reply_free(out);
+            out = frame_error(&f, "STORAGE_ERROR", "log write failed: the change is not durable", resp_len);
+        }
+        tl_wal_lsn = 0;
+    }
     atomic_fetch_add(&n->cpu_ns, thread_cpu_ns() - c0);
     atomic_fetch_add(&n->wall_ns, mono_ns() - w0);
     atomic_fetch_add(&n->reqs, 1);

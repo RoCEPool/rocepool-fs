@@ -366,6 +366,11 @@ static int do_open(const char *rel, int flags, mode_t mode) {
         }
         goto created;
     }
+    /* close-to-open: an open asks the MDT, never this process's attribute
+     * cache -- a cached "no such file" or size from before another node
+     * created or wrote the file would be served for up to the TTL (IO500
+     * rule 2: data written and closed on one client is read on another) */
+    ac_del(rel);
     rc = fs_getattr(rel, &a);
     if (rc == -ENOENT) {
         if (!(flags & O_CREAT)) return seterr(-ENOENT);
@@ -374,10 +379,6 @@ static int do_open(const char *rel, int flags, mode_t mode) {
     } else if (rc == 0) {
         if ((flags & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL)) return seterr(-EEXIST);
         if (a.is_dir && (flags & O_ACCMODE) != O_RDONLY) return seterr(-EISDIR);
-        if (!a.is_dir && !a.inl) {  /* close-to-open: revalidate a striped file's size */
-            ac_del(rel);
-            rc = fs_getattr(rel, &a);
-        }
     }
     if (rc) {
         if (g_log) fprintf(stderr, "rocepool_intercept[%d]: open %s flags %#x failed: %d\n", (int)getpid(), rel, flags, rc);

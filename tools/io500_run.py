@@ -101,6 +101,46 @@ IO500_PHASES = ("ior-easy-write", "mdtest-easy-write", "ior-hard-write", "mdtest
                 "mdtest-hard-delete", "ior-rnd4K-easy-read")
 
 
+def tier_dir(spec: str | None) -> str | None:
+    """the directory of a file tier spec (file:PATH[:GIB]); None otherwise"""
+    if not spec or not spec.startswith("file:"):
+        return None
+    path = spec[5:]
+    head, sep, tail = path.rpartition(":")
+    if sep and tail.isdigit():
+        path = head
+    return os.path.dirname(path) or None
+
+
+def durable_logs(servers: list[dict], tier_env: dict, cluster, env: dict) -> dict:
+    """IO500 rule 6: every change a server acknowledges must be on persistent
+    storage. Each MDT and OST gets a log (roce/native/wal.c) next to its
+    node's file tier, emptied first (a run starts on an empty file system);
+    a node with no file tier cannot keep its servers' state durable.
+    ROCEPOOL_DURABLE=0 turns it off (the RAM-only behaviour of earlier runs)."""
+    if os.environ.get("ROCEPOOL_DURABLE", "1") == "0":
+        print("== durability OFF (ROCEPOOL_DURABLE=0): acknowledged data lives in RAM -- not valid under IO500 rule 6",
+              flush=True)
+        return {"on": False, "reason": "ROCEPOOL_DURABLE=0"}
+    dirs = {node: tier_dir(e.get("ROCEPOOL_OST_TIER")) for node, e in tier_env.items()}
+    missing = sorted({s["node"] for s in servers if not dirs.get(s["node"])})
+    logs = []
+    for kind in ("mdt", "ost"):
+        for k, s in enumerate(x for x in servers if x["kind"] == kind):
+            d = dirs.get(s["node"])
+            if not d:
+                continue
+            path = os.path.join(d, f"rocepool_{kind}_{k}.log")
+            cluster.run(s["node"], ["rm", "-f", path], env, net=False, timeout=60)
+            s.setdefault("env", {})["ROCEPOOL_MDT_LOG" if kind == "mdt" else "ROCEPOOL_OST_LOG"] = path
+            logs.append(path)
+    on = not missing
+    print(f"== durability {'ON' if on else 'PARTIAL'}: {len(logs)} server logs next to the file tiers"
+          + ("" if on else f"; nodes {missing} have no file tier: their servers keep acknowledged state in RAM "
+                           "(not valid under IO500 rule 6)"), flush=True)
+    return {"on": on, "logs": len(logs), "nodes_without_tier": missing}
+
+
 def write_ini(path: str, *, datadir: str, resdir: str, pause_dir: str | None, stonewall: int, ior_easy_block_mib: int,
               ior_hard_segments: int, md_easy_n: int, md_hard_n: int, phases: list | None = None) -> None:
     lines = ["[global]", f"datadir = {datadir}", "timestamp-datadir = FALSE", f"resultdir = {resdir}",
@@ -711,6 +751,7 @@ def main() -> int:
             if s["kind"] == "mdt":
                 s.setdefault("env", {})["ROCEPOOL_MDT_SLOTS"] = str(slots)
         report["mdt_slots"] = slots
+        report["durable"] = durable_logs(servers, tier_env, cluster, env)
         # the MDTs' inline file bytes (mdtest-hard's 3901-byte files live in
         # the MDT): bounded, or millions of them outgrow the host -- 15% of
         # the smallest host's RAM over its MDTs; beyond it files go striped

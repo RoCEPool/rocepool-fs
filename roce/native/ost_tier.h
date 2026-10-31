@@ -50,6 +50,14 @@ int ost_tier_read(ost_tier_t *t, const tier_ext_t *ext, uint64_t off, void *buf,
 int ost_tier_write_direct(ost_tier_t *t, const tier_ext_t *ext, uint64_t off, const void *buf, size_t len);
 int ost_tier_read_direct(ost_tier_t *t, const tier_ext_t *ext, uint64_t off, void *buf, size_t len);
 
+/* the descriptor whose fdatasync makes this tier's writes durable (the
+ * file backend; -1 for SPDK, which has no sync here yet) */
+int ost_tier_sync_fd(const ost_tier_t *t);
+/* after a restart: mark these slabs (the objects the OST's log lists) as
+ * used and rebuild the allocator around them. Zones below the highest one
+ * used that hold none of them are not reused (their class is unknown). */
+int ost_tier_restore(ost_tier_t *t, const tier_ext_t *used, size_t n);
+
 /* DMA-able memory for the RAM copies: plain malloc for the file backend,
  * spdk_dma_malloc for SPDK (its NVMe driver can only move registered or
  * hugepage-backed memory) */

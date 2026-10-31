@@ -203,7 +203,7 @@ else
   echo "[build] OST tier: kernel backend only (set SPDK_DIR=<built spdk tree> for the SPDK backend)"
 fi
 "$CC" -O2 -g -Wall -Wextra -pthread -fPIC -shared "${CFLAGS_EXTRA[@]}" "${TIER_CFLAGS[@]}" \
-  "$TSRC" rocepool_servers.c ost_tier.c -o "$OUT" "${LDFLAGS_EXTRA[@]}" "${TIER_LIBS[@]}" "${TLIBS[@]}" -lpthread
+  "$TSRC" rocepool_servers.c ost_tier.c wal.c -o "$OUT" "${LDFLAGS_EXTRA[@]}" "${TIER_LIBS[@]}" "${TLIBS[@]}" -lpthread
 echo "[build] built $OUT"
 FUSE_OUT="${FUSE_OUT:-$SCRIPT_DIR/rocepool-fuse}"
 "$CC" -O2 -g -Wall -Wextra -pthread "${CFLAGS_EXTRA[@]}" \
