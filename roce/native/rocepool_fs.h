@@ -39,6 +39,7 @@ typedef struct {
                           fuse.enable_uring=Y). Off by default: tools/io500_run.py measures both ways on the
                           hosts at hand and picks (it lost ~10% on this project's 2-core emulated rig). */
     int uring_entries; /* ring entries per queue (one queue per possible CPU) */
+    int mdt_async;     /* Lustre-style commit of file creates/unlinks (ROCEPOOL_MDT_ASYNC=1): see mdt_rpc */
     int direct_read;   /* one-sided reads of stripes (OST LEASE + RDMA READ); env ROCEPOOL_DIRECT_READ=0 off */
 } rpfs_cfg_t;
 extern rpfs_cfg_t cfg;
@@ -122,6 +123,11 @@ uint32_t strhash(const char *s);
 /* reads the ROCEPOOL_* environment, connects the peers named in cfg.mdt /
  * cfg.ost, starts cfg.io_threads pool workers. Returns 0 or -errno. */
 int rpfs_init(void);
+/* every MDT change this process was replied to is durable when it returns
+ * (ROCEPOOL_MDT_ASYNC: a barrier on each MDT it has changes pending on) */
+int rpfs_commit(void);
+/* changes kept (not committed yet), replayed after an MDT restart, lost */
+void rpfs_commit_stats(unsigned long long *pending, unsigned long long *replayed, unsigned long long *lost);
 void die(const char *fmt, ...);
 void *xmalloc(size_t n);
 void *xrealloc(void *old, size_t n);
