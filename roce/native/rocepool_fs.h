@@ -101,6 +101,13 @@ typedef struct {
     dirty_t *dirty;
     size_t ndirty, capdirty, dirty_bytes;
     scache_t *sc;
+    /* write-behind: a full dirty buffer is sent by a background thread while
+     * the program fills the next one; handle_flush waits for it */
+    int wb_on;
+    pthread_t wb_thr;
+    dirty_t *wb_dirty;
+    size_t wb_n, wb_cap;
+    int wb_rc;
     dirent_t *dents;     /* dir: listing snapshot taken at the first READDIR */
     size_t ndents;
     int listed;

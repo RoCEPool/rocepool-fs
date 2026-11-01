@@ -216,9 +216,10 @@ static int init_locked(void) {
     cfg.nmdt = split_list(strdup(mdts), cfg.mdt, MAX_PEERS);
     cfg.nost = split_list(strdup(osts), cfg.ost, MAX_PEERS);
     const char *v;
-    /* one program = one I/O stream: a few threads for the stripe fan-out
-     * of a large read or a readdir, not the FUSE daemon's 32 */
-    cfg.io_threads = 4;
+    /* one program = one I/O stream, but a durable write is replied only
+     * once logged (~1 ms): the stripe writes of a flush need this many in
+     * flight to keep a strided writer (IOR hard) from waiting on latency */
+    cfg.io_threads = 16;
     if ((v = getenv("ROCEPOOL_IO_THREADS")) && atoi(v) > 0) cfg.io_threads = atoi(v);
     if ((v = getenv("ROCEPOOL_ATTR_TTL")) && *v) cfg.attr_ttl = atof(v);
     if ((v = getenv("ROCEPOOL_STRIPE_SIZE")) && atoll(v) > 0) cfg.stripe_size = (uint64_t)atoll(v);

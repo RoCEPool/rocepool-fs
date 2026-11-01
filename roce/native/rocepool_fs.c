@@ -26,6 +26,7 @@
 #define CAS_MAX_ATTEMPTS 1000
 #define DIRTY_CAP_DEFAULT_MIB 16  /* buffered writes per open file before a flush (env ROCEPOOL_DIRTY_CAP_MIB) */
 size_t g_dirty_cap = (size_t)DIRTY_CAP_DEFAULT_MIB << 20;
+int g_write_behind = 1;  /* env ROCEPOOL_WRITE_BEHIND=0: a full buffer is flushed by the writer itself */
 
 /* ---------------------------------------------------------------- utils */
 void die(const char *fmt, ...) {
@@ -2062,7 +2063,10 @@ handle_t *handle_new(const char *path, int is_dir) {
     return h;
 }
 
+static int wb_wait(handle_t *h);
+
 void handle_free(handle_t *h) {
+    wb_wait(h);  /* a release always flushes first; this covers the paths that do not */
     if (h->sc) open_unregister(h);
     for (size_t i = 0; i < h->ndirty; i++) rp_bulk_free(h->dirty[i].base ? h->dirty[i].base : h->dirty[i].data);
     free(h->dirty);
@@ -2078,7 +2082,7 @@ void handle_free(handle_t *h) {
 /* caller holds h->lk. Coalesce this fd's writes into runs (in write order
  * for overlaps: later writes win) and send each run with one striped
  * write_range, like fs/fuse_lowlevel.py _flush_handle. */
-int handle_flush(handle_t *h) {
+static int flush_now(handle_t *h) {
     if (!h->ndirty) return 0;
     dirty_t *v = h->dirty;
     size_t n = h->ndirty;
@@ -2187,6 +2191,73 @@ int handle_flush(handle_t *h) {
 }
 
 
+/* ---- write-behind ----
+ * handle_write hands a full buffer to a thread of its own and goes on
+ * buffering; one batch is in flight per handle, so batches reach the OSTs
+ * in write order (a later overlapping write still wins). Every explicit
+ * flush -- fsync, close, a read or stat or truncate through the fd -- first
+ * waits for the batch, so nothing is acknowledged durable before it is. */
+static void *wb_main(void *arg) {
+    handle_t *h = arg, t;
+    memset(&t, 0, sizeof(t));
+    t.path = h->path;
+    t.dirty = h->wb_dirty;
+    t.ndirty = h->wb_n;
+    t.capdirty = h->wb_cap;
+    h->wb_rc = flush_now(&t);
+    h->wb_dirty = t.dirty;  /* what is left of it (a failed run on) */
+    h->wb_n = t.ndirty;
+    return NULL;
+}
+
+/* caller holds h->lk */
+static int wb_wait(handle_t *h) {
+    if (!h->wb_on) return 0;
+    pthread_join(h->wb_thr, NULL);
+    h->wb_on = 0;
+    int rc = h->wb_rc;
+    if (h->wb_n) {  /* not written: back in front of the newer writes, retried by the next flush */
+        size_t n = h->wb_n + h->ndirty;
+        dirty_t *v = xmalloc((n ? n : 1) * sizeof(*v));
+        memcpy(v, h->wb_dirty, h->wb_n * sizeof(*v));
+        if (h->ndirty) memcpy(v + h->wb_n, h->dirty, h->ndirty * sizeof(*v));
+        for (size_t i = 0; i < h->wb_n; i++) h->dirty_bytes += h->wb_dirty[i].len;
+        free(h->dirty);
+        h->dirty = v;
+        h->ndirty = h->capdirty = n;
+    }
+    free(h->wb_dirty);
+    h->wb_dirty = NULL;
+    h->wb_n = h->wb_cap = 0;
+    if (h->sc) sc_clear(h->sc);
+    return rc;
+}
+
+static int wb_start(handle_t *h) {
+    int rc = wb_wait(h);
+    if (rc) return rc;  /* reported to this write; the data stays buffered */
+    h->wb_dirty = h->dirty;
+    h->wb_n = h->ndirty;
+    h->wb_cap = h->capdirty;
+    h->wb_rc = 0;
+    h->dirty = NULL;
+    h->ndirty = h->capdirty = h->dirty_bytes = 0;
+    if (pthread_create(&h->wb_thr, NULL, wb_main, h) == 0) { h->wb_on = 1; return 0; }
+    h->dirty = h->wb_dirty;  /* no thread: as before, the writer flushes */
+    h->ndirty = h->wb_n;
+    h->capdirty = h->wb_cap;
+    for (size_t i = 0; i < h->ndirty; i++) h->dirty_bytes += h->dirty[i].len;
+    h->wb_dirty = NULL;
+    h->wb_n = h->wb_cap = 0;
+    return flush_now(h);
+}
+
+int handle_flush(handle_t *h) {
+    int rc = wb_wait(h);
+    int rc2 = flush_now(h);  /* retries what a failed batch left too */
+    return rc2 ? rc2 : (h->ndirty ? rc : 0);
+}
+
 /* ---------------------------------------------------------------- handle I/O
  * The library's own read/write through a handle (the interception library
  * uses these; the FUSE daemon has zero-copy variants of the same logic). */
@@ -2209,11 +2280,12 @@ int handle_write(handle_t *h, uint64_t off, const uint8_t *data, size_t len, uin
         if (base) rp_bulk_free(base);
     }
     h->dirty_bytes += len;
-    return h->dirty_bytes >= DIRTY_CAP ? handle_flush(h) : 0;  /* bound memory per handle */
+    if (h->dirty_bytes < DIRTY_CAP) return 0;  /* bound memory per handle: two buffers with write-behind */
+    return g_write_behind ? wb_start(h) : handle_flush(h);
 }
 
 ssize_t handle_read(handle_t *h, uint64_t off, uint8_t *out, size_t len) {
-    if (h->pre_ok && !h->ndirty) {  /* the content the open fetched */
+    if (h->pre_ok && !h->ndirty && !h->wb_on) {  /* the content the open fetched */
         if (off >= h->pre_len) return 0;
         size_t n = h->pre_len - (size_t)off < len ? h->pre_len - (size_t)off : len;
         memcpy(out, h->pre + off, n);
@@ -2264,6 +2336,8 @@ int rpfs_init(void) {
     if (ie && !strcmp(ie, "0")) cfg.inline_ok = 0;
     const char *dc = getenv("ROCEPOOL_DIRTY_CAP_MIB");
     if (dc && atol(dc) > 0) g_dirty_cap = (size_t)atol(dc) << 20;
+    const char *wbe = getenv("ROCEPOOL_WRITE_BEHIND");
+    if (wbe && *wbe) g_write_behind = atoi(wbe) != 0;
     const char *ds = getenv("ROCEPOOL_DIR_STRIPE");
     if (ds && (!strcmp(ds, "0") || !strcmp(ds, "false") || !strcmp(ds, "no") || !strcmp(ds, "off"))) cfg.dir_stripe = 0;
     /* per-RPC reply timeout (60 s, rocepool_client.c): a request that gets no reply in time
