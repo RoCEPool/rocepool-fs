@@ -41,6 +41,7 @@ void ost_tier_close(ost_tier_t *t);
 const char *ost_tier_kind(const ost_tier_t *t);           /* "file" | "spdk" */
 uint64_t ost_tier_capacity(const ost_tier_t *t);
 uint64_t ost_tier_used(const ost_tier_t *t);
+unsigned long long ost_tier_direct_reads(void);       /* tier reads that bypassed the page cache (all tiers of the process) */
 int ost_tier_direct(const ost_tier_t *t);                /* 1: page-aligned buffers go to the device without a copy */
 size_t ost_tier_class_bytes(uint32_t cls);
 uint32_t ost_tier_class_for(size_t size);                /* UINT32_MAX if too big for any class */

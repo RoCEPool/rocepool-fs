@@ -648,10 +648,14 @@ class AsyncTierReadTests(unittest.TestCase):
 
     def ost_stats(self, srv):
         st = [_stats(self.lib, a) for a in srv.osts.split(",")]
-        return {k: sum(x.get(k, 0) for x in st) for k in ("async_tier_reads", "async_tier_rereads", "tier_reads", "tier_read_threads")}
+        return {k: sum(x.get(k, 0) for x in st) for k in ("async_tier_reads", "async_tier_rereads", "tier_reads", "tier_read_threads")} | \
+            {"tier_direct_reads": st[0].get("tier_direct_reads", 0)}  # one count per process
 
-    def test_tier_reads_are_the_bytes(self):
-        srv = _Servers(self.lib, self.d, self.port, nm=1, no=2)
+    def test_tier_reads_are_the_bytes_through_the_page_cache(self):
+        self.test_tier_reads_are_the_bytes(env={"ROCEPOOL_OST_TIER_DIRECT_READ": "0"}, port=self.port + 20)
+
+    def test_tier_reads_are_the_bytes(self, env=None, port=None):
+        srv = _Servers(self.lib, self.d, port or self.port, nm=1, no=2, env=env)
         srv.start()
         self.addCleanup(srv.stop)
         # 48 MiB through a 16 MiB RAM cache per OST: most of it only on the tier
@@ -683,6 +687,11 @@ print("ok")
         self.assertEqual(self.done(self.client(srv, rd)), "ok")
         st = self.ost_stats(srv)
         self.assertEqual(st["tier_read_threads"], 2 * 32, st)
+        # past the page cache (O_DIRECT), as the writes: unaligned pieces included
+        if env is None:
+            self.assertGreater(st["tier_direct_reads"] - before["tier_direct_reads"], 100, st)
+        else:
+            self.assertEqual(st["tier_direct_reads"], 0, st)
         self.assertGreater(st["tier_reads"] - before["tier_reads"], 100, st)
         if self.ofi:
             self.assertGreater(st["async_tier_reads"] - before["async_tier_reads"], 100, st)
