@@ -520,7 +520,7 @@ class DurableRestartWriteBehindTests(DurableRestartTests):
     sent in batches by the write-behind thread while the program goes on,
     and close still returns only once all of them are durable"""
     port = 24900
-    CLIENT_ENV = {"ROCEPOOL_DIRTY_CAP_MIB": "1"}
+    CLIENT_ENV = {"ROCEPOOL_DIRTY_CAP_MIB": "1", "ROCEPOOL_WRITE_BEHIND": "1"}
     test_a_torn_log_tail_is_dropped = None  # nothing write-behind changes there
 
 
@@ -601,6 +601,7 @@ print(hashlib.sha256(open(os.environ["ROCEPOOL_PREFIX"] + "/f" + os.environ["WB"
         # comes back on a later write or at close, never lost
         code = r'''
 import errno, os
+assert os.environ["ROCEPOOL_WRITE_BEHIND"] == "1"
 fd = os.open(os.environ["ROCEPOOL_PREFIX"] + "/big", os.O_WRONLY | os.O_CREAT, 0o644)
 try:
     for i in range(32):
@@ -611,4 +612,4 @@ except OSError as x:
     print(x.errno)
 '''
         import errno
-        self.assertEqual(self.run_client(d, srv, code, {}), str(errno.ENOSPC))
+        self.assertEqual(self.run_client(d, srv, code, {"ROCEPOOL_WRITE_BEHIND": "1"}), str(errno.ENOSPC))

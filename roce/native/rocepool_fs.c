@@ -26,7 +26,11 @@
 #define CAS_MAX_ATTEMPTS 1000
 #define DIRTY_CAP_DEFAULT_MIB 16  /* buffered writes per open file before a flush (env ROCEPOOL_DIRTY_CAP_MIB) */
 size_t g_dirty_cap = (size_t)DIRTY_CAP_DEFAULT_MIB << 20;
-int g_write_behind = 1;  /* env ROCEPOOL_WRITE_BEHIND=0: a full buffer is flushed by the writer itself */
+/* env ROCEPOOL_WRITE_BEHIND=1: a full buffer is sent by a background thread.
+ * Off by default: measured no faster for IOR, whose writes are only copies
+ * into the buffer -- the writer is back waiting on the batch at once, so the
+ * in-flight requests (cfg.io_threads) decide, not the overlap */
+int g_write_behind = 0;
 
 /* ---------------------------------------------------------------- utils */
 void die(const char *fmt, ...) {
