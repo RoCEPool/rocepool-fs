@@ -105,6 +105,7 @@ int rp_ost_truncate(rp_peer_t *p, const char *key, uint64_t size);
  * or moved (take a new lease, or read by RPC); -ENOTSUP from rp_ost_lease
  * = this server has no one-sided path (the Python one). */
 typedef struct { uint64_t version, size, addr, seq, keyhash; uint32_t rkey; } rp_lease_t;
+void rp_stride_ra_stats(uint64_t *issued, uint64_t *hits, uint64_t *wasted);  /* (rocepool_fs.c) stride readahead */
 void rp_lookup_stats(uint64_t *direct, uint64_t *misses);   /* (rocepool_fs.c) one-sided MDT lookups / misses */
 int rp_ost_lease(rp_peer_t *p, const char *key, rp_lease_t *out);
 int rp_ost_read_direct(rp_peer_t *p, const rp_lease_t *l, uint64_t off, size_t len, void *dst);
