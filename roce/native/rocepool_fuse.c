@@ -811,6 +811,7 @@ static int dispatch_parts(const struct fuse_in_header *ih, const uint8_t *in, si
             rc = handle_flush(h);
             pthread_mutex_unlock(&h->lk);
         }
+        if (!rc) rc = rpfs_commit();  /* and the namespace changes (ROCEPOOL_MDT_ASYNC) */
         reply(u, -rc, NULL, 0, NULL, 0);
         break;
     }

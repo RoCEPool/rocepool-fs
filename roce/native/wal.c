@@ -354,6 +354,10 @@ static void commit_one(wal_t *w, uint8_t **mine, size_t *mine_cap) {
 
     uint64_t t0 = mono_ns();
     int rc = 0;
+    /* tests only: a slow drive (changes stay uncommitted this long) */
+    static long delay_ms = -1;
+    if (delay_ms < 0) { const char *d = getenv("ROCEPOOL_TEST_LOG_DELAY_MS"); delay_ms = d ? atol(d) : 0; }
+    if (delay_ms > 0) { struct timespec dl = {delay_ms / 1000, (delay_ms % 1000) * 1000000L}; nanosleep(&dl, NULL); }
     /* the data the records point at first (an OST's tier file) */
     for (int i = 0; i < nsync && !rc; i++)
         if (fdatasync(fds[i])) rc = -errno;
@@ -633,6 +637,15 @@ int wal_wait(wal_t *w, uint64_t lsn) {
     pthread_mutex_unlock(&w->lk);
     return rc;
 }
+
+uint64_t wal_last(wal_t *w) {
+    pthread_mutex_lock(&w->lk);
+    uint64_t v = w->next_seq;
+    pthread_mutex_unlock(&w->lk);
+    return v;
+}
+
+uint64_t wal_durable(wal_t *w) { return atomic_load_explicit(&w->durable_pub, memory_order_acquire); }
 
 int wal_ready(wal_t *w, uint64_t lsn) {
     if (atomic_load_explicit(&w->durable_pub, memory_order_acquire) >= lsn) return 1;

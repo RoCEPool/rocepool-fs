@@ -18,7 +18,7 @@ enum {
     RP_STAT = 7, RP_STAT_OK = 8,
     RP_WRITE_AT = 11, RP_WRITE_AT_OK = 12, RP_GET_V = 13, RP_GET_V_OK = 14,
     RP_READ_AT = 15, RP_READ_AT_OK = 16, RP_TRUNCATE = 17, RP_TRUNCATE_OK = 18,
-    RP_MDT = 30, RP_MDT_OK = 31, RP_BATCH = 40, RP_BATCH_OK = 41, RP_VTOKEN = 42, RP_VTOKEN_OK = 43,
+    RP_MDT = 30, RP_MDT_OK = 31, RP_MDT_OK_TX = 32, RP_BATCH = 40, RP_BATCH_OK = 41, RP_VTOKEN = 42, RP_VTOKEN_OK = 43,
     RP_LEASE = 44, RP_LEASE_OK = 45,
     RP_ERROR = 255,
 };
@@ -61,6 +61,12 @@ extern int rp_timeout_ms;       /* per request, default 5000 */
 
 void rp_peer_init(rp_peer_t *p, const char *addr);
 void rp_peer_close_idle(rp_peer_t *p);
+/* the request header's flag byte for this thread's next rp_rpc / rp_rpc_v
+ * (then cleared): RP_RQF_ASYNC, RP_RQF_REPLAY (rocepool_servers.c) */
+#define RP_RQF_ASYNC 1
+#define RP_RQF_REPLAY 2
+extern __thread uint8_t rp_next_flags;
+
 /* value = v1 ++ v2. 0 = reply in *out (maybe RP_ERROR), -EIO/-EFBIG otherwise. */
 int rp_rpc(rp_peer_t *p, uint8_t op, const char *key, const void *v1, size_t n1, const void *v2, size_t n2,
            rp_resp_t *out);

@@ -964,6 +964,15 @@ def main() -> int:
                 s.setdefault("env", {})["ROCEPOOL_MDT_SLOTS"] = str(slots)
         report["mdt_slots"] = slots
         report["durable"] = durable_logs(servers, tier_env, cluster, env)
+        # Lustre-style commit: a file's create/unlink replied to before its
+        # record is durable, the client keeping it until committed and
+        # replaying it after an MDT restart; data (and so a written file's
+        # close) still synced first. ROCEPOOL_MDT_ASYNC=0: every change synced.
+        if report["durable"]["on"] and os.environ.get("ROCEPOOL_MDT_ASYNC", "1") != "0":
+            env["ROCEPOOL_MDT_ASYNC"] = "1"
+            report["durable"]["mdt_async"] = True
+            print("== MDT commit: Lustre-style (creates/unlinks replied first, kept by the clients until committed, "
+                  "replayed after a restart; data synced before its reply)", flush=True)
         # the MDTs' inline file bytes (mdtest-hard's 3901-byte files live in
         # the MDT): bounded, or millions of them outgrow the host -- 15% of
         # the smallest host's RAM over its MDTs; beyond it files go striped
@@ -1061,7 +1070,7 @@ def main() -> int:
                    "ROCEPOOL_OSTS": osts, "ROCEPOOL_ATTR_TTL": str(args.attr_ttl),
                    "ROCEPOOL_IO_THREADS": str(args.intercept_io_threads),
                    **{k: env[k] for k in ("ROCEPOOL_DIRTY_CAP_MIB", "ROCEPOOL_RPC_TIMEOUT_MS", "ROCEPOOL_SCACHE_SLOTS",
-                                           "ROCE_BUFPOOL_MAX", "ROCE_TRANSPORT_LIB") if k in env}}
+                                           "ROCE_BUFPOOL_MAX", "ROCE_TRANSPORT_LIB", "ROCEPOOL_MDT_ASYNC") if k in env}}
         icp_genv = [a for k, v in icp_env.items() for a in ("-genv", k, v)]
         bind_args = []
         if bind != "none":

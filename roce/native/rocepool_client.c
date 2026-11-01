@@ -231,6 +231,8 @@ void rp_resp_free(rp_resp_t *r) {
  * without a copy: the OST RDMA READs it in place; any other segment is
  * copied once into a registered buffer by the transport. The reply lands
  * in a registered buffer the caller keeps until rp_resp_free. */
+__thread uint8_t rp_next_flags;
+
 int rp_rpc_v(rp_peer_t *p, uint8_t op, const char *key, const void *v1, size_t n1, const rp_seg_t *segs, int nsegs,
              rp_resp_t *out) {
     size_t klen = strlen(key), body = 0;
@@ -244,7 +246,9 @@ int rp_rpc_v(rp_peer_t *p, uint8_t op, const char *key, const void *v1, size_t n
     uint32_t kl = (uint32_t)klen, vl = (uint32_t)(n1 + body);
     memcpy(buf, "RCP1", 4);
     buf[4] = op;
-    buf[5] = buf[6] = buf[7] = 0;
+    buf[5] = rp_next_flags;
+    rp_next_flags = 0;
+    buf[6] = buf[7] = 0;
     memcpy(buf + 8, &id, 8);   /* little-endian hosts only (x86_64/aarch64) */
     memcpy(buf + 16, &kl, 4);
     memcpy(buf + 20, &vl, 4);

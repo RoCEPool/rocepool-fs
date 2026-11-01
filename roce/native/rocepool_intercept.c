@@ -94,6 +94,9 @@ static int g_ready;
 static pid_t g_pid;
 /* ROCEPOOL_INTERCEPT_LOG: a one-line summary at exit (tests read it) */
 __attribute__((destructor)) static void intercept_dtor(void) {
+    /* every change this process was replied to durable before it is gone:
+     * its copies of uncommitted ones go with it (ROCEPOOL_MDT_ASYNC) */
+    if (g_ready == 1 && getpid() == g_pid) rpfs_commit();
     if (!g_log || g_ready != 1 || getpid() != g_pid) return;
     uint64_t dr, db, dl, ds, lk, lm;
     rp_direct_stats(&dr, &db, &dl, &ds);
@@ -101,10 +104,13 @@ __attribute__((destructor)) static void intercept_dtor(void) {
     unsigned long long orr = 0, mr = 0;
     for (int i = 0; i < cfg.nost; i++) orr += atomic_load(&g_osts[i].rpcs);
     for (int i = 0; i < cfg.nmdt; i++) mr += atomic_load(&g_mdts[i].rpcs);
+    unsigned long long pend, repl, lost;
+    rpfs_commit_stats(&pend, &repl, &lost);
     fprintf(stderr, "rocepool_intercept[%d]: stats mdt_rpcs=%llu ost_rpcs=%llu direct_reads=%llu direct_bytes=%llu "
-                    "leases=%llu stale_leases=%llu direct_lookups=%llu direct_lookup_misses=%llu\n", (int)getpid(), mr, orr,
+                    "leases=%llu stale_leases=%llu direct_lookups=%llu direct_lookup_misses=%llu "
+                    "mdt_uncommitted=%llu mdt_replayed=%llu mdt_lost=%llu\n", (int)getpid(), mr, orr,
             (unsigned long long)dr, (unsigned long long)db, (unsigned long long)dl, (unsigned long long)ds,
-            (unsigned long long)lk, (unsigned long long)lm);
+            (unsigned long long)lk, (unsigned long long)lm, pend, repl, lost);
 }
 static void load_libc(void) {
 #define LOAD(name) real_##name = sym(#name)
@@ -665,12 +671,18 @@ int rp_intercept_fd_flush(int fd) {
 int fsync(int fd) {
     ENSURE();
     ofile_t *f = fd_get(fd);
-    return f ? seterr(flush_file(f)) : real_fsync(fd);
+    if (!f) return real_fsync(fd);
+    int rc = flush_file(f);
+    if (!rc) rc = rpfs_commit();  /* the namespace changes too (ROCEPOOL_MDT_ASYNC) */
+    return seterr(rc);
 }
 int fdatasync(int fd) {
     ENSURE();
     ofile_t *f = fd_get(fd);
-    return f ? seterr(flush_file(f)) : real_fdatasync(fd);
+    if (!f) return real_fdatasync(fd);
+    int rc = flush_file(f);
+    if (!rc) rc = rpfs_commit();
+    return seterr(rc);
 }
 
 static int do_ftruncate(ofile_t *f, uint64_t size) {

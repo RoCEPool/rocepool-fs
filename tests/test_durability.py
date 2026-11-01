@@ -34,13 +34,14 @@ class _Servers:
     and tiers under `d`; start() again after kill() = a restart on the same
     state."""
 
-    def __init__(self, lib, d, port, nm=2, no=3, durable=True):
+    def __init__(self, lib, d, port, nm=2, no=3, durable=True, env=None):
         self.lib, self.d, self.port, self.nm, self.no, self.durable = lib, d, port, nm, no, durable
+        self.env = dict(env or {})  # the servers' extra environment, from the next start()
         self.p = None
 
     def start(self):
         env = dict(os.environ, ROCE_TRANSPORT_LIB=self.lib, PYTHONPATH=ROOT,
-                   ROCEPOOL_OST_TIER=f"file:{self.d}/ost{{n}}.tier:1", ROCEPOOL_OST_RAM_CACHE_MIB="16")
+                   ROCEPOOL_OST_TIER=f"file:{self.d}/ost{{n}}.tier:1", ROCEPOOL_OST_RAM_CACHE_MIB="16", **self.env)
         if self.durable:
             env.update(ROCEPOOL_OST_LOG=f"{self.d}/ost{{n}}.log", ROCEPOOL_MDT_LOG=f"{self.d}/mdt{{n}}.log")
         self.p = subprocess.Popen([sys.executable, "-u", os.path.join(ROOT, "tests", "fakes", "native_cluster.py"), ROOT,
@@ -66,6 +67,8 @@ class _Servers:
 @unittest.skipUnless(shutil.which("gcc"), "needs gcc")
 class DurableRestartTests(unittest.TestCase):
     port = 24100
+    SERVER_ENV: dict = {}
+    CLIENT_ENV: dict = {}
 
     @classmethod
     def setUpClass(cls):
@@ -76,7 +79,7 @@ class DurableRestartTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        self.srv = _Servers(self.lib, self.tmp, self.port)
+        self.srv = _Servers(self.lib, self.tmp, self.port, env=self.SERVER_ENV)
         self.srv.start()
         self.addCleanup(self.srv.stop)
         self.prefix = os.path.join(self.tmp, "rp")
@@ -84,7 +87,7 @@ class DurableRestartTests(unittest.TestCase):
     def py(self, code: str, env: dict | None = None) -> str:
         e = dict(os.environ, ROCE_TRANSPORT_LIB=self.lib, PYTHONPATH=ROOT, LD_PRELOAD=self.icp,
                  ROCEPOOL_PREFIX=self.prefix, ROCEPOOL_MDTS=self.srv.mdts, ROCEPOOL_OSTS=self.srv.osts,
-                 ROCEPOOL_ATTR_TTL="3", **(env or {}))
+                 ROCEPOOL_ATTR_TTL="3", **self.CLIENT_ENV, **(env or {}))
         out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=e, timeout=300, cwd=self.tmp)
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
         return out.stdout
@@ -128,7 +131,7 @@ for k in range(me, 200, 2):
 os.close(fd)
 """
         e = dict(os.environ, ROCE_TRANSPORT_LIB=self.lib, PYTHONPATH=ROOT, LD_PRELOAD=self.icp,
-                 ROCEPOOL_PREFIX=self.prefix, ROCEPOOL_MDTS=self.srv.mdts, ROCEPOOL_OSTS=self.srv.osts)
+                 ROCEPOOL_PREFIX=self.prefix, ROCEPOOL_MDTS=self.srv.mdts, ROCEPOOL_OSTS=self.srv.osts, **self.CLIENT_ENV)
         ps = [subprocess.Popen([sys.executable, "-c", hard, str(m)], env=e, cwd=self.tmp) for m in (0, 1)]
         self.assertEqual([p.wait(timeout=300) for p in ps], [0, 0])
         sums["d/shared"] = hashlib.sha256(b"".join(bytes([k % 251]) * piece for k in range(200))).hexdigest()
@@ -326,3 +329,139 @@ except OSError as x:
 
     def test_full_tier_is_enospc_when_durable(self):
         self.check(durable=True)
+
+
+
+ASYNC = {"ROCEPOOL_MDT_ASYNC": "1", "ROCEPOOL_MDT_RECOVERY_S": "1"}
+
+
+class DurableRestartAsyncTests(DurableRestartTests):
+    """the same crashes with Lustre-style commit of creates and unlinks:
+    everything a process was replied to is durable once it exited"""
+    port = 24500
+    SERVER_ENV = ASYNC
+    CLIENT_ENV = {"ROCEPOOL_MDT_ASYNC": "1"}
+
+    def test_everything_acknowledged_survives_a_crash(self):
+        super().test_everything_acknowledged_survives_a_crash()
+        st = [_stats(self.lib, a) for a in self.srv.mdts.split(",")]
+        self.assertTrue(all("mdt_async" in x for x in st), st)
+
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class AsyncReplayTests(unittest.TestCase):
+    """An MDT that crashes with creates and unlinks it replied to but had
+    not committed: the clients still alive replay them, the MDT applies
+    them in their original order (transno) at the end of its recovery
+    window. A slow log (ROCEPOOL_TEST_LOG_DELAY_MS) keeps them uncommitted."""
+    port = 24600
+
+    @classmethod
+    def setUpClass(cls):
+        from roce.native.build_lib import ensure_intercept_lib, ensure_softverbs_lib
+        cls.lib = ensure_softverbs_lib()
+        cls.icp = ensure_intercept_lib()
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.srv = _Servers(self.lib, self.tmp, self.port, nm=2, no=2, env=dict(ASYNC, ROCEPOOL_MDT_RECOVERY_S="2"))
+        self.srv.start()
+        self.addCleanup(self.srv.stop)
+        self.prefix = os.path.join(self.tmp, "rp")
+
+    def env(self):
+        return dict(os.environ, ROCE_TRANSPORT_LIB=self.lib, PYTHONPATH=ROOT, LD_PRELOAD=self.icp,
+                    ROCEPOOL_PREFIX=self.prefix, ROCEPOOL_MDTS=self.srv.mdts, ROCEPOOL_OSTS=self.srv.osts,
+                    ROCEPOOL_MDT_ASYNC="1", ROCEPOOL_ATTR_TTL="0", ROCEPOOL_INTERCEPT_LOG="1")
+
+    def client(self, code):
+        """a client process that runs `code` in steps: each "step()" waits
+        for a line on stdin; returns the Popen"""
+        pre = "import os, sys\nP = %r\ndef step(tag):\n    print(tag, flush=True)\n    sys.stdin.readline()\n" % self.prefix
+        return subprocess.Popen([sys.executable, "-c", pre + code], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True, env=self.env(), cwd=self.tmp)
+
+    def crash_and_restart(self):
+        self.srv.kill()
+        self.srv.env.pop("ROCEPOOL_TEST_LOG_DELAY_MS", None)
+        self.srv.start()
+
+    def listing(self, d):
+        code = f"import os; print(sorted(os.listdir({os.path.join(self.prefix, d)!r})))"
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=self.env(), timeout=120)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return eval(out.stdout.strip())
+
+    def test_uncommitted_creates_and_unlinks_are_replayed(self):
+        # the directory and the first files committed, then a slow log
+        c = self.client("""
+os.makedirs(P + "/d")
+for i in range(10): open(P + "/d/old%02d" % i, "w").close()
+os.fsync(os.open(P + "/d/old00", os.O_RDONLY))  # a barrier: all of it durable
+step("ready")
+for i in range(30): open(P + "/d/f%02d" % i, "w").close()
+for i in range(0, 10, 2): os.unlink(P + "/d/old%02d" % i)
+step("changed")
+for i in range(30, 35): open(P + "/d/f%02d" % i, "w").close()  # meets the recovery, replays, goes on
+print(sorted(os.listdir(P + "/d")))
+""")
+        self.assertEqual(c.stdout.readline().strip(), "ready")
+        # from here on nothing commits for 5 s: everything that follows is
+        # replied to and uncommitted when the MDTs die
+        self.srv.kill()
+        self.srv.env["ROCEPOOL_TEST_LOG_DELAY_MS"] = "5000"
+        self.srv.start()
+        c.stdin.write("\n"); c.stdin.flush()
+        self.assertEqual(c.stdout.readline().strip(), "changed")
+        st = [_stats(self.lib, a) for a in self.srv.mdts.split(",")]
+        self.assertGreater(sum(x["mdt_async"]["early_replies"] for x in st), 0, st)
+        self.crash_and_restart()
+        c.stdin.write("\n"); c.stdin.flush()
+        out, err = c.communicate(timeout=180)
+        want = sorted([f"f{i:02d}" for i in range(35)] + [f"old{i:02d}" for i in range(1, 10, 2)])
+        self.assertEqual(eval(out.strip().splitlines()[-1]), want, err[-2000:])
+        self.assertRegex(err, r"mdt_replayed=[1-9]")
+        self.assertIn("mdt_lost=0", err)
+        st = [_stats(self.lib, a) for a in self.srv.mdts.split(",")]
+        self.assertGreater(sum(x["mdt_async"]["replays_applied"] for x in st), 0, st)
+        # the client exited (its barrier): all of it durable on its own now
+        self.crash_and_restart()
+        self.assertEqual(self.listing("d"), want)
+
+    def test_two_clients_changes_replay_in_their_order(self):
+        a = self.client("""
+os.makedirs(P + "/d")
+os.fsync(os.open(P + "/d", os.O_RDONLY))
+step("dir")
+open(P + "/d/x", "w").close()
+open(P + "/d/z", "w").close()
+step("a")
+os.stat(P + "/d")       # meets the recovery: replays
+print(sorted(os.listdir(P + "/d")))
+""")
+        self.assertEqual(a.stdout.readline().strip(), "dir")
+        self.srv.kill()
+        self.srv.env["ROCEPOOL_TEST_LOG_DELAY_MS"] = "5000"
+        self.srv.start()
+        a.stdin.write("\n"); a.stdin.flush()
+        self.assertEqual(a.stdout.readline().strip(), "a")
+        b = self.client("""
+os.unlink(P + "/d/x")   # after A's create of x
+open(P + "/d/y", "w").close()
+os.unlink(P + "/d/z")
+open(P + "/d/z", "w").close()   # z again, after A's
+step("b")
+os.stat(P + "/d")
+print(sorted(os.listdir(P + "/d")))
+""")
+        self.assertEqual(b.stdout.readline().strip(), "b")
+        self.crash_and_restart()
+        for p in (a, b):
+            p.stdin.write("\n"); p.stdin.flush()
+        outs = [p.communicate(timeout=180) for p in (a, b)]
+        for out, err in outs:
+            self.assertEqual(eval(out.strip().splitlines()[-1]), ["y", "z"], err[-2000:])
+            self.assertIn("mdt_lost=0", err)
+        self.crash_and_restart()
+        self.assertEqual(self.listing("d"), ["y", "z"])

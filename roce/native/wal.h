@@ -50,6 +50,11 @@ uint64_t wal_append(wal_t *w, const void *a, size_t alen, const void *b, size_t 
  * (a failed write or sync fails every later wait too: the log is stuck) */
 int wal_wait(wal_t *w, uint64_t lsn);
 
+/* the LSN of the last record appended (0: none yet in this life) */
+uint64_t wal_last(wal_t *w);
+/* records 1..wal_durable() are on the drive */
+uint64_t wal_durable(wal_t *w);
+
 /* without blocking: 1 once everything up to lsn is durable, 0 not yet,
  * -errno when the log failed (it never will be) */
 int wal_ready(wal_t *w, uint64_t lsn);

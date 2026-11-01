@@ -53,11 +53,15 @@ enum {
     OP_LEASE = 44, OP_LEASE_OK = 45,
     OP_STATS = 50, OP_STATS_OK = 51,
     OP_MDT = 30, OP_MDT_OK = 31, OP_ERROR = 255,
+    /* an MDT reply to a request flagged RQF_ASYNC: u64 LE epoch, u64 LE
+     * transno, u64 LE committed, then OP_MDT_OK's value (see mdt_async) */
+    OP_MDT_OK_TX = 32,
 };
 #define HDR 24
 
 typedef struct {
     uint8_t op;
+    uint8_t flags;   /* request header byte 5: RQF_* */
     uint64_t req_id;
     const char *key;
     uint32_t key_len;
@@ -75,6 +79,7 @@ static void wr_u64be(uint8_t *p, uint64_t v) { for (int i = 0; i < 8; i++) p[i] 
 static int frame_decode(const uint8_t *buf, size_t len, frame_t *f) {
     if (len < HDR || memcmp(buf, "RCP1", 4) != 0) return -1;
     f->op = buf[4];
+    f->flags = buf[5];
     f->req_id = rd_u64le(buf + 8);
     f->key_len = rd_u32le(buf + 16);
     f->val_len = rd_u32le(buf + 20);
@@ -1400,6 +1405,22 @@ typedef struct {
     /* durability (ROCEPOOL_MDT_LOG): every change a reply acknowledges --
      * the request itself -- in a log, synced before the reply */
     wal_t *wal;
+    /* Asynchronous commit, as Lustre's MDT does it (ROCEPOOL_MDT_ASYNC=1,
+     * the client opting in per request): a file's create or unlink is
+     * replied to before its log record is durable; the reply carries the
+     * transno (its LSN in this log's life) and how far the log is
+     * committed, and the client keeps the request until it is. After a
+     * restart the MDT first collects what clients replay (a recovery
+     * window), applies it in transno order, then serves. */
+    uint64_t epoch;                 /* this life's id, in the log's marker record */
+    struct { uint64_t epoch, last; } lives[64];  /* earlier lives in the log, their last transno */
+    int nlives;
+    uint64_t replay_epoch, replay_seq;  /* while replaying the log */
+    atomic_int recovering;
+    pthread_mutex_t rec_lk;
+    struct mdt_replay { uint64_t epoch, transno; char *key; uint32_t kl; uint8_t *val; uint32_t vl; } *rq;
+    size_t nrq, crq;
+    atomic_ullong async_replies, replays_applied, replays_skipped, replays_late;
     atomic_ullong log_fail;
 } mdt_store;
 
@@ -2145,10 +2166,27 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
 }
 
 /* replay one logged MDT request (the same handler, with no log attached) */
+#define MDT_MARKER 0xFFFFFFFFu  /* key length of a life's first record: u64 epoch */
+static void mdt_life_end(mdt_store *m) {
+    if (!m->replay_seq) return;
+    if (m->nlives == 64) { memmove(m->lives, m->lives + 1, 63 * sizeof(m->lives[0])); m->nlives--; }
+    m->lives[m->nlives].epoch = m->replay_epoch;
+    m->lives[m->nlives].last = m->replay_seq;
+    m->nlives++;
+}
+
 static int mdt_replay_rec(void *user, const uint8_t *r, size_t len) {
     mdt_store *m = user;
     if (len < 8) return 1;
     size_t kl = rd_u32le(r), vl = rd_u32le(r + 4);
+    if (kl == MDT_MARKER) {  /* a new life of the log starts here */
+        if (vl != 8 || len != 16) return 1;
+        mdt_life_end(m);
+        m->replay_epoch = rd_u64le(r + 8);
+        m->replay_seq = 1;  /* the marker is its life's record 1 */
+        return 0;
+    }
+    m->replay_seq++;
     if (8 + kl + vl != len || vl < 1) return 1;
     frame_t f = {.op = OP_MDT, .req_id = 0, .key = (const char *)r + 8, .key_len = (uint32_t)kl,
                  .val = r + 8 + kl, .val_len = (uint32_t)vl};
@@ -2156,6 +2194,117 @@ static int mdt_replay_rec(void *user, const uint8_t *r, size_t len) {
     uint8_t *out = mdt_handle(m, &f, &ol);
     roce_reply_free(out);
     return 0;
+}
+
+static int rq_cmp(const void *a, const void *b) {
+    const struct mdt_replay *x = a, *y = b;
+    if (x->epoch != y->epoch) return 0;  /* lives sort by their order in the log: see mdt_recovery_main */
+    return x->transno < y->transno ? -1 : x->transno > y->transno;
+}
+
+static int life_index(const mdt_store *m, uint64_t epoch) {
+    for (int i = 0; i < m->nlives; i++) if (m->lives[i].epoch == epoch) return i;
+    return -1;
+}
+
+/* the recovery window's end: what clients replayed, in transno order within
+ * each earlier life (lives in their log order); a change the log has
+ * already (transno <= that life's last) is skipped */
+static void *mdt_recovery_main(void *arg) {
+    mdt_store *m = arg;
+    pthread_setname_np(pthread_self(), "mdt-recovery");
+    const char *w = getenv("ROCEPOOL_MDT_RECOVERY_S");
+    double win = w && *w ? atof(w) : 10.0;
+    struct timespec ts = {(time_t)win, (long)((win - (double)(time_t)win) * 1e9)};
+    nanosleep(&ts, NULL);
+    pthread_mutex_lock(&m->rec_lk);
+    size_t n = m->nrq;
+    struct mdt_replay *rq = m->rq;
+    /* stable order: life by log order, then transno */
+    for (size_t i = 1; i < n; i++) {
+        struct mdt_replay t = rq[i];
+        int li = life_index(m, t.epoch);
+        size_t j = i;
+        while (j > 0) {
+            int lj = life_index(m, rq[j - 1].epoch);
+            if (lj < li || (lj == li && rq[j - 1].transno <= t.transno)) break;
+            rq[j] = rq[j - 1];
+            j--;
+        }
+        rq[j] = t;
+    }
+    (void)rq_cmp;
+    uint64_t applied = 0, skipped = 0;
+    for (size_t i = 0; i < n; i++) {
+        int li = life_index(m, rq[i].epoch);
+        if (li < 0 || rq[i].transno <= m->lives[li].last) { skipped++; goto next; }
+        frame_t f = {.op = OP_MDT, .req_id = 0, .key = rq[i].key, .key_len = rq[i].kl, .val = rq[i].val,
+                     .val_len = rq[i].vl};
+        size_t ol = 0;
+        tl_wal_lsn = 0;
+        roce_reply_free(mdt_handle(m, &f, &ol));  /* logged again, in this life */
+        applied++;
+    next:
+        free(rq[i].key);
+        free(rq[i].val);
+    }
+    free(m->rq);
+    m->rq = NULL;
+    m->nrq = m->crq = 0;
+    if (m->wal) wal_wait(m->wal, wal_last(m->wal));
+    atomic_fetch_add(&m->replays_applied, applied);
+    atomic_fetch_add(&m->replays_skipped, skipped);
+    atomic_store(&m->recovering, 0);
+    pthread_mutex_unlock(&m->rec_lk);
+    fprintf(stderr, "rocepool MDT: recovery: %llu replayed changes applied, %llu the log had already\n",
+            (unsigned long long)applied, (unsigned long long)skipped);
+    return NULL;
+}
+
+static void mdt_recovery_start(mdt_store *m) {
+    atomic_store(&m->recovering, 1);
+    pthread_t t;
+    if (pthread_create(&t, NULL, mdt_recovery_main, m)) { atomic_store(&m->recovering, 0); return; }
+    pthread_detach(t);
+    const char *w = getenv("ROCEPOOL_MDT_RECOVERY_S");
+    fprintf(stderr, "rocepool MDT: recovery: %s s for clients to replay their uncommitted changes\n",
+            w && *w ? w : "10");
+}
+
+/* a request a client replays during recovery: u64 LE epoch, u64 LE transno,
+ * the request's own value */
+static uint8_t *mdt_replay_in(mdt_store *m, const frame_t *f, size_t *out_len) {
+    if (f->val_len < 17) return frame_error(f, "MDT_INTERNAL", "short replay", out_len);
+    pthread_mutex_lock(&m->rec_lk);
+    if (!atomic_load(&m->recovering)) {
+        pthread_mutex_unlock(&m->rec_lk);
+        atomic_fetch_add(&m->replays_late, 1);
+        return frame_error(f, "REPLAY_LATE", "recovery is over", out_len);
+    }
+    if (m->nrq == m->crq) {
+        size_t nc = m->crq ? 2 * m->crq : 1024;
+        struct mdt_replay *nr = realloc(m->rq, nc * sizeof(*nr));
+        if (!nr) { pthread_mutex_unlock(&m->rec_lk); return frame_error(f, "MDT_INTERNAL", "out of memory", out_len); }
+        m->rq = nr;
+        m->crq = nc;
+    }
+    struct mdt_replay *r = &m->rq[m->nrq];
+    r->epoch = rd_u64le(f->val);
+    r->transno = rd_u64le(f->val + 8);
+    r->kl = f->key_len;
+    r->vl = f->val_len - 16;
+    r->key = malloc(r->kl ? r->kl : 1);
+    r->val = malloc(r->vl);
+    if (!r->key || !r->val) {
+        free(r->key); free(r->val);
+        pthread_mutex_unlock(&m->rec_lk);
+        return frame_error(f, "MDT_INTERNAL", "out of memory", out_len);
+    }
+    memcpy(r->key, f->key, r->kl);
+    memcpy(r->val, f->val + 16, r->vl);
+    m->nrq++;
+    pthread_mutex_unlock(&m->rec_lk);
+    return frame_simple(OP_MDT_OK, f, NULL, 0, out_len);
 }
 
 static int mdt_open_log(mdt_store *m, const char *spec) {
@@ -2169,9 +2318,33 @@ static int mdt_open_log(mdt_store *m, const char *spec) {
     if (recs < 0) { fprintf(stderr, "rocepool MDT: replaying %s: %s\n", path, strerror((int)-recs)); return -1; }
     if (recs > 0)
         fprintf(stderr, "rocepool MDT: %ld log records replayed in %.1f s\n", recs, (double)(mono_ns() - t0) / 1e9);
+    mdt_life_end(m);
     m->wal = wal_open(path, err, sizeof(err));
     if (!m->wal) { fprintf(stderr, "rocepool MDT: %s\n", err); return -1; }
-    fprintf(stderr, "rocepool MDT: durable: log %s, changes synced before the reply\n", path);
+    /* this life's marker: record 1, before any change */
+    uint64_t ep = 0;
+    int ufd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+    if (ufd < 0 || read(ufd, &ep, sizeof(ep)) != sizeof(ep)) ep = mono_ns() ^ ((uint64_t)getpid() << 32);
+    if (ufd >= 0) close(ufd);
+    if (!ep) ep = 1;
+    m->epoch = ep;
+    uint8_t mk[16];
+    wr_u32le(mk, MDT_MARKER);
+    wr_u32le(mk + 4, 8);
+    for (int i = 0; i < 8; i++) mk[8 + i] = (uint8_t)(ep >> (8 * i));
+    uint64_t l = wal_append(m->wal, mk, 16, NULL, 0, NULL, 0);
+    if (l != 1 || wal_wait(m->wal, l)) { fprintf(stderr, "rocepool MDT: writing the log's marker failed\n"); return -1; }
+    pthread_mutex_init(&m->rec_lk, NULL);
+    const char *as = getenv("ROCEPOOL_MDT_ASYNC");
+    int async = as && !strcmp(as, "1");
+    fprintf(stderr, "rocepool MDT: durable: log %s, %s\n", path,
+            async ? "creates/unlinks replied before their commit (clients keep them until it), the rest synced first"
+                  : "changes synced before the reply");
+    /* a restart (the log has an earlier life): clients may hold changes it
+     * never committed -- whatever the log itself has -- so they get time to
+     * replay them. (Was: only when an earlier life had records past its
+     * marker; one whose every change was still uncommitted skipped it.) */
+    if (async && m->nlives > 0) mdt_recovery_start(m);
     return 0;
 }
 
@@ -2304,6 +2477,14 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
                             (unsigned long long)atomic_load(&n->log_waited));
         }
     }
+    if (!rc && n->mdt)  /* asynchronous commit (mdt_store) */
+        rc = buf_printf(&b, ", \"mdt_async\": {\"early_replies\": %llu, \"replays_applied\": %llu, "
+                        "\"replays_skipped\": %llu, \"replays_late\": %llu, \"recovering\": %s}",
+                        (unsigned long long)atomic_load(&n->mdt->async_replies),
+                        (unsigned long long)atomic_load(&n->mdt->replays_applied),
+                        (unsigned long long)atomic_load(&n->mdt->replays_skipped),
+                        (unsigned long long)atomic_load(&n->mdt->replays_late),
+                        atomic_load(&n->mdt->recovering) ? "true" : "false");
     if (!rc && n->server) {  /* where a request's time goes outside the handler */
         char tx[2048];
         if (roce_server_stats_json(n->server, tx, sizeof(tx)) > 0) rc = buf_printf(&b, ", \"transport\": {%s}", tx);
@@ -2326,6 +2507,31 @@ static int defer_allowed(void) {
     return v;
 }
 
+#define RQF_ASYNC 1   /* the client keeps a change until committed: create/unlink may be replied to first */
+#define RQF_REPLAY 2  /* a change the client kept, replayed after the MDT restarted */
+#define MDT_OP_COMMIT 20  /* a barrier: replied to once everything appended so far is durable */
+
+/* an MDT_OK reply as OP_MDT_OK_TX: epoch, transno, committed, then its value */
+static uint8_t *mdt_tx_wrap(uint8_t *out, size_t *resp_len, uint64_t epoch, uint64_t transno, uint64_t committed) {
+    uint32_t kl = rd_u32le(out + 16), vl = rd_u32le(out + 20);
+    size_t total = HDR + kl + 24 + vl;
+    uint8_t *b = roce_reply_alloc(total);
+    if (!b) return out;  /* stays a plain MDT_OK: the client then treats the change as synced */
+    memcpy(b, out, HDR + kl);
+    b[4] = OP_MDT_OK_TX;
+    wr_u32le(b + 20, vl + 24);
+    uint8_t *v = b + HDR + kl;
+    for (int i = 0; i < 8; i++) {
+        v[i] = (uint8_t)(epoch >> (8 * i));
+        v[8 + i] = (uint8_t)(transno >> (8 * i));
+        v[16 + i] = (uint8_t)(committed >> (8 * i));
+    }
+    memcpy(v + 24, out + HDR + kl, vl);
+    roce_reply_free(out);
+    *resp_len = total;
+    return b;
+}
+
 static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_len, void *user) {
     struct rocepool_native *n = user;
     frame_t f;
@@ -2341,7 +2547,45 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
     if (slow_ms > 0 && n->kind == ROCEPOOL_NATIVE_OST && (f.op == OP_PUT || f.op == OP_WRITE_AT)) usleep(slow_ms * 1000);
     tl_wal_lsn = 0;
     tl_wal = NULL;
-    uint8_t *out = n->kind == ROCEPOOL_NATIVE_OST ? ost_handle(n->ost, &f, resp_len) : mdt_handle(n->mdt, &f, resp_len);
+    mdt_store *md = n->kind == ROCEPOOL_NATIVE_MDT ? n->mdt : NULL;
+    uint8_t mop = f.op == OP_MDT && f.val_len ? f.val[0] : 0;
+    uint8_t *out;
+    if (md && atomic_load(&md->recovering)) {
+        /* after a restart: replays are collected, everything else waits */
+        out = f.flags & RQF_REPLAY ? mdt_replay_in(md, &f, resp_len)
+                                   : frame_error(&f, "RECOVERING", "the MDT is collecting replayed changes", resp_len);
+        goto done;
+    }
+    if (md && (f.flags & RQF_REPLAY)) {
+        out = mdt_replay_in(md, &f, resp_len);  /* too late: refused */
+        goto done;
+    }
+    if (md && mop == MDT_OP_COMMIT) {
+        out = frame_simple(OP_MDT_OK, &f, NULL, 0, resp_len);
+        if (md->wal && out) {
+            tl_wal = md->wal;
+            tl_wal_lsn = wal_last(md->wal);
+        }
+    } else {
+        out = n->kind == ROCEPOOL_NATIVE_OST ? ost_handle(n->ost, &f, resp_len) : mdt_handle(n->mdt, &f, resp_len);
+    }
+    if (md && md->wal && (f.flags & RQF_ASYNC) && out && out[4] == OP_MDT_OK) {
+        /* the client keeps what it is told is not committed yet. A file's
+         * create or unlink is replied to now; anything else (data written
+         * into the entry, sizes, directories, the barrier) only once
+         * durable -- its reply says committed through its own transno */
+        uint64_t lsn = tl_wal_lsn == UINT64_MAX ? 0 : tl_wal_lsn;
+        int early = lsn && (mop == 2 || mop == 4) && f.val_len >= 2 && f.val[1] == 0;
+        uint64_t committed = wal_durable(md->wal);
+        if (early) {
+            tl_wal_lsn = 0;
+            wal_kick(md->wal);
+            atomic_fetch_add(&md->async_replies, 1);
+        } else if (lsn > committed) {
+            committed = lsn;  /* the reply leaves once this is durable */
+        }
+        out = mdt_tx_wrap(out, resp_len, md->epoch, lsn, committed);
+    }
     if (tl_wal_lsn) {  /* the change is acknowledged only once it is durable */
         int wrc = 0;
         /* the transport holds the reply until the log's commit covers it,
@@ -2361,6 +2605,7 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
         }
         tl_wal_lsn = 0;
     }
+done:
     atomic_fetch_add(&n->cpu_ns, thread_cpu_ns() - c0);
     atomic_fetch_add(&n->wall_ns, mono_ns() - w0);
     atomic_fetch_add(&n->reqs, 1);

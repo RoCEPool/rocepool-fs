@@ -87,6 +87,212 @@ rpfs_cfg_t cfg = {.attr_ttl = 3.0, .threads = 16, .io_threads = 32, .stripe_size
 
 peer_t g_mdts[MAX_PEERS], g_osts[MAX_PEERS];
 
+/* ---------------------------------------------------------------- MDT commit
+ * As Lustre's clients do: with ROCEPOOL_MDT_ASYNC=1 every MDT request is
+ * flagged RP_RQF_ASYNC and the MDT answers RP_MDT_OK_TX -- its epoch (one
+ * per server life), the change's transno, how far its log is committed.
+ * A file's create or unlink is answered before its log record is durable;
+ * this process keeps a copy of each such request until a later reply
+ * says it is committed. When the MDT restarts it first spends a recovery
+ * window collecting what clients replay (it answers RECOVERING to
+ * everything else); this process then sends what it kept, in transno
+ * order, and retries. Data never goes this way: a write into an entry, a
+ * size, a spill -- and so a close of a file that was written -- is
+ * replied to only once durable, and the log's order makes the file's
+ * create durable with it. rpfs_commit (fsync, rmdir, exit) is a barrier. */
+typedef struct { uint64_t epoch, transno; char *key; uint8_t *val; uint32_t vl; int replayed; } pend_t;
+static struct mdt_track {
+    pthread_mutex_t lk;
+    uint64_t epoch;
+    pend_t *p;
+    size_t n, cap;
+} g_mt[MAX_PEERS];
+static pthread_once_t g_mt_once = PTHREAD_ONCE_INIT;
+static void *mt_pinger(void *arg);
+static void mt_init(void) {
+    for (int i = 0; i < MAX_PEERS; i++) pthread_mutex_init(&g_mt[i].lk, NULL);
+    /* like Lustre's pinger: an MDT this process has changes pending on
+     * hears from it twice a second -- a barrier, which commits them, or
+     * after a restart meets the recovery and replays them, whether or not
+     * the program sends that MDT anything (the window is 10 s) */
+    pthread_t t;
+    pthread_attr_t at;
+    pthread_attr_init(&at);
+    pthread_attr_setdetachstate(&at, PTHREAD_CREATE_DETACHED);
+    if (pthread_create(&t, &at, mt_pinger, NULL)) fprintf(stderr, "rocepool: no MDT pinger thread\n");
+    pthread_attr_destroy(&at);
+}
+static _Atomic unsigned long long g_mt_lost, g_mt_replayed;
+
+static void pend_free(pend_t *e) { free(e->key); free(e->val); }
+
+/* a TX reply: forget what it says is committed, keep this change if not */
+static void mt_note(struct mdt_track *t, const uint8_t *v, const char *key, const void *v1, size_t n1,
+                    const void *v2, size_t n2) {
+    uint64_t ep, tn, cm;
+    memcpy(&ep, v, 8);
+    memcpy(&tn, v + 8, 8);
+    memcpy(&cm, v + 16, 8);
+    pthread_mutex_lock(&t->lk);
+    size_t k = 0;
+    for (size_t i = 0; i < t->n; i++) {
+        pend_t *e = &t->p[i];
+        int drop = e->epoch == ep ? e->transno <= cm : 1;  /* an earlier life: replayed, or lost */
+        if (drop && e->epoch != ep && !e->replayed) {
+            static _Atomic int said;
+            if (atomic_fetch_add(&said, 1) < 5)
+                fprintf(stderr, "rocepool: an MDT restarted and ended its recovery before this process replayed "
+                                "to it: an uncommitted change is lost\n");
+            atomic_fetch_add(&g_mt_lost, 1);
+        }
+        if (drop) pend_free(e);
+        else t->p[k++] = *e;
+    }
+    t->n = k;
+    t->epoch = ep;
+    if (tn > cm) {
+        if (t->n == t->cap) {
+            size_t nc = t->cap ? 2 * t->cap : 256;
+            pend_t *np = realloc(t->p, nc * sizeof(*np));
+            if (!np) die("out of memory");
+            t->p = np;
+            t->cap = nc;
+        }
+        pend_t *e = &t->p[t->n++];
+        e->epoch = ep;
+        e->transno = tn;
+        e->key = xstrdup(key);
+        e->vl = (uint32_t)(n1 + n2);
+        e->val = xmalloc(e->vl ? e->vl : 1);
+        if (n1) memcpy(e->val, v1, n1);
+        if (n2) memcpy(e->val + n1, v2, n2);
+        e->replayed = 0;
+    }
+    pthread_mutex_unlock(&t->lk);
+}
+
+static int pend_cmp(const void *a, const void *b) {
+    const pend_t *x = a, *y = b;
+    return x->transno < y->transno ? -1 : x->transno > y->transno;
+}
+
+/* the MDT is recovering: send it what this process kept, in transno order */
+static void mt_replay(peer_t *p, struct mdt_track *t) {
+    pthread_mutex_lock(&t->lk);
+    qsort(t->p, t->n, sizeof(pend_t), pend_cmp);
+    for (size_t i = 0; i < t->n; i++) {
+        pend_t *e = &t->p[i];
+        if (e->replayed) continue;
+        uint8_t *buf = xmalloc(16 + e->vl);
+        memcpy(buf, &e->epoch, 8);
+        memcpy(buf + 8, &e->transno, 8);
+        memcpy(buf + 16, e->val, e->vl);
+        resp_t r;
+        rp_next_flags = RP_RQF_REPLAY;
+        int rc = rpc(p, OP_MDT, e->key, buf, 16 + e->vl, NULL, 0, &r);
+        free(buf);
+        if (rc) break;  /* not reachable now: again with the next RECOVERING */
+        if (r.op == OP_MDT_OK) { e->replayed = 1; atomic_fetch_add(&g_mt_replayed, 1); }
+        else if (r.op == OP_ERROR && !strcmp(r.code, "REPLAY_LATE")) e->replayed = 1;  /* lost: counted at drop */
+        resp_free(&r);
+    }
+    pthread_mutex_unlock(&t->lk);
+}
+
+/* every MDT request: plain, or (mdt_async) as described above. once: a
+ * RECOVERING MDT gets this process's replays and the call returns -EAGAIN
+ * instead of waiting the window out (the pinger: every MDT must hear in time) */
+static int mdt_rpc_x(peer_t *p, const char *key, const void *v1, size_t n1, const void *v2, size_t n2, resp_t *out,
+                     int once);
+static int mdt_rpc(peer_t *p, const char *key, const void *v1, size_t n1, const void *v2, size_t n2, resp_t *out) {
+    return mdt_rpc_x(p, key, v1, n1, v2, n2, out, 0);
+}
+static int mdt_rpc_x(peer_t *p, const char *key, const void *v1, size_t n1, const void *v2, size_t n2, resp_t *out,
+                     int once) {
+    if (!cfg.mdt_async) return rpc(p, OP_MDT, key, v1, n1, v2, n2, out);
+    pthread_once(&g_mt_once, mt_init);
+    struct mdt_track *t = &g_mt[p - g_mdts];
+    double until = 0;
+    for (;;) {
+        rp_next_flags = RP_RQF_ASYNC;
+        int rc = rpc(p, OP_MDT, key, v1, n1, v2, n2, out);
+        if (rc) return rc;
+        if (out->op == RP_MDT_OK_TX && out->vlen >= 24) {
+            mt_note(t, out->val, key, v1, n1, v2, n2);
+            out->op = OP_MDT_OK;
+            out->val += 24;
+            out->vlen -= 24;
+            return 0;
+        }
+        if (out->op != OP_ERROR || strcmp(out->code, "RECOVERING")) return 0;
+        resp_free(out);
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        double now = (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+        if (!until) until = now + 600;  /* the MDT's window is ROCEPOOL_MDT_RECOVERY_S (10 s) */
+        else if (now > until) return -EIO;
+        mt_replay(p, t);
+        if (once) return -EAGAIN;
+        struct timespec nap = {0, 20 * 1000000L};
+        nanosleep(&nap, NULL);
+    }
+}
+
+static int mt_barrier(int i, int once) {
+    uint8_t req[1] = {20};  /* MDT_OP_COMMIT */
+    resp_t r;
+    int rc = mdt_rpc_x(&g_mdts[i], "", req, 1, NULL, 0, &r, once);
+    if (!rc) {
+        if (r.op != OP_MDT_OK) rc = -EIO;
+        resp_free(&r);
+    }
+    return rc;
+}
+
+static void *mt_pinger(void *arg) {
+    (void)arg;
+    pthread_setname_np(pthread_self(), "rp-mdt-ping");
+    for (;;) {
+        struct timespec nap = {0, 500 * 1000000L};
+        nanosleep(&nap, NULL);
+        for (int i = 0; i < cfg.nmdt; i++) {
+            pthread_mutex_lock(&g_mt[i].lk);
+            size_t n = g_mt[i].n;
+            pthread_mutex_unlock(&g_mt[i].lk);
+            if (n) mt_barrier(i, 1);
+        }
+    }
+    return NULL;
+}
+
+int rpfs_commit(void) {
+    if (!cfg.mdt_async) return 0;
+    pthread_once(&g_mt_once, mt_init);
+    int err = 0;
+    for (int i = 0; i < cfg.nmdt; i++) {
+        pthread_mutex_lock(&g_mt[i].lk);
+        size_t n = g_mt[i].n;
+        pthread_mutex_unlock(&g_mt[i].lk);
+        if (!n) continue;
+        int rc = mt_barrier(i, 0);
+        if (rc && !err) err = rc;
+    }
+    return err;
+}
+
+void rpfs_commit_stats(unsigned long long *pending, unsigned long long *replayed, unsigned long long *lost) {
+    pthread_once(&g_mt_once, mt_init);
+    unsigned long long n = 0;
+    for (int i = 0; i < cfg.nmdt; i++) {
+        pthread_mutex_lock(&g_mt[i].lk);
+        n += g_mt[i].n;
+        pthread_mutex_unlock(&g_mt[i].lk);
+    }
+    *pending = n;
+    *replayed = atomic_load(&g_mt_replayed);
+    *lost = atomic_load(&g_mt_lost);
+}
+
 /* ---------------------------------------------------------------- MDT ops
  * fs/mdt_wire.py. The entry owning `path` lives on the MDT chosen by
  * hashing its PARENT (fs/namespace_shard.py). */
@@ -159,7 +365,7 @@ static int mdt_errno(const char *code) {
 
 static int mdt_entry_call(const char *path, const uint8_t *req, size_t rlen, attr_t *a) {
     resp_t r;
-    int rc = rpc(mdt_for(path), OP_MDT, path, req, rlen, NULL, 0, &r);
+    int rc = mdt_rpc(mdt_for(path), path, req, rlen, NULL, 0, &r);
     if (rc) return rc;
     if (r.op == OP_MDT_OK) rc = decode_entry(r.val, r.vlen, a) ? 0 : -EIO;
     else rc = r.op == OP_ERROR ? mdt_errno(r.code) : -EIO;
@@ -194,7 +400,7 @@ static mdt_tab_t *mdt_table(peer_t *p) {
     if (!t->state) {
         uint8_t req[1] = {12};
         resp_t r;
-        int rc = rpc(p, OP_MDT, "", req, 1, NULL, 0, &r);
+        int rc = mdt_rpc(p, "", req, 1, NULL, 0, &r);
         if (rc == 0 && r.op == OP_MDT_OK && r.vlen >= 20) {
             memcpy(&t->addr, r.val, 8);
             memcpy(&t->nslots, r.val + 8, 8);
@@ -303,7 +509,7 @@ static int mdt_write_inline(const char *path, uint64_t off, const uint8_t *data,
     uint8_t hdr[9] = {7};
     memcpy(hdr + 1, &off, 8);
     resp_t r;
-    int rc = rpc(mdt_for(path), OP_MDT, path, hdr, 9, data, len, &r);
+    int rc = mdt_rpc(mdt_for(path), path, hdr, 9, data, len, &r);
     if (rc) return rc;
     if (r.op == OP_MDT_OK) rc = decode_entry(r.val, r.vlen, a) ? 0 : -EIO;
     else rc = r.op == OP_ERROR ? mdt_errno(r.code) : -EIO;
@@ -318,7 +524,7 @@ int mdt_inline_read(const char *path, int freeze, uint64_t off, uint32_t len, at
     uint8_t req[13] = {(uint8_t)(freeze ? 9 : 8)};
     memcpy(req + 1, &off, 8);
     memcpy(req + 9, &len, 4);
-    int rc = rpc(mdt_for(path), OP_MDT, path, req, freeze ? 1 : 13, NULL, 0, out);
+    int rc = mdt_rpc(mdt_for(path), path, req, freeze ? 1 : 13, NULL, 0, out);
     if (rc) return rc;
     if (out->op != OP_MDT_OK || out->vlen < 8) {
         rc = out->op == OP_ERROR ? mdt_errno(out->code) : -EIO;
@@ -351,7 +557,7 @@ static int mdt_unlink(const char *path, int is_dir, attr_t *a) {
 static int mdt_child_count_one(peer_t *p, const char *dir, uint64_t *n) {
     uint8_t req[1] = {6};
     resp_t r;
-    int rc = rpc(p, OP_MDT, dir, req, 1, NULL, 0, &r);
+    int rc = mdt_rpc(p, dir, req, 1, NULL, 0, &r);
     if (rc) return rc;
     if (r.op == OP_MDT_OK && r.vlen >= 8) { memcpy(n, r.val, 8); rc = 0; }
     else rc = r.op == OP_ERROR ? mdt_errno(r.code) : -EIO;
@@ -377,7 +583,7 @@ static int mdt_readdir_one(peer_t *p, const char *dir, dirent_t **out, size_t *c
         req[6] = (uint8_t)(last_len >> 8);
         memcpy(req + 7, last, last_len);
         resp_t r;
-        int rc = rpc(p, OP_MDT, dir, req, 7 + last_len, NULL, 0, &r);
+        int rc = mdt_rpc(p, dir, req, 7 + last_len, NULL, 0, &r);
         if (rc == 0 && (r.op != OP_MDT_OK || r.vlen < 4)) {
             rc = r.op == OP_ERROR ? mdt_errno(r.code) : -EIO;
             resp_free(&r);
@@ -699,7 +905,7 @@ static int mdt_readdir_at_one(peer_t *p, const char *dir, uint64_t at, uint32_t 
     memcpy(req + 1, &budget, 4);
     memcpy(req + 5, &at, 8);
     resp_t r;
-    int rc = rpc(p, OP_MDT, dir, req, sizeof(req), NULL, 0, &r);
+    int rc = mdt_rpc(p, dir, req, sizeof(req), NULL, 0, &r);
     if (rc) return rc;
     if (r.op != OP_MDT_OK || r.vlen < 12) {
         rc = r.op == OP_ERROR && !strcmp(r.code, "UNSUPPORTED_OP") ? -EOPNOTSUPP
@@ -868,8 +1074,11 @@ int fs_create_file_excl(const char *path, int exclusive, attr_t *a) {
 int fs_create_file(const char *path, attr_t *a) { return fs_create_file_excl(path, 0, a); }
 
 int fs_rmdir(const char *path) {
+    /* its children's unlinks (on every MDT) durable before the directory's */
+    int rc = rpfs_commit();
+    if (rc) return rc;
     attr_t a;
-    int rc = fs_getattr(path, &a);
+    rc = fs_getattr(path, &a);
     if (rc) return rc;
     if (!a.is_dir) return -ENOTDIR;
     uint64_t n = 0;
@@ -2066,6 +2275,8 @@ int rpfs_init(void) {
     if (dr && (!strcmp(dr, "0") || !strcmp(dr, "off"))) cfg.direct_read = 0;
     const char *dl = getenv("ROCEPOOL_DIRECT_LOOKUP");
     if (dl && *dl) g_direct_lookup = strcmp(dl, "0") && strcmp(dl, "off");
+    const char *ma = getenv("ROCEPOOL_MDT_ASYNC");
+    if (ma && !strcmp(ma, "1")) cfg.mdt_async = 1;
     const char *ss = getenv("ROCEPOOL_SCACHE_SLOTS");
     if (ss && atoi(ss) > 0) cfg.scache_slots = atoi(ss);
     if (cfg.nmdt < 1 || cfg.nost < 1) return -EINVAL;
