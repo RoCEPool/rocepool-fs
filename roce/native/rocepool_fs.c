@@ -1667,6 +1667,174 @@ int fs_read_direct(const char *path, const attr_t *a, uint64_t off, size_t len, 
     return rc;
 }
 
+/* ---- stride readahead (Lustre's "stride read-ahead") ----
+ * A reader that steps through a file in equal pieces at a constant stride
+ * (IOR hard: 47008 bytes every nranks * 47008) asked for one piece at a time
+ * and waited each one out: one request in flight per rank, so its rate was
+ * one over the latency -- half of it when the pieces sit on the NVMe tier
+ * instead of in OST memory. Once two steps in a row have the same stride
+ * and length, the next g_stride_ra pieces are read by the pool while the
+ * program copies the current one. Nothing is kept beyond the open file: the
+ * pieces are read from the OSTs after the open, a write or truncate through
+ * this fd (or any on this client) drops them, and a broken pattern ends it. */
+#define RA_SLOTS 64
+int g_stride_ra = 16;  /* env ROCEPOOL_STRIDE_RA: pieces read ahead, 0 = off */
+static atomic_ullong g_ra_issued, g_ra_hits, g_ra_wasted;
+
+typedef struct stride_ra stride_ra_t;
+typedef struct {
+    stride_ra_t *ra;
+    const char *path;
+    attr_t a;
+    uint64_t off;
+    size_t len, cap;
+    uint8_t *buf;
+    int busy, done, rc;
+    unsigned gen;
+} ra_slot_t;
+
+struct stride_ra {
+    pthread_mutex_t lk;
+    pthread_cond_t cv;
+    unsigned gen;
+    int inflight;
+    uint64_t last_off, next;
+    size_t last_len;
+    int64_t stride;
+    int hits;
+    ra_slot_t s[RA_SLOTS];
+};
+
+static void ra_task(void *arg) {
+    ra_slot_t *s = arg;
+    uint64_t end = s->off + s->len, first = s->off / s->a.ss, last = (end - 1) / s->a.ss;
+    group_t g;
+    group_init(&g, (int)(last - first + 1));
+    /* the stripes one after another, here: a pool task must not wait on
+     * tasks queued behind it */
+    for (uint64_t idx = first; idx <= last; idx++) {
+        uint64_t s0 = idx * s->a.ss, lo = s->off > s0 ? s->off : s0, hi = end < s0 + s->a.ss ? end : s0 + s->a.ss;
+        range_read_t t = {&g, s->path, &s->a, idx, lo - s0, hi - s0, s->buf + (lo - s->off)};
+        range_read_task(&t);
+    }
+    int rc = group_wait(&g);
+    stride_ra_t *ra = s->ra;
+    pthread_mutex_lock(&ra->lk);
+    s->rc = rc;
+    s->done = 1;
+    ra->inflight--;
+    pthread_cond_broadcast(&ra->cv);
+    pthread_mutex_unlock(&ra->lk);
+}
+
+/* every piece read so far is forgotten (a write, a truncate, a new pattern) */
+static void ra_drop(stride_ra_t *ra) {
+    if (!ra) return;
+    pthread_mutex_lock(&ra->lk);
+    ra->gen++;
+    ra->hits = 0;
+    ra->stride = 0;
+    ra->last_len = 0;
+    pthread_mutex_unlock(&ra->lk);
+}
+
+static void ra_free(stride_ra_t *ra) {
+    if (!ra) return;
+    pthread_mutex_lock(&ra->lk);
+    while (ra->inflight) pthread_cond_wait(&ra->cv, &ra->lk);
+    pthread_mutex_unlock(&ra->lk);
+    for (int i = 0; i < RA_SLOTS; i++) {
+        if (ra->s[i].busy && ra->s[i].gen == ra->gen) atomic_fetch_add(&g_ra_wasted, 1);
+        free(ra->s[i].buf);
+    }
+    pthread_mutex_destroy(&ra->lk);
+    pthread_cond_destroy(&ra->cv);
+    free(ra);
+}
+
+void rp_stride_ra_stats(uint64_t *issued, uint64_t *hits, uint64_t *wasted) {
+    *issued = atomic_load(&g_ra_issued);
+    *hits = atomic_load(&g_ra_hits);
+    *wasted = atomic_load(&g_ra_wasted);
+}
+
+/* caller holds h->lk; a is the file's current attributes, off + len <= a->size */
+static int ra_read(handle_t *h, const attr_t *a, uint64_t off, size_t len, uint8_t *out) {
+    if (g_stride_ra <= 0) return fs_read_direct(h->path, a, off, len, out);
+    if (!h->ra) {
+        stride_ra_t *n = calloc(1, sizeof(*n));
+        if (!n) return fs_read_direct(h->path, a, off, len, out);
+        pthread_mutex_init(&n->lk, NULL);
+        pthread_cond_init(&n->cv, NULL);
+        for (int i = 0; i < RA_SLOTS; i++) n->s[i].ra = n;
+        h->ra = n;
+    }
+    stride_ra_t *ra = h->ra;
+    int depth = g_stride_ra < RA_SLOTS ? g_stride_ra : RA_SLOTS;
+    pthread_mutex_lock(&ra->lk);
+    int64_t st = (int64_t)(off - ra->last_off);
+    if (ra->last_len == len && st == ra->stride && st >= (int64_t)len) {
+        ra->hits++;
+    } else {
+        if (ra->hits) ra->gen++;  /* a pattern ended: what it read ahead is not wanted */
+        ra->hits = 0;
+        ra->stride = ra->last_len == len && st >= (int64_t)len ? st : 0;
+        ra->next = 0;
+    }
+    ra->last_off = off;
+    ra->last_len = len;
+    ra_slot_t *m = NULL;
+    for (int i = 0; i < RA_SLOTS && !m; i++) {
+        ra_slot_t *s = &ra->s[i];
+        if (s->busy && s->gen == ra->gen && s->off == off && s->len >= len) m = s;
+    }
+    if (ra->hits >= 1) {
+        uint64_t from = off + (uint64_t)ra->stride, lim = off + (uint64_t)depth * (uint64_t)ra->stride;
+        if (ra->next < from) ra->next = from;
+        for (int i = 0; i < RA_SLOTS; i++) {  /* pieces behind us, or of an old pattern, once their reads are back */
+            ra_slot_t *s = &ra->s[i];
+            if (s->busy && s != m && s->done && (s->gen != ra->gen || s->off <= off)) {
+                if (s->gen == ra->gen) atomic_fetch_add(&g_ra_wasted, 1);
+                s->busy = 0;
+            }
+        }
+        for (int i = 0; i < RA_SLOTS && ra->next <= lim && ra->next < a->size; i++) {
+            ra_slot_t *s = &ra->s[i];
+            if (s->busy) continue;
+            size_t n = a->size - ra->next < len ? (size_t)(a->size - ra->next) : len;
+            if (s->cap < n) {
+                uint8_t *b = realloc(s->buf, n);
+                if (!b) break;
+                s->buf = b;
+                s->cap = n;
+            }
+            s->path = h->path;
+            s->a = *a;
+            s->off = ra->next;
+            s->len = n;
+            s->busy = 1;
+            s->done = 0;
+            s->rc = 0;
+            s->gen = ra->gen;
+            ra->inflight++;
+            ra->next += (uint64_t)ra->stride;
+            atomic_fetch_add(&g_ra_issued, 1);
+            pool_submit(ra_task, s);
+        }
+    }
+    if (m) {
+        while (!m->done) pthread_cond_wait(&ra->cv, &ra->lk);
+        int rc = m->rc;
+        if (!rc) memcpy(out, m->buf, len);
+        m->busy = 0;
+        pthread_mutex_unlock(&ra->lk);
+        if (!rc) { atomic_fetch_add(&g_ra_hits, 1); return 0; }
+        return fs_read_direct(h->path, a, off, len, out);  /* its error is this read's, read again */
+    }
+    pthread_mutex_unlock(&ra->lk);
+    return fs_read_direct(h->path, a, off, len, out);
+}
+
 /* ---------------------------------------------------------------- device (GPU) memory
  * GPUDirect-Storage-style I/O: a file range straight into / out of device
  * memory. Every stripe goes one-sided (an OST lease + an RDMA READ that
@@ -2055,7 +2223,7 @@ static void open_unregister(handle_t *h) {
 void invalidate_open_caches(const char *path) {
     pthread_mutex_lock(&g_open_lk);
     for (size_t i = 0; i < g_nopen; i++)
-        if (g_open[i]->sc && !strcmp(g_open[i]->path, path)) { sc_clear(g_open[i]->sc); g_open[i]->pre_ok = 0; }
+        if (g_open[i]->sc && !strcmp(g_open[i]->path, path)) { sc_clear(g_open[i]->sc); g_open[i]->pre_ok = 0; ra_drop(g_open[i]->ra); }
     pthread_mutex_unlock(&g_open_lk);
 }
 
@@ -2072,6 +2240,7 @@ static int wb_wait(handle_t *h);
 void handle_free(handle_t *h) {
     wb_wait(h);  /* a release always flushes first; this covers the paths that do not */
     if (h->sc) open_unregister(h);
+    ra_free(h->ra);
     for (size_t i = 0; i < h->ndirty; i++) rp_bulk_free(h->dirty[i].base ? h->dirty[i].base : h->dirty[i].data);
     free(h->dirty);
     for (size_t i = 0; i < h->ndents; i++) free(h->dents[i].name);
@@ -2266,6 +2435,7 @@ int handle_flush(handle_t *h) {
  * The library's own read/write through a handle (the interception library
  * uses these; the FUSE daemon has zero-copy variants of the same logic). */
 int handle_write(handle_t *h, uint64_t off, const uint8_t *data, size_t len, uint8_t *base) {
+    ra_drop(h->ra);  /* this fd's reads ahead may predate this write */
     if (h->ndirty == h->capdirty) {
         h->capdirty = h->capdirty ? 2 * h->capdirty : 64;
         h->dirty = xrealloc(h->dirty, h->capdirty * sizeof(dirty_t));
@@ -2321,7 +2491,7 @@ ssize_t handle_read(handle_t *h, uint64_t off, uint8_t *out, size_t len) {
     if (off + len > a.size) len = (size_t)(a.size - off);
     if (!a.has_layout || !a.ss) return -EIO;
     if (off != h->next_off && len < a.ss) {
-        rc = fs_read_direct(h->path, &a, off, len, out);  /* random/strided: exact bytes only */
+        rc = ra_read(h, &a, off, len, out);  /* random/strided: exact bytes only (and stride readahead) */
     } else {  /* sequential: whole-stripe cache + readahead */
         if (!h->sc) h->sc = sc_new(h->path, &a);
         pthread_mutex_lock(&h->sc->lk);
@@ -2340,6 +2510,8 @@ int rpfs_init(void) {
     if (ie && !strcmp(ie, "0")) cfg.inline_ok = 0;
     const char *dc = getenv("ROCEPOOL_DIRTY_CAP_MIB");
     if (dc && atol(dc) > 0) g_dirty_cap = (size_t)atol(dc) << 20;
+    const char *sra = getenv("ROCEPOOL_STRIDE_RA");
+    if (sra && *sra) g_stride_ra = atoi(sra);
     const char *wbe = getenv("ROCEPOOL_WRITE_BEHIND");
     if (wbe && *wbe) g_write_behind = atoi(wbe) != 0;
     const char *ds = getenv("ROCEPOOL_DIR_STRIPE");

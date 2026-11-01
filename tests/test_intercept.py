@@ -668,3 +668,83 @@ class InterceptIORTests(_Cluster):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class StrideReadaheadTests(_Cluster):
+    """stride readahead (rocepool_fs.c ra_read): a reader stepping through a
+    file in equal pieces at a constant stride (IOR hard's read) gets the next
+    pieces read ahead -- and always the file's bytes: across stripe edges, at
+    the end of the file, when the pattern changes, after its own writes"""
+    port = 23490
+
+    def run_logged(self, code, env=None):
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                             env=dict(self.penv, ROCEPOOL_INTERCEPT_LOG="1", **(env or {})), timeout=300, cwd=self.tmp)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        st = [l for l in out.stderr.splitlines() if " stats " in l][-1]
+        return out.stdout.strip(), {k: int(v) for k, v in (w.split("=") for w in st.split()[2:] if "=" in w)}
+
+    def test_strided_reads_are_the_files_bytes(self):
+        code = f"""
+import os, random
+P = {self.prefix!r}
+r = random.Random(5)
+data = r.randbytes((3 << 20) + 777777)  # 1 MiB stripes; pieces cross their edges
+with open(P + "/s", "wb") as f: f.write(data)
+fd = os.open(P + "/s", os.O_RDWR)
+def check(off, n):
+    got = os.pread(fd, n, off)
+    want = bytes(data[off:off + n])
+    assert got == want, (off, n, len(got))
+piece, nr = 47008, 8
+for me in (3, 0, 7):  # IOR hard: one rank's pieces, to the end of the file
+    off = me * piece
+    while off < len(data): check(off, piece); off += nr * piece
+for k in range(0, 60, 3): check(k * 50000, 12345)  # another stride and length
+for k in range(80, 20, -2): check(k * 40000, 9000)  # backwards: no readahead, exact bytes
+data = bytearray(data)
+for k in range(38):  # its own writes between strided reads are seen (inside the file)
+    off = (k * 2 + 1) * piece
+    check(off, piece)
+    if k % 7 == 3:
+        nxt = ((k + 1) * 2 + 1) * piece
+        b = r.randbytes(piece)
+        os.pwrite(fd, b, nxt)
+        data[nxt:nxt + piece] = b
+os.close(fd)
+print("ok")
+"""
+        out, st = self.run_logged(code)
+        self.assertEqual(out, "ok")
+        self.assertGreater(st["stride_ra_hits"], 50, st)
+        self.assertLessEqual(st["stride_ra_hits"], st["stride_ra_issued"], st)
+
+    def test_truncate_by_another_fd_drops_what_was_read_ahead(self):
+        code = f"""
+import os
+P = {self.prefix!r}
+piece, nr = 47008, 4
+with open(P + "/t", "wb") as f: f.write(b"a" * (64 * nr * piece))
+fd = os.open(P + "/t", os.O_RDONLY)
+for k in range(8): assert os.pread(fd, piece, k * nr * piece) == b"a" * piece
+os.truncate(P + "/t", 0)  # this client: invalidate_open_caches
+with open(P + "/t", "r+b") as f: f.write(b"b" * (64 * nr * piece))
+for k in range(8, 16): assert os.pread(fd, piece, k * nr * piece) == b"b" * piece, k
+os.close(fd)
+print("ok")
+"""
+        self.assertEqual(self.run_logged(code)[0], "ok")
+
+    def test_off_reads_one_piece_at_a_time(self):
+        code = f"""
+import os
+P = {self.prefix!r}
+with open(P + "/o", "wb") as f: f.write(os.urandom(4 << 20))
+fd = os.open(P + "/o", os.O_RDONLY)
+for k in range(40): os.pread(fd, 47008, k * 4 * 47008)
+os.close(fd)
+print("ok")
+"""
+        _, st = self.run_logged(code, {"ROCEPOOL_STRIDE_RA": "0"})
+        self.assertEqual(st["stride_ra_issued"], 0, st)

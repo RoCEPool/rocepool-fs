@@ -2632,6 +2632,10 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
     static long slow_ms = -1;
     if (slow_ms < 0) { const char *d = getenv("ROCEPOOL_TEST_OST_WRITE_DELAY_MS"); slow_ms = d ? atol(d) : 0; }
     if (slow_ms > 0 && n->kind == ROCEPOOL_NATIVE_OST && (f.op == OP_PUT || f.op == OP_WRITE_AT)) usleep(slow_ms * 1000);
+    /* and whose reads wait this long (an NVMe tier read plus the network, without the CPU) */
+    static long slow_rd_us = -1;
+    if (slow_rd_us < 0) { const char *d = getenv("ROCEPOOL_TEST_OST_READ_DELAY_US"); slow_rd_us = d ? atol(d) : 0; }
+    if (slow_rd_us > 0 && n->kind == ROCEPOOL_NATIVE_OST && f.op == OP_READ_AT) usleep(slow_rd_us);
     tl_wal_lsn = 0;
     tl_wal = NULL;
     mdt_store *md = n->kind == ROCEPOOL_NATIVE_MDT ? n->mdt : NULL;

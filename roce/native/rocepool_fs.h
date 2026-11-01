@@ -108,6 +108,7 @@ typedef struct {
     dirty_t *wb_dirty;
     size_t wb_n, wb_cap;
     int wb_rc;
+    struct stride_ra *ra;  /* strided reader: the pieces it will ask for next, already in flight */
     dirent_t *dents;     /* dir: listing snapshot taken at the first READDIR */
     size_t ndents;
     int listed;
