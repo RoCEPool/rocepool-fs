@@ -389,6 +389,8 @@ static arena_chunk_t *arena_chunk_of(obj_arena_t *a, const uint8_t *data) {
     return NULL;
 }
 
+static atomic_ullong g_ent_uid;
+
 typedef struct kv_entry {
     struct kv_entry *next;
     uint64_t hash;
@@ -398,6 +400,7 @@ typedef struct kv_entry {
     size_t size;          /* logical size */
     size_t data_cap;      /* bytes allocated behind data */
     uint64_t version;
+    uint64_t uid;         /* unique per entry ever made: an async tier read's check (a re-created object is another) */
     double created_at, updated_at;
     /* capacity tier (ost_tier.h): the object's slab, and its place in the
      * RAM cache's LRU list (both only with a tier) */
@@ -451,11 +454,21 @@ typedef struct {
     atomic_ullong leases, lease_misses;
     pthread_mutex_t lru_lock;
     kv_entry *lru_head, *lru_tail;   /* head = most recently used */
+    /* async tier reads (ROCEPOOL_OST_READ_THREADS): a READ_AT of an object
+     * only on the tier is read by these threads into its reply, which the
+     * transport holds meanwhile -- the transport thread goes on instead of
+     * waiting out the device (and no stripe lock is held across a pread) */
+    struct tier_rd *rq_head, *rq_tail;
+    pthread_mutex_t rq_lk;
+    pthread_cond_t rq_cv;
+    int rd_threads;
+    atomic_ullong async_reads, async_rereads;
 } ost_store;
 
 static void arena_tier_notify(void *base, size_t len, void *user) { ost_tier_notify_chunk(user, base, len); }
 
 static void *ost_evictor(void *arg);
+static void tier_readers_start(ost_store *s);
 static int ost_open_log(ost_store *s, const char *spec, int n);
 static ost_store *ost_new(void) {
     ost_store *s = calloc(1, sizeof(*s));
@@ -497,6 +510,7 @@ static ost_store *ost_new(void) {
     }
     const char *lspec = getenv("ROCEPOOL_OST_LOG");
     if (lspec && *lspec && ost_open_log(s, lspec, my_n)) return NULL;
+    tier_readers_start(s);
     return s;
 }
 
@@ -853,6 +867,7 @@ static int ost_replay_rec(void *user, const uint8_t *r, size_t len) {
     }
     if (!e) {
         e = calloc(1, sizeof(*e));
+        if (e) e->uid = atomic_fetch_add(&g_ent_uid, 1) + 1;
         char *k = malloc(kl ? kl : 1);
         if (!e || !k) { free(e); free(k); return 1; }
         memcpy(k, key, kl);
@@ -937,6 +952,137 @@ static uint8_t *tier_error(const frame_t *f, const char *what, int rc, size_t *o
     return frame_error(f, "STORAGE_ERROR", msg, out_len);
 }
 
+/* ---- async tier reads ----
+ * The snapshot taken under the stripe lock (the object's uid, version and
+ * slab) is read without it; then, under the lock again, the object must be
+ * the same one at the same version on the same slab -- else (written,
+ * moved, deleted in between: its slab may hold another's bytes by now) it
+ * is read again under the lock as it is now, absent bytes as zeros, which
+ * is what a client makes of a missing or short object (range_read_task). */
+typedef struct tier_rd {
+    struct tier_rd *next;
+    ost_store *s;
+    kv_stripe *st;
+    uint64_t h, uid, version, from;
+    char *key;
+    size_t key_len, n;
+    tier_ext_t ext;
+    size_t voff;             /* where in the reply the u64 BE version and the n bytes go */
+    uint8_t *v;              /* read here (8 + n), copied into the transport's held reply by tier_rd_fill */
+    pthread_mutex_t lk;
+    pthread_cond_t cv;
+    int state;               /* 0 pending, 1 done, -1 failed */
+} tier_rd_t;
+
+/* a READ_AT's read of the tier; tests only: ROCEPOOL_TEST_OST_READ_DELAY_US
+ * makes each one wait that long first (a device's latency, without its CPU),
+ * in whichever thread reads -- the handler, or a tier reader */
+static int tier_read_at(ost_store *s, const tier_ext_t *ext, uint64_t off, void *buf, size_t len) {
+    static long us = -1;
+    if (us < 0) { const char *d = getenv("ROCEPOOL_TEST_OST_READ_DELAY_US"); us = d ? atol(d) : 0; }
+    if (us > 0) usleep((useconds_t)us);
+    return ost_tier_read(s->tier, ext, off, buf, len);
+}
+
+static void tier_rd_run(tier_rd_t *r) {
+    ost_store *s = r->s;
+    int rc = tier_read_at(s, &r->ext, r->from, r->v + 8, r->n);
+    atomic_fetch_add(&s->tier_reads, 1);
+    pthread_mutex_lock(&r->st->lock);
+    kv_entry *e = *kv_find(r->st, r->h, r->key, r->key_len);
+    if (rc || !e || e->uid != r->uid || e->version != r->version || !e->on_tier || e->ext.off != r->ext.off) {
+        atomic_fetch_add(&s->async_rereads, 1);
+        rc = 0;
+        size_t have = e && r->from < e->size ? e->size - (size_t)r->from : 0;
+        if (have > r->n) have = r->n;
+        if (have && e->data) memcpy(r->v + 8, e->data + r->from, have);
+        else if (have) { rc = ost_tier_read(s->tier, &e->ext, r->from, r->v + 8, have); atomic_fetch_add(&s->tier_reads, 1); }
+        if (have < r->n) memset(r->v + 8 + have, 0, r->n - have);
+        wr_u64be(r->v, e ? e->version : 0);
+    }
+    pthread_mutex_unlock(&r->st->lock);
+    pthread_mutex_lock(&r->lk);
+    r->state = rc ? -1 : 1;
+    pthread_cond_broadcast(&r->cv);
+    pthread_mutex_unlock(&r->lk);
+}
+
+static void *tier_reader(void *arg) {
+    ost_store *s = arg;
+    for (;;) {
+        pthread_mutex_lock(&s->rq_lk);
+        while (!s->rq_head) pthread_cond_wait(&s->rq_cv, &s->rq_lk);
+        tier_rd_t *r = s->rq_head;
+        s->rq_head = r->next;
+        if (!s->rq_head) s->rq_tail = NULL;
+        pthread_mutex_unlock(&s->rq_lk);
+        tier_rd_run(r);
+    }
+    return NULL;
+}
+
+/* the transport's question (roce_server_defer_reply): is this reply ready?
+ * Once it says so the transport sends the reply and never asks again */
+static int tier_rd_ready(void *obj, uint64_t token, int block) {
+    (void)token;
+    tier_rd_t *r = obj;
+    pthread_mutex_lock(&r->lk);
+    while (block && !r->state) pthread_cond_wait(&r->cv, &r->lk);
+    int st = r->state;
+    pthread_mutex_unlock(&r->lk);
+    return st;
+}
+
+static void tier_rd_fill(void *obj, uint8_t *reply, size_t len) {
+    tier_rd_t *r = obj;
+    if (reply && r->voff + 8 + r->n <= len) memcpy(reply + r->voff, r->v, 8 + r->n);
+    pthread_mutex_destroy(&r->lk);
+    pthread_cond_destroy(&r->cv);
+    free(r->v);
+    free(r->key);
+    free(r);
+}
+
+static void tier_readers_start(ost_store *s) {
+    const char *e = getenv("ROCEPOOL_OST_READ_THREADS");
+    int n = e && *e ? atoi(e) : 32;
+    if (n <= 0 || !s->tier || !strcmp(ost_tier_kind(s->tier), "spdk")) return;
+    pthread_mutex_init(&s->rq_lk, NULL);
+    pthread_cond_init(&s->rq_cv, NULL);
+    for (int i = 0; i < n; i++) {
+        pthread_t t;
+        if (pthread_create(&t, NULL, tier_reader, s)) break;
+        pthread_detach(t);
+        s->rd_threads++;
+    }
+}
+
+/* under st->lock, e only on the tier: 0 = the read is queued and the
+ * transport holds the reply (v) until it is done; -1 = read it here */
+static int tier_rd_submit(ost_store *s, kv_stripe *st, uint64_t h, const frame_t *f, kv_entry *e, size_t from, size_t n,
+                          const uint8_t *reply, uint8_t *v, size_t reply_len) {
+    if (!s->rd_threads) return -1;
+    tier_rd_t *r = calloc(1, sizeof(*r));
+    char *k = r ? malloc(f->key_len ? f->key_len : 1) : NULL;
+    uint8_t *buf = k ? malloc(8 + n) : NULL;
+    if (!r || !k || !buf) { free(r); free(k); free(buf); return -1; }
+    if (roce_server_defer_reply(tier_rd_ready, r, 0, reply_len) != 0) { free(r); free(k); free(buf); return -1; }
+    roce_server_defer_fill(tier_rd_fill);
+    memcpy(k, f->key, f->key_len);
+    memcpy(buf, v, 8);  /* the version, as of now */
+    *r = (tier_rd_t){.s = s, .st = st, .h = h, .uid = e->uid, .version = e->version, .from = from, .key = k,
+                     .key_len = f->key_len, .n = n, .ext = e->ext, .voff = (size_t)(v - reply), .v = buf};
+    pthread_mutex_init(&r->lk, NULL);
+    pthread_cond_init(&r->cv, NULL);
+    pthread_mutex_lock(&s->rq_lk);
+    if (s->rq_tail) s->rq_tail->next = r; else s->rq_head = r;
+    s->rq_tail = r;
+    pthread_cond_signal(&s->rq_cv);
+    pthread_mutex_unlock(&s->rq_lk);
+    atomic_fetch_add(&s->async_reads, 1);
+    return 0;
+}
+
 static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
     atomic_fetch_add(&s->ops, 1);
     uint64_t h = fnv1a(f->key, f->key_len);
@@ -977,6 +1123,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         size_t old_size = 0, old_cap = 0;
         if (!e) {
             e = calloc(1, sizeof(*e));
+            if (e) e->uid = atomic_fetch_add(&g_ent_uid, 1) + 1;
             char *k = malloc(f->key_len ? f->key_len : 1);
             if (!e || !k) { pthread_mutex_unlock(&st->lock); free(e); free(k); ent_free_data(s, data, cap);
                             return frame_error(f, "STORAGE_ERROR", "out of memory", out_len); }
@@ -1120,6 +1267,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         size_t new_size = end > old_size ? end : old_size;
         if (!e) {
             e = calloc(1, sizeof(*e));
+            if (e) e->uid = atomic_fetch_add(&g_ent_uid, 1) + 1;
             char *k = malloc(f->key_len ? f->key_len : 1);
             if (!e || !k) { pthread_mutex_unlock(&st->lock); free(e); free(k);
                             return frame_error(f, "STORAGE_ERROR", "out of memory", out_len); }
@@ -1248,7 +1396,8 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         if (v) {
             wr_u64be(v, e->version);
             if (n && e->data) { memcpy(v + 8, e->data + from, n); if (s->tier) lru_touch(s, e); }
-            else if (n) { rc = ost_tier_read(s->tier, &e->ext, from, v + 8, n); atomic_fetch_add(&s->tier_reads, 1); }
+            else if (n && f->op == OP_READ_AT && tier_rd_submit(s, st, h, f, e, from, n, out, v, *out_len) == 0) { /* async */ }
+            else if (n) { rc = tier_read_at(s, &e->ext, from, v + 8, n); atomic_fetch_add(&s->tier_reads, 1); }
         }
         pthread_mutex_unlock(&st->lock);
         if (rc) { roce_reply_free(out); return tier_error(f, "read", rc, out_len); }
@@ -2521,6 +2670,10 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
                             (unsigned long long)atomic_load(&n->ost->leases), (unsigned long long)atomic_load(&n->ost->lease_misses),
                             (unsigned long long)atomic_load(&n->ost->arena.bytes));
         if (!rc && n->ost->tier)
+            rc = buf_printf(&b, ", \"tier_read_threads\": %d, \"async_tier_reads\": %llu, \"async_tier_rereads\": %llu",
+                            n->ost->rd_threads, (unsigned long long)atomic_load(&n->ost->async_reads),
+                            (unsigned long long)atomic_load(&n->ost->async_rereads));
+        if (!rc && n->ost->tier)
             rc = buf_printf(&b, ", \"tier\": \"%s\", \"tier_capacity\": %llu, \"tier_used\": %llu, \"tier_direct\": %s, "
                             "\"ram_cache_bytes\": %llu, \"ram_cache_budget\": %llu, \"direct_writes\": %llu, "
                             "\"tier_reads\": %llu, \"evictions\": %llu, \"tier_bytes_written\": %llu, \"writebacks\": %llu, \"inline_evictions\": %llu",
@@ -2632,10 +2785,6 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
     static long slow_ms = -1;
     if (slow_ms < 0) { const char *d = getenv("ROCEPOOL_TEST_OST_WRITE_DELAY_MS"); slow_ms = d ? atol(d) : 0; }
     if (slow_ms > 0 && n->kind == ROCEPOOL_NATIVE_OST && (f.op == OP_PUT || f.op == OP_WRITE_AT)) usleep(slow_ms * 1000);
-    /* and whose reads wait this long (an NVMe tier read plus the network, without the CPU) */
-    static long slow_rd_us = -1;
-    if (slow_rd_us < 0) { const char *d = getenv("ROCEPOOL_TEST_OST_READ_DELAY_US"); slow_rd_us = d ? atol(d) : 0; }
-    if (slow_rd_us > 0 && n->kind == ROCEPOOL_NATIVE_OST && f.op == OP_READ_AT) usleep(slow_rd_us);
     tl_wal_lsn = 0;
     tl_wal = NULL;
     mdt_store *md = n->kind == ROCEPOOL_NATIVE_MDT ? n->mdt : NULL;

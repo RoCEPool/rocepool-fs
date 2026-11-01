@@ -1562,6 +1562,7 @@ struct deferred {
     fi_addr_t to;
     uint64_t tag, token;
     roce_reply_ready_fn ready;
+    roce_reply_fill_fn fill;
     void *obj;
     size_t len;
     uint8_t buf[];
@@ -1570,6 +1571,7 @@ static __thread struct deferred *tl_dq[DEFER_MAX];
 static __thread int tl_dq_n;
 /* set by the handler (roce_server_defer_reply) for the reply it returns */
 static __thread roce_reply_ready_fn tl_defer_fn;
+static __thread roce_reply_fill_fn tl_defer_fill;
 static __thread void *tl_defer_obj;
 static __thread uint64_t tl_defer_token;
 static __thread struct worker *tl_defer_ok;  /* this thread's worker: it can hold replies */
@@ -1750,10 +1752,13 @@ int roce_server_defer_reply(roce_reply_ready_fn ready, void *obj, uint64_t token
     if (!tl_defer_ok || !tl_tx || reply_len + REP_HDR > SMALL_FRAME) return -1;
     if (tl_dq_n >= DEFER_MAX) { __atomic_add_fetch(&tl_defer_ok->st_defer_full, 1, __ATOMIC_RELAXED); return -1; }
     tl_defer_fn = ready;
+    tl_defer_fill = NULL;
     tl_defer_obj = obj;
     tl_defer_token = token;
     return 0;
 }
+
+void roce_server_defer_fill(roce_reply_fill_fn fill) { tl_defer_fill = fill; }
 
 /* send the held replies whose change is durable now (status 1 -- the
  * server could not handle it -- when it never will be); with `all`, wait
@@ -1767,6 +1772,7 @@ static void defer_reap(struct worker *w, int all) {
             int r = d->ready(d->obj, d->token, all);
             if (!r && all && now_ms() > end) r = -1;
             if (!r) { tl_dq[k++] = d; continue; }
+            if (d->fill) d->fill(d->obj, r > 0 ? d->buf : NULL, d->len);
             send_reply(w, d->to, d->tag, r > 0 ? 0 : 1, d->buf, d->len);
             free(d);
         }
@@ -1853,18 +1859,25 @@ static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *
     size_t rlen = 0;
     tl_reply_pool = w->pool;
     tl_defer_fn = NULL;
+    tl_defer_fill = NULL;
     uint64_t t_h = now_ns();
     uint8_t *resp = w->s->handler(frame, h.total_len, &rlen, w->s->user);
     __atomic_add_fetch(&w->st_handler_ns, now_ns() - t_h, __ATOMIC_RELAXED);
     tl_reply_pool = NULL;
     if (fb) pool_put(w->pool, fb);
     roce_reply_ready_fn hold = tl_defer_fn;
+    roce_reply_fill_fn fill = tl_defer_fill;
     tl_defer_fn = NULL;
-    if (!resp) { send_reply(w, to, h.tag, 1, NULL, 0); return; }
+    tl_defer_fill = NULL;
+    if (!resp) {
+        if (hold && fill) { hold(tl_defer_obj, tl_defer_token, 1); fill(tl_defer_obj, NULL, 0); }
+        send_reply(w, to, h.tag, 1, NULL, 0);
+        return;
+    }
     if (hold && rlen + REP_HDR <= SMALL_FRAME && tl_dq_n < DEFER_MAX) {
         struct deferred *d = malloc(sizeof(*d) + rlen);
         if (d) {
-            *d = (struct deferred){.to = to, .tag = h.tag, .token = tl_defer_token, .ready = hold,
+            *d = (struct deferred){.to = to, .tag = h.tag, .token = tl_defer_token, .ready = hold, .fill = fill,
                                    .obj = tl_defer_obj, .len = rlen};
             memcpy(d->buf, resp, rlen);
             roce_reply_free(resp);
@@ -1875,6 +1888,11 @@ static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *
         /* out of memory: wait for it here */
         int r;
         r = hold(tl_defer_obj, tl_defer_token, 1);
+        if (fill) fill(tl_defer_obj, r > 0 ? resp : NULL, rlen);
+        if (r < 0) { roce_reply_free(resp); send_reply(w, to, h.tag, 1, NULL, 0); return; }
+    } else if (hold) {  /* accepted by roce_server_defer_reply, but not held after all: wait here */
+        int r = hold(tl_defer_obj, tl_defer_token, 1);
+        if (fill) fill(tl_defer_obj, r > 0 ? resp : NULL, rlen);
         if (r < 0) { roce_reply_free(resp); send_reply(w, to, h.tag, 1, NULL, 0); return; }
     }
     if (rlen > w->s->max_frame) {

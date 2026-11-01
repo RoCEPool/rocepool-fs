@@ -613,3 +613,126 @@ except OSError as x:
 '''
         import errno
         self.assertEqual(self.run_client(d, srv, code, {"ROCEPOOL_WRITE_BEHIND": "1"}), str(errno.ENOSPC))
+
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class AsyncTierReadTests(unittest.TestCase):
+    """async tier reads (rocepool_servers.c tier_rd_submit): a READ_AT of an
+    object only on the tier is read by the OST's reader threads while the
+    transport holds its reply (OFI; the RC transport cannot hold one and
+    reads in the handler as before) -- and is always that object's bytes,
+    also when it is deleted and its slab reused while the read is out"""
+    port = 25100
+
+    @classmethod
+    def setUpClass(cls):
+        from roce.native.build_lib import backend, ensure_intercept_lib, ensure_softverbs_lib
+        cls.lib = ensure_softverbs_lib()
+        cls.icp = ensure_intercept_lib()
+        cls.ofi = backend() == "ofi"
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+
+    def client(self, srv, code, **env):
+        e = dict(os.environ, ROCE_TRANSPORT_LIB=self.lib, PYTHONPATH=ROOT, LD_PRELOAD=self.icp,
+                 ROCEPOOL_PREFIX=self.d + "/rp", ROCEPOOL_MDTS=srv.mdts, ROCEPOOL_OSTS=srv.osts,
+                 ROCEPOOL_DIRECT_READ="0", ROCE_OFI_CLIENT_EPS="16", **env)  # every read a READ_AT (as on AWS)
+        return subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=e)
+
+    def done(self, p):
+        out, err = p.communicate(timeout=300)
+        self.assertEqual(p.returncode, 0, out + err)
+        return out.strip()
+
+    def ost_stats(self, srv):
+        st = [_stats(self.lib, a) for a in srv.osts.split(",")]
+        return {k: sum(x.get(k, 0) for x in st) for k in ("async_tier_reads", "async_tier_rereads", "tier_reads", "tier_read_threads")}
+
+    def test_tier_reads_are_the_bytes(self):
+        srv = _Servers(self.lib, self.d, self.port, nm=1, no=2)
+        srv.start()
+        self.addCleanup(srv.stop)
+        # 48 MiB through a 16 MiB RAM cache per OST: most of it only on the tier
+        w = r'''
+import hashlib, os, random
+P = os.environ["ROCEPOOL_PREFIX"]
+r = random.Random(3)
+for i in range(6):
+    with open(P + "/f%d" % i, "wb") as f: f.write(r.randbytes((8 << 20) - 1000 * i))
+print("ok")
+'''
+        self.assertEqual(self.done(self.client(srv, w)), "ok")
+        before = self.ost_stats(srv)
+        rd = r'''
+import os, random
+P = os.environ["ROCEPOOL_PREFIX"]
+r = random.Random(3)
+for i in range(6):
+    data = r.randbytes((8 << 20) - 1000 * i)
+    fd = os.open(P + "/f%d" % i, os.O_RDONLY)
+    for k in range(0, len(data) // 47008, 3):  # strided pieces
+        assert os.pread(fd, 47008, k * 47008) == data[k * 47008:(k + 1) * 47008], (i, k)
+    for off in (len(data) - 5000, 1 << 20, (1 << 20) - 100):  # the end, stripe edges
+        assert os.pread(fd, 20000, off) == data[off:off + 20000], (i, off)
+    os.close(fd)
+    assert open(P + "/f%d" % i, "rb").read() == data, i
+print("ok")
+'''
+        self.assertEqual(self.done(self.client(srv, rd)), "ok")
+        st = self.ost_stats(srv)
+        self.assertEqual(st["tier_read_threads"], 2 * 32, st)
+        self.assertGreater(st["tier_reads"] - before["tier_reads"], 100, st)
+        if self.ofi:
+            self.assertGreater(st["async_tier_reads"] - before["async_tier_reads"], 100, st)
+        else:
+            self.assertEqual(st["async_tier_reads"], 0, st)
+
+    def test_a_deleted_objects_reused_slab_is_never_read_as_its_bytes(self):
+        # each tier read waits 300 ms first: the file is deleted and its slabs
+        # (freed once durable) taken by another file while reads are out
+        srv = _Servers(self.lib, self.d, self.port + 10, nm=1, no=2, env={"ROCEPOOL_TEST_OST_READ_DELAY_US": "300000"})
+        srv.start()
+        self.addCleanup(srv.stop)
+        w = r'''
+import os
+P = os.environ["ROCEPOOL_PREFIX"]
+with open(P + "/a", "wb") as f: f.write(b"A" * (8 << 20))
+with open(P + "/filler", "wb") as f: f.write(b"F" * (40 << 20))  # a's stripes out of RAM
+os.unlink(P + "/filler")
+print("ok")
+'''
+        self.assertEqual(self.done(self.client(srv, w)), "ok")
+        rd = r'''
+import os, time
+P = os.environ["ROCEPOOL_PREFIX"]
+fd = os.open(P + "/a", os.O_RDONLY)
+bad = 0
+seen = set()
+try:
+    for rep in range(40):  # strided pieces (READ_AT): until the file is gone
+        for k in range(rep % 2, (8 << 20) // 47008, 2):
+            b = os.pread(fd, 47008, k * 47008)
+            seen |= set(b)
+            bad += b.count(b"B")
+except OSError:
+    pass
+print(bad, sorted(seen))
+'''
+        reader = self.client(srv, rd)
+        time.sleep(3.0)  # its stride readahead under way: ~16 reads out at any time
+        churn = r'''
+import os
+P = os.environ["ROCEPOOL_PREFIX"]
+os.unlink(P + "/a")
+for i in range(4):
+    with open(P + "/b%d" % i, "wb") as f: f.write(b"B" * (8 << 20))
+print("ok")
+'''
+        self.assertEqual(self.done(self.client(srv, churn)), "ok")
+        bad, seen = self.done(reader).split(" ", 1)
+        self.assertEqual(bad, "0", "a deleted file's reads returned another file's bytes: " + seen)
+        self.assertTrue(set(eval(seen)) <= {0, ord("A")}, seen)
+        # (whether a read was out across the delete is timing: async_tier_rereads
+        # says; 6-8 of ~80 here on OFI -- not asserted, it would be flaky)
