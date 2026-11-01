@@ -615,3 +615,25 @@ class TierFilesTests(unittest.TestCase):
         self.assertIsNone(tier_files("file:/dev/nvme1n1"))
         self.assertIsNone(tier_files("spdk:0000:00:1f.0"))
         self.assertIsNone(tier_files(None))
+
+
+class ServerReadyLineTests(unittest.TestCase):
+    """a server's READY written into the middle of the C library's message
+    in the same log is still its start-up (it was taken for a 120 s hang)"""
+
+    def test_ready_in_the_middle_of_a_line(self):
+        sys.path.insert(0, ROOT)
+        from tools.io500_run import _file_line_until
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        log = os.path.join(d, "mdt.log")
+        with open(log, "w") as f:
+            f.write("rocepool: log x: commits/s measured here\n"
+                    "rocepool MDT: durable: creates/unlinks replied before their commit (clients keep them "
+                    "uREADY 10.99.1.3:19902ntil it), the rest synced first\n")
+        p = subprocess.Popen(["sleep", "5"])
+        self.addCleanup(p.kill)
+        self.assertTrue(_file_line_until(log, p, "READY", 2).startswith("READY 10.99.1.3:19902"))
+        with open(log, "w") as f:
+            f.write("rocepool OST: NOT READYING anything\n")
+        self.assertFalse(_file_line_until(log, p, "READY", 0.2).startswith("READY"))

@@ -662,9 +662,14 @@ KERNEL_LOG_CMD = ("{ dmesg -T 2>/dev/null || journalctl -k --no-pager -n 3000 2>
 
 
 def _file_line_until(path: str, p: subprocess.Popen, prefix: str, timeout: float) -> str:
-    """the first line starting with `prefix` in the file p writes to, or what
-    is there when the deadline passes or p exits first"""
+    """the first line starting with `prefix` in the file p writes to (from
+    `prefix` on: the server's stdout READY and the C library's stderr share
+    the file, and a message written in two pieces once had the READY line in
+    its middle -- "...them uREADY 10.99.1.3:19902ntil it" -- a start-up then
+    misjudged as a 120 s hang), or what is there when the deadline passes or
+    p exits first"""
     deadline = time.monotonic() + timeout
+    pat = re.compile(re.escape(prefix) + r"(?=\s|$)")
     while True:
         try:
             with open(path, errors="replace") as f:
@@ -672,8 +677,9 @@ def _file_line_until(path: str, p: subprocess.Popen, prefix: str, timeout: float
         except OSError:
             text = ""
         for line in text.splitlines():
-            if line.startswith(prefix):
-                return line
+            m = pat.search(line)
+            if m:
+                return line[m.start():]
         if p.poll() is not None:
             return text + f"[exited {p.returncode}]"
         if time.monotonic() > deadline:
@@ -719,6 +725,10 @@ def main() -> int:
     ap.add_argument("--client-threads", type=int, default=16, help="native client FUSE threads per node")
     ap.add_argument("--intercept-io-threads", type=int, default=16,
                     help="interception client: I/O threads per rank (stripe fan-out)")
+    ap.add_argument("--client-eps", type=int, default=0,
+                    help="interception client on OFI (EFA): endpoints per rank (ROCE_OFI_CLIENT_EPS) -- a request "
+                         "holds one until its reply, so this is a rank's requests in flight; 0 = the transport's "
+                         "default (2). tools/roce_onsite.py measures it against the EFA queue pairs")
     ap.add_argument("--attr-ttl", type=float, default=3.0)
     ap.add_argument("--stonewall", type=int, default=None, help="seconds per write phase (IO500 official: 300)")
     ap.add_argument("--rates-from", default=None,
@@ -1101,6 +1111,7 @@ def main() -> int:
         icp_env = {"LD_PRELOAD": cluster.intercept_lib, "ROCEPOOL_PREFIX": MNT, "ROCEPOOL_MDTS": mdts,
                    "ROCEPOOL_OSTS": osts, "ROCEPOOL_ATTR_TTL": str(args.attr_ttl),
                    "ROCEPOOL_IO_THREADS": str(args.intercept_io_threads),
+                   **({"ROCE_OFI_CLIENT_EPS": str(args.client_eps)} if args.client_eps > 0 else {}),
                    **{k: env[k] for k in ("ROCEPOOL_DIRTY_CAP_MIB", "ROCEPOOL_RPC_TIMEOUT_MS", "ROCEPOOL_SCACHE_SLOTS",
                                            "ROCE_BUFPOOL_MAX", "ROCE_TRANSPORT_LIB", "ROCEPOOL_MDT_ASYNC") if k in env}}
         icp_genv = [a for k, v in icp_env.items() for a in ("-genv", k, v)]
@@ -1393,6 +1404,7 @@ def main() -> int:
                               "mdtest_easy_n": md_easy_n, "mdtest_hard_n": md_hard_n,
                               "client_threads": args.client_threads, "attr_ttl_s": args.attr_ttl,
                               "client": mode, "intercept_io_threads": args.intercept_io_threads,
+                              "client_eps": args.client_eps or None,
                               "ost_tier": args.ost_tier, "ost_ram_cache_mib": ram_mib},
                       servers=servers, snapshots=[{"phase": p, **s} for p, s in snaps])
         from tools import io500_model

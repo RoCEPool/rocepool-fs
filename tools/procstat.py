@@ -136,6 +136,38 @@ def _fuse_stats(recs: list[dict], timeout: float = 3.0) -> None:
             time.sleep(0.01)
 
 
+def efa_max_qp() -> int | None:
+    """Queue pairs an EFA device has (ibv_devinfo -v: max_qp), the smallest
+    of the host's EFA devices -- shared by every process on the host: each
+    OFI endpoint (servers', ranks', MPI's) takes one. None without EFA."""
+    import subprocess
+    base = "/sys/class/infiniband"
+    try:
+        devs = [d for d in os.listdir(base)
+                if os.path.basename(os.path.realpath(os.path.join(base, d, "device", "driver"))) == "efa"]
+    except OSError:
+        return None
+    qps = []
+    for d in devs:
+        try:
+            r = subprocess.run(["ibv_devinfo", "-v", "-d", d], capture_output=True, text=True, timeout=20)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        q = max_qp_of(r.stdout)
+        if q:
+            qps.append(q)
+    return min(qps) if qps else None
+
+
+def max_qp_of(devinfo: str) -> int | None:
+    """max_qp from `ibv_devinfo -v` output"""
+    for line in devinfo.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] == "max_qp:" and parts[1].isdigit():
+            return int(parts[1])
+    return None
+
+
 def facts(ip: str | None) -> dict:
     """Hardware facts for the projection profile: cores, RAM, and the speed of
     the NIC that holds `ip`."""
@@ -161,6 +193,7 @@ def facts(ip: str | None) -> dict:
         out["nvme_gib"] = round(sum(n["size_bytes"] for n in ns) / 2**30, 1)
     except Exception:  # noqa: BLE001
         pass
+    out["efa_max_qp"] = efa_max_qp()
     if ip:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         for _, name in socket.if_nameindex():
