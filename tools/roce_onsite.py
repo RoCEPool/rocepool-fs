@@ -541,15 +541,33 @@ def cluster_step(args, ip: str, lib: str, fuse_client: str, intercept_lib: str, 
     # io_uring, the interception library); the valid run reuses its choice
     channel, client, direct = "auto", "auto", "auto"
     ranks_choice = None  # (ranks per node, the quick report it was measured in)
+    eps_choice = None    # (endpoints per rank, the IOR probe report it was measured in)
+    eps_probed = False
+    ofi = "ofi" in os.path.basename(cluster.get("lib") or "")
     i = 0
     while i < len(runs):
         name, fname, extra = runs[i]
+        if name == "io500-valid" and ofi and not eps_probed:
+            # endpoints per rank, measured: 2 (the transport's default)
+            # against the most the EFA queue pairs allow, IOR phases only
+            eps_probed = True
+            quick = ranks_choice[1] if ranks_choice else os.path.join(ROOT, "onsite_io500.json")
+            probes = eps_probes(quick, ranks_choice[0] if ranks_choice else None, quick_sw)
+            if probes:
+                runs[i:i] = probes
+                continue
+            step("eps-choice", PASS, f"the EFA queue pairs (ibv_devinfo max_qp) leave no room for more than "
+                                     f"{OFI_CLIENT_EPS_DEFAULT} endpoints per rank, or their count is unknown: "
+                                     f"the valid run keeps {OFI_CLIENT_EPS_DEFAULT}")
         i += 1
         out = os.path.join(ROOT, fname)
         cmd = [sys.executable, os.path.join(ROOT, "tools", "io500_run.py"), "--report", out, "--project", "auto",
                "--fuse-uring", channel, "--client", client, "--direct-read", direct, *extra]
         if name == "io500-valid":
             rates = ranks_choice[1] if ranks_choice else os.path.join(ROOT, "onsite_io500.json")
+            if eps_choice:
+                rates = merged_rates(rates, eps_choice[1], os.path.join(ROOT, "onsite_rates.json"))
+                cmd += ["--client-eps", str(eps_choice[0])]
             if os.path.exists(rates):
                 # the quick run's write speeds size the data: each write phase lasts 300 s
                 cmd += ["--rates-from", rates]
@@ -617,6 +635,13 @@ def cluster_step(args, ip: str, lib: str, fuse_client: str, intercept_lib: str, 
             if more:
                 runs.insert(i, ("io500-ranks", "onsite_io500_ranks.json",
                                 ["--stonewall", quick_sw, "--ranks-per-node", str(more)]))
+        if name.startswith("io500-eps") and (i >= len(runs) or not runs[i][0].startswith("io500-eps")):
+            # the last probe: choose
+            try:
+                eps_choice = pick_eps([os.path.join(ROOT, f) for n, f, _ in runs[:i] if n.startswith("io500-eps")])
+                step("eps-choice", PASS, eps_choice[2])
+            except ValueError as exc:
+                step("eps-choice", WARN, f"{exc}: the valid run keeps {OFI_CLIENT_EPS_DEFAULT} endpoints per rank")
         if name == "io500-ranks":
             try:
                 ranks_choice = pick_ranks([os.path.join(ROOT, "onsite_io500.json"), out])
@@ -680,6 +705,109 @@ def pick_ranks(report_paths: list[str]) -> tuple[int, str, str]:
             best = r
     why = "; ".join(f"{r} ranks/node: score {s:.2f}" for r, s, _ in seen) + f" -> the valid run uses {best[0]}"
     return best[0], best[2], why
+
+
+# OFI (EFA) client endpoints per rank: a request holds one until its reply,
+# so they are a rank's requests in flight -- the transport's default 2 held
+# a 6-node valid run at ~1.2 per rank, its servers half idle
+OFI_CLIENT_EPS_DEFAULT = 2
+OFI_CLIENT_EPS_MAX = 16
+IOR_PHASES = "ior-easy-write,ior-hard-write,ior-easy-read,ior-hard-read"
+
+
+def server_eps(cores: int) -> int:
+    """endpoints of one OFI server on `cores` (ofi_transport.c: one per 4 cores, 2..16)"""
+    return 2 if cores < 8 else (16 if cores > 64 else cores // 4)
+
+
+def client_eps_max(report_path: str, ranks_per_node: int | None = None) -> int:
+    """The most endpoints per rank the hosts' EFA queue pairs allow: each
+    endpoint takes one, shared by every process on a host -- its MDT's and
+    OST's, MPI's (2 per rank, at most), the tools' -- and a rank that gets
+    none cannot do I/O at all. The transport's default when unknown."""
+    try:
+        with open(report_path) as f:
+            rep = json.load(f)
+    except (OSError, ValueError):
+        return OFI_CLIENT_EPS_DEFAULT
+    facts = rep.get("node_facts") or []
+    qps = [f.get("efa_max_qp") for f in facts]
+    ranks = ranks_per_node or rep.get("ranks_per_node")
+    if not facts or not all(qps) or not ranks:
+        return OFI_CLIENT_EPS_DEFAULT
+    cores = min(f.get("cores") or 1 for f in facts)
+    reserve = 2 * server_eps(cores) + 2 * ranks + 16
+    n = (min(qps) - reserve) // ranks
+    return max(OFI_CLIENT_EPS_DEFAULT, min(OFI_CLIENT_EPS_MAX, n))
+
+
+def eps_probes(quick_report: str, ranks_per_node: int | None, stonewall: str) -> list[tuple]:
+    """The IOR-only quick runs that measure endpoints per rank before the
+    valid run: the default, and the most the queue pairs allow (none when
+    that is the default) -- with the ranks per node the valid run uses"""
+    top = client_eps_max(quick_report, ranks_per_node)
+    if top <= OFI_CLIENT_EPS_DEFAULT:
+        return []
+    rk = ["--ranks-per-node", str(ranks_per_node)] if ranks_per_node else []
+    return [(f"io500-eps{e}", f"onsite_io500_eps{e}.json",
+             ["--stonewall", stonewall, "--phases", IOR_PHASES, "--client-eps", str(e), *rk])
+            for e in (OFI_CLIENT_EPS_DEFAULT, top)]
+
+
+def ior_bw(rep: dict) -> float | None:
+    """the geometric mean of the four IOR phases (IO500's bandwidth score)"""
+    v = [((rep.get("phases") or {}).get(p) or {}).get("value") for p in IOR_PHASES.split(",")]
+    if not all(v):
+        return None
+    out = 1.0
+    for x in v:
+        out *= x
+    return out ** (1 / len(v))
+
+
+def pick_eps(report_paths: list[str]) -> tuple[int, str, str]:
+    """Of IOR probes that differ in endpoints per rank, the count with the
+    higher bandwidth score (a tie -- within 2% -- keeps the fewer), the
+    report measured with it (its write speeds size the valid run), and why."""
+    seen = []
+    for p in report_paths:
+        try:
+            with open(p) as f:
+                rep = json.load(f)
+        except (OSError, ValueError):
+            continue
+        bw = ior_bw(rep)
+        eps = (rep.get("config") or {}).get("client_eps") or OFI_CLIENT_EPS_DEFAULT
+        if bw:
+            seen.append((eps, bw, p))
+    if not seen:
+        raise ValueError("no IOR probe finished")
+    seen.sort()
+    best = seen[0]
+    for r in seen[1:]:
+        if r[1] > best[1] * 1.02:
+            best = r
+    why = "; ".join(f"{e} endpoints/rank: IOR bandwidth {b:.2f} GiB/s" for e, b, _ in seen) + \
+          f" -> the valid run uses {best[0]}"
+    return best[0], best[2], why
+
+
+def merged_rates(md_report: str, ior_report: str, out_path: str) -> str:
+    """--rates-from for the valid run: the mdtest write rates of the quick
+    run, the IOR write rates of the probe with the chosen endpoints (a
+    faster write phase needs more data to last its 300 s)"""
+    phases = {}
+    for path, keys in ((md_report, ("mdtest-easy-write", "mdtest-hard-write")),
+                       (ior_report, ("ior-easy-write", "ior-hard-write"))):
+        try:
+            with open(path) as f:
+                ph = json.load(f).get("phases") or {}
+        except (OSError, ValueError):
+            continue
+        phases.update({k: ph[k] for k in keys if (ph.get(k) or {}).get("value")})
+    with open(out_path, "w") as f:
+        json.dump({"phases": phases}, f, indent=1)
+    return out_path
 
 
 def gds_step(args, env: dict, topo_file: str, step) -> None:

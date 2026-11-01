@@ -262,3 +262,71 @@ class RanksChoiceTests(unittest.TestCase):
         self.assertIn("-> the valid run uses 48", pick_ranks([a, b])[2])
         with self.assertRaises(ValueError):
             pick_ranks([e])
+
+
+class EpsChoiceTests(unittest.TestCase):
+    """the valid run's OFI client endpoints per rank (a rank's requests in
+    flight): as many as the EFA queue pairs allow, measured against the
+    default 2 in IOR-only quick runs, the better bandwidth wins, and the
+    valid run's data sized by the chosen probe's write speeds"""
+
+    def report(self, d, name, rpn=32, qp=1024, cores=48, eps=None, ior=None, md=None):
+        p = os.path.join(d, name)
+        phases = {}
+        for k, v in (ior or {}).items():
+            phases[k] = {"value": v}
+        for k, v in (md or {}).items():
+            phases[k] = {"value": v}
+        with open(p, "w") as f:
+            json.dump({"ranks_per_node": rpn, "config": {"client_eps": eps}, "phases": phases,
+                       "node_facts": [{"cores": cores, "efa_max_qp": qp}, {"cores": cores, "efa_max_qp": qp and qp + 64}]}, f)
+        return p
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+
+    def test_the_most_the_queue_pairs_allow(self):
+        from tools.roce_onsite import client_eps_max
+        # reserve: 2 servers x 12 endpoints (48 cores) + 2 per rank (MPI) + 16
+        self.assertEqual(client_eps_max(self.report(self.d, "a.json", qp=1024)), 16)          # capped
+        self.assertEqual(client_eps_max(self.report(self.d, "b.json", qp=256)), 4)             # (256-104)//32
+        self.assertEqual(client_eps_max(self.report(self.d, "c.json", qp=256), 48), 2)         # 48 ranks: no room
+        self.assertEqual(client_eps_max(self.report(self.d, "d.json", qp=None)), 2)            # not EFA / unknown
+        self.assertEqual(client_eps_max(os.path.join(self.d, "missing.json")), 2)
+
+    def test_probes_only_when_there_is_room(self):
+        from tools.roce_onsite import eps_probes
+        runs = eps_probes(self.report(self.d, "a.json", qp=256), 32, "60")
+        self.assertEqual([r[0] for r in runs], ["io500-eps2", "io500-eps4"])
+        self.assertEqual(runs[1][2], ["--stonewall", "60", "--phases",
+                                      "ior-easy-write,ior-hard-write,ior-easy-read,ior-hard-read",
+                                      "--client-eps", "4", "--ranks-per-node", "32"])
+        self.assertEqual(eps_probes(self.report(self.d, "b.json", qp=None), None, "60"), [])
+
+    def test_pick_and_rates(self):
+        from tools.roce_onsite import merged_rates, pick_eps
+        ior2 = {"ior-easy-write": 16.0, "ior-hard-write": 6.5, "ior-easy-read": 22.0, "ior-hard-read": 10.0}
+        ior16 = {"ior-easy-write": 16.5, "ior-hard-write": 12.0, "ior-easy-read": 22.0, "ior-hard-read": 18.0}
+        a = self.report(self.d, "e2.json", eps=2, ior=ior2)
+        b = self.report(self.d, "e16.json", eps=16, ior=ior16)
+        self.assertEqual(pick_eps([a, b])[:2], (16, b))
+        self.assertIn("-> the valid run uses 16", pick_eps([a, b])[2])
+        tie = self.report(self.d, "t.json", eps=16, ior={k: v * 1.01 for k, v in ior2.items()})
+        self.assertEqual(pick_eps([a, tie])[:2], (2, a))                   # within 2%: fewer endpoints
+        failed = self.report(self.d, "f.json", eps=16, ior={"ior-easy-write": 16.0})
+        self.assertEqual(pick_eps([a, failed])[:2], (2, a))                # the probe did not finish
+        with self.assertRaises(ValueError):
+            pick_eps([failed])
+        quick = self.report(self.d, "q.json", ior=ior2, md={"mdtest-easy-write": 440.0, "mdtest-hard-write": 180.0})
+        from tools.io500_run import load_rates
+        r = load_rates(merged_rates(quick, b, os.path.join(self.d, "rates.json")))
+        self.assertEqual(r, {"ior-easy-write": 16.5, "ior-hard-write": 12.0,       # the chosen probe's
+                             "mdtest-easy-write": 440.0, "mdtest-hard-write": 180.0})  # the quick run's
+
+    def test_max_qp_of_ibv_devinfo(self):
+        from tools.procstat import max_qp_of
+        out = "hca_id:\trdmap0s6\n\ttransport:\t\t\tunknown (4)\n\t\tmax_mr_size:\t\t\t0x1000000000\n" \
+              "\t\tmax_qp:\t\t\t\t1024\n\t\tmax_qp_wr:\t\t\t4096\n"
+        self.assertEqual(max_qp_of(out), 1024)
+        self.assertIsNone(max_qp_of("No IB devices found\n"))
