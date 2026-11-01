@@ -230,3 +230,35 @@ sys.exit(subprocess.call(["sh", "-c", cmd.replace({self.src!r}, dest)]))
         self.addCleanup(setattr, self.onsite, "_tar_once", real)
         self.onsite.ship_same_path("root@10.0.0.9", timeout=120)
         self.assertEqual(len(calls), 2)
+
+
+class RanksChoiceTests(unittest.TestCase):
+    """the valid run's ranks per node: a second quick run with as many
+    ranks as the hosts have cores (at most 48), the better score wins"""
+
+    def report(self, d, name, rpn, score, cores=48):
+        p = os.path.join(d, name)
+        with open(p, "w") as f:
+            json.dump({"ranks_per_node": rpn, "score": {"score": score} if score else {},
+                       "node_facts": [{"cores": cores}, {"cores": cores + 16}]}, f)
+        return p
+
+    def test_more_and_pick(self):
+        from tools.roce_onsite import more_ranks, pick_ranks
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        a = self.report(d, "a.json", 32, 80.0)
+        self.assertEqual(more_ranks(a), 48)                                  # the smallest host's cores
+        self.assertEqual(more_ranks(self.report(d, "x.json", 32, 80.0, cores=96)), 48)  # capped
+        self.assertIsNone(more_ranks(self.report(d, "y.json", 32, 80.0, cores=32)))   # no more cores
+        self.assertIsNone(more_ranks(self.report(d, "z.json", 32, None)))            # the run failed
+        self.assertIsNone(more_ranks(os.path.join(d, "missing.json")))
+        b = self.report(d, "b.json", 48, 90.0)
+        self.assertEqual(pick_ranks([a, b])[:2], (48, b))
+        c = self.report(d, "c.json", 48, 81.0)                               # within 2%: fewer ranks
+        self.assertEqual(pick_ranks([a, c])[:2], (32, a))
+        e = self.report(d, "e.json", 48, None)                               # the probe failed
+        self.assertEqual(pick_ranks([a, e])[:2], (32, a))
+        self.assertIn("-> the valid run uses 48", pick_ranks([a, b])[2])
+        with self.assertRaises(ValueError):
+            pick_ranks([e])

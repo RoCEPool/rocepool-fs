@@ -533,19 +533,28 @@ def cluster_step(args, ip: str, lib: str, fuse_client: str, intercept_lib: str, 
     if args.bench == "writes":
         write_probe(cfile, env, cluster, step)
         return
-    runs = [("io500", "onsite_io500.json", ["--stonewall", "30" if args.bench == "quick" else "60"])]
+    quick_sw = "30" if args.bench == "quick" else "60"
+    runs = [("io500", "onsite_io500.json", ["--stonewall", quick_sw])]
     if args.bench == "full":  # + the untouched official procedure, for the score itself
         runs.append(("io500-valid", "onsite_io500_valid.json", ["--valid"]))
     # the first run probes the clients (FUSE over /dev/fuse, FUSE over
     # io_uring, the interception library); the valid run reuses its choice
     channel, client, direct = "auto", "auto", "auto"
-    for name, fname, extra in runs:
+    ranks_choice = None  # (ranks per node, the quick report it was measured in)
+    i = 0
+    while i < len(runs):
+        name, fname, extra = runs[i]
+        i += 1
         out = os.path.join(ROOT, fname)
         cmd = [sys.executable, os.path.join(ROOT, "tools", "io500_run.py"), "--report", out, "--project", "auto",
                "--fuse-uring", channel, "--client", client, "--direct-read", direct, *extra]
-        if name == "io500-valid" and os.path.exists(os.path.join(ROOT, "onsite_io500.json")):
-            # the quick run's write speeds size the data: each write phase lasts 300 s
-            cmd += ["--rates-from", os.path.join(ROOT, "onsite_io500.json")]
+        if name == "io500-valid":
+            rates = ranks_choice[1] if ranks_choice else os.path.join(ROOT, "onsite_io500.json")
+            if os.path.exists(rates):
+                # the quick run's write speeds size the data: each write phase lasts 300 s
+                cmd += ["--rates-from", rates]
+            if ranks_choice:
+                cmd += ["--ranks-per-node", str(ranks_choice[0])]
         begin(name, "official IO500 on " + ", ".join(n["ip"] for n in cluster["nodes"])
               + (" (300 s per phase: about an hour)" if "--valid" in extra else " (about 15-30 min)"))
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
@@ -600,6 +609,20 @@ def cluster_step(args, ip: str, lib: str, fuse_client: str, intercept_lib: str, 
             detail = "\n".join(problems) + "\n" + detail
         step(name, FAIL if timed_out or p.returncode else (WARN if problems else PASS),
              ("timed out after 6 h; stopped and cleaned up\n" if timed_out else "") + detail, report_file=fname)
+        if name == "io500" and args.bench == "full":
+            # more ranks per node, measured: with durable logs the metadata
+            # phases wait on commits, the CPUs idle -- more requests in
+            # flight raise them (IO500 lets the submitter pick the count)
+            more = more_ranks(out)
+            if more:
+                runs.insert(i, ("io500-ranks", "onsite_io500_ranks.json",
+                                ["--stonewall", quick_sw, "--ranks-per-node", str(more)]))
+        if name == "io500-ranks":
+            try:
+                ranks_choice = pick_ranks([os.path.join(ROOT, "onsite_io500.json"), out])
+                step("ranks-choice", PASS, ranks_choice[2])
+            except ValueError as exc:  # the probe failed: the valid run keeps the default
+                step("ranks-choice", WARN, f"{exc}: the valid run keeps the first quick run's ranks per node")
         try:  # the client (and FUSE channel) the probe chose, for the runs that follow
             with open(out) as f:
                 rep = json.load(f)
@@ -612,6 +635,51 @@ def cluster_step(args, ip: str, lib: str, fuse_client: str, intercept_lib: str, 
                 client, channel = "fuse", "on" if chosen == "io_uring" else "off"
         except (OSError, ValueError):
             pass
+
+
+MAX_RANKS_PER_NODE = 48
+
+
+def more_ranks(report_path: str) -> int | None:
+    """The rank count per node to try next to a quick run's: the hosts'
+    cores (the smallest host), at most MAX_RANKS_PER_NODE -- None when the
+    run already used that many, or it did not finish."""
+    try:
+        with open(report_path) as f:
+            rep = json.load(f)
+    except (OSError, ValueError):
+        return None
+    cores = [f.get("cores") for f in rep.get("node_facts") or [] if f.get("cores")]
+    used = rep.get("ranks_per_node")
+    if not cores or not used or not (rep.get("score") or {}).get("score"):
+        return None
+    want = min(min(cores), MAX_RANKS_PER_NODE)
+    return want if want > used else None
+
+
+def pick_ranks(report_paths: list[str]) -> tuple[int, str, str]:
+    """Of quick runs that differ in ranks per node, the count with the
+    higher IO500 score (a tie -- within 2% -- keeps the fewer ranks), the
+    report measured with it (the valid run's --rates-from), and why."""
+    seen = []
+    for p in report_paths:
+        try:
+            with open(p) as f:
+                rep = json.load(f)
+        except (OSError, ValueError):
+            continue
+        score = (rep.get("score") or {}).get("score")
+        if score and rep.get("ranks_per_node"):
+            seen.append((rep["ranks_per_node"], score, p))
+    if not seen:
+        raise ValueError("no quick run with a score")
+    seen.sort()
+    best = seen[0]
+    for r in seen[1:]:
+        if r[1] > best[1] * 1.02:
+            best = r
+    why = "; ".join(f"{r} ranks/node: score {s:.2f}" for r, s, _ in seen) + f" -> the valid run uses {best[0]}"
+    return best[0], best[2], why
 
 
 def gds_step(args, env: dict, topo_file: str, step) -> None:
