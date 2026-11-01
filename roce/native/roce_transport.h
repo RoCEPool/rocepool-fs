@@ -234,6 +234,14 @@ typedef uint8_t *(*roce_request_handler)(const uint8_t *request, size_t request_
  * the log's group commit) without a server thread idle in each fsync. */
 typedef int (*roce_reply_ready_fn)(void *obj, uint64_t token, int block);
 int roce_server_defer_reply(roce_reply_ready_fn ready, void *obj, uint64_t token, size_t reply_len);
+/* After a successful roce_server_defer_reply, for a reply whose bytes are
+ * not all there yet (an async tier read): the transport keeps its own copy
+ * of the reply, so it calls fill(obj, reply, len) exactly once, after
+ * ready() was nonzero and before sending -- reply is that copy to complete
+ * (NULL when a failure status goes instead). obj is the handler's to free
+ * there; ready() must not free it then. */
+typedef void (*roce_reply_fill_fn)(void *obj, uint8_t *reply, size_t len);
+void roce_server_defer_fill(roce_reply_fill_fn fill);
 
 roce_server_t *roce_server_start(const char *bind_address, roce_request_handler handler,
                                   void *user_data, size_t max_frame_bytes);

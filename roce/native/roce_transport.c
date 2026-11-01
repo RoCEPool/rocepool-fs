@@ -1966,3 +1966,4 @@ int roce_server_defer_reply(roce_reply_ready_fn ready, void *obj, uint64_t token
     (void)ready; (void)obj; (void)token; (void)reply_len;
     return -1;
 }
+void roce_server_defer_fill(roce_reply_fill_fn fill) { (void)fill; }
