@@ -513,3 +513,103 @@ class FreedSlabTests(unittest.TestCase):
         srv.start()
         e = RemoteEngine(srv.osts, RoCETransport())
         self.assertEqual(e.get("A"), a1)
+
+
+class DurableRestartWriteBehindTests(DurableRestartTests):
+    """the same crashes with a 1 MiB write buffer: every file over it is
+    sent in batches by the write-behind thread while the program goes on,
+    and close still returns only once all of them are durable"""
+    port = 24900
+    CLIENT_ENV = {"ROCEPOOL_DIRTY_CAP_MIB": "1", "ROCEPOOL_WRITE_BEHIND": "1"}
+    test_a_torn_log_tail_is_dropped = None  # nothing write-behind changes there
+
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class WriteBehindTests(unittest.TestCase):
+    """write-behind (handle_write -> wb_start): batches reach the OSTs in
+    write order, a read or stat through the fd sees every earlier write,
+    and an error of a background batch is the program's at close"""
+    port = 25000
+
+    @classmethod
+    def setUpClass(cls):
+        from roce.native.build_lib import ensure_intercept_lib, ensure_softverbs_lib
+        cls.lib = ensure_softverbs_lib()
+        cls.icp = ensure_intercept_lib()
+
+    def run_client(self, d, srv, code, env):
+        e = dict(os.environ, ROCE_TRANSPORT_LIB=self.lib, PYTHONPATH=ROOT, LD_PRELOAD=self.icp,
+                 ROCEPOOL_PREFIX=d + "/rp", ROCEPOOL_MDTS=srv.mdts, ROCEPOOL_OSTS=srv.osts,
+                 ROCEPOOL_DIRTY_CAP_MIB="1", **env)
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=e, timeout=300)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        return out.stdout.strip()
+
+    def test_overlapping_writes_across_batches_keep_their_order(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        srv = _Servers(self.lib, d, self.port, nm=1, no=2, env={"ROCEPOOL_TEST_LOG_DELAY_MS": "1"})
+        srv.start()
+        self.addCleanup(srv.stop)
+        # random overlapping writes over 6 MiB, many 1 MiB batches; reads,
+        # fstat and lseek through the fd in between check against a model
+        code = r'''
+import hashlib, os, random, sys
+P = os.environ["ROCEPOOL_PREFIX"]
+name = P + "/f" + os.environ["WB"]
+r = random.Random(11)
+size = 6 << 20
+model = bytearray(size)
+fd = os.open(name, os.O_RDWR | os.O_CREAT, 0o644)
+os.pwrite(fd, b"\0" * size, 0)
+for i in range(400):
+    off, n = r.randrange(size - 300000), r.randrange(1, 300000)
+    b = bytes([i % 251 + 1]) * n
+    os.pwrite(fd, b, off)
+    model[off:off + n] = b
+    if i % 97 == 50:
+        o = r.randrange(size - 4096)
+        assert os.pread(fd, 4096, o) == bytes(model[o:o + 4096]), ("same-fd read", i)
+        assert os.fstat(fd).st_size == size
+os.fsync(fd)
+os.close(fd)
+print(hashlib.sha256(model).hexdigest())
+'''
+        read = r'''
+import hashlib, os
+print(hashlib.sha256(open(os.environ["ROCEPOOL_PREFIX"] + "/f" + os.environ["WB"], "rb").read()).hexdigest())
+'''
+        want = {}
+        for wb in ("1", "0"):
+            want[wb] = self.run_client(d, srv, code, {"WB": wb, "ROCEPOOL_WRITE_BEHIND": wb})
+            self.assertEqual(self.run_client(d, srv, read, {"WB": wb}), want[wb], f"write-behind={wb}")
+        self.assertEqual(want["1"], want["0"])  # the same random writes
+        srv.kill()  # and every batch was durable when close returned
+        srv.start()
+        for wb in ("1", "0"):
+            self.assertEqual(self.run_client(d, srv, read, {"WB": wb}), want[wb], f"after a crash, write-behind={wb}")
+
+    def test_a_failed_background_batch_is_enospc(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        subprocess.run(["mount", "-t", "tmpfs", "-o", "size=8m", "tmpfs", d], check=True)
+        self.addCleanup(subprocess.run, ["umount", "-l", d])
+        srv = _Servers(self.lib, d, self.port + 10, nm=1, no=1)
+        srv.start()
+        self.addCleanup(srv.stop)
+        # 1 MiB writes: the tier fills under a batch in flight; the error
+        # comes back on a later write or at close, never lost
+        code = r'''
+import errno, os
+assert os.environ["ROCEPOOL_WRITE_BEHIND"] == "1"
+fd = os.open(os.environ["ROCEPOOL_PREFIX"] + "/big", os.O_WRONLY | os.O_CREAT, 0o644)
+try:
+    for i in range(32):
+        os.write(fd, b"x" * (1 << 20))
+    os.close(fd)
+    print("no error")
+except OSError as x:
+    print(x.errno)
+'''
+        import errno
+        self.assertEqual(self.run_client(d, srv, code, {"ROCEPOOL_WRITE_BEHIND": "1"}), str(errno.ENOSPC))

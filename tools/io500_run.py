@@ -717,7 +717,7 @@ def main() -> int:
     ap.add_argument("--bind-ranks", choices=["auto", "numa", "core", "none"], default="auto",
                     help="MPI rank placement (hydra -bind-to): auto = numa on real hosts, none simulated")
     ap.add_argument("--client-threads", type=int, default=16, help="native client FUSE threads per node")
-    ap.add_argument("--intercept-io-threads", type=int, default=4,
+    ap.add_argument("--intercept-io-threads", type=int, default=16,
                     help="interception client: I/O threads per rank (stripe fan-out)")
     ap.add_argument("--attr-ttl", type=float, default=3.0)
     ap.add_argument("--stonewall", type=int, default=None, help="seconds per write phase (IO500 official: 300)")
