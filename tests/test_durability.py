@@ -465,3 +465,51 @@ print(sorted(os.listdir(P + "/d")))
             self.assertIn("mdt_lost=0", err)
         self.crash_and_restart()
         self.assertEqual(self.listing("d"), ["y", "z"])
+
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class FreedSlabTests(unittest.TestCase):
+    """A slab an uncommitted change frees must not be reused before that
+    change is durable: a crash replays the old object onto it. A was
+    acknowledged; A's overwrite (A moves, its slab freed) and B (would take
+    that slab) are both in flight, the log slowed so neither commits, when
+    the OST dies: A must read as acknowledged."""
+    port = 24700
+
+    def test_an_acknowledged_object_survives_its_uncommitted_overwrite(self):
+        import threading
+        from roce.native.build_lib import ensure_softverbs_lib
+        lib = ensure_softverbs_lib()
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        srv = _Servers(lib, tmp, self.port, nm=1, no=1)
+        srv.start()
+        self.addCleanup(srv.stop)
+        os.environ["ROCE_TRANSPORT_LIB"] = lib
+        from roce.remote_engine import RemoteEngine
+        from roce.roce_transport import RoCETransport
+        e = RemoteEngine(srv.osts, RoCETransport())
+        a1 = b"\x41" * 4000
+        e.put("A", a1)  # durable: its reply waited for the log
+        srv.kill()
+        srv.env["ROCEPOOL_TEST_LOG_DELAY_MS"] = "4000"
+        srv.start()
+        e = RemoteEngine(srv.osts, RoCETransport())
+        self.assertEqual(e.get("A"), a1)
+
+        def bg(key, data):
+            try:
+                RemoteEngine(srv.osts, RoCETransport()).put(key, data)
+            except Exception:  # noqa: BLE001 -- the OST dies under it
+                pass
+        t1 = threading.Thread(target=bg, args=("A", b"\x61" * 20000), daemon=True)
+        t1.start()
+        time.sleep(0.5)
+        t2 = threading.Thread(target=bg, args=("B", b"\x42" * 4000), daemon=True)
+        t2.start()
+        time.sleep(0.5)
+        srv.kill()
+        srv.env.pop("ROCEPOOL_TEST_LOG_DELAY_MS")
+        srv.start()
+        e = RemoteEngine(srv.osts, RoCETransport())
+        self.assertEqual(e.get("A"), a1)

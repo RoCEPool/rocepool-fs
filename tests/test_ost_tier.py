@@ -222,10 +222,11 @@ print(got == data)
         for k, v in want.items():
             self.assertEqual(e.get(k), v, k)
         written = _stats(self.transport, addr)["tier_bytes_written"] - before
-        # old code: 10.5x here; now ~1.8x in this worst case (every object
-        # written back between pieces, zero gaps and all); on site, with a
-        # RAM cache far larger than the objects in flight, ~1x
-        self.assertLessEqual(written, 2.2 * nobj * 22 * piece, written)
+        # old code: 10.5x here; now ~1.7x in this worst case: an object
+        # evicted mid-fill is written back whole, its gaps' zeros with it
+        # (RAM-only mode). Durable OSTs write each piece through and skip
+        # the gaps on a fresh slab: TierZeroTailDurableTests, ~1x
+        self.assertLessEqual(written, 2.0 * nobj * 22 * piece, written)
 
     def test_many_small_objects_survive_eviction(self):
         e = self.engines[0]
@@ -281,3 +282,113 @@ class TierBackgroundEvictionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+class TierZeroTailTests(unittest.TestCase):
+    """A gap a write leaves past an object's end must read as zeros. On a
+    slab never written since the tier was created it does by itself and is
+    not written (ior-hard's out-of-order pieces wrote each stripe ~1.84
+    times); wherever old bytes may lie past the end -- the object shrank
+    (truncate, a shorter PUT), the slab was freed and reused -- it is. Read
+    back after eviction, so the bytes come from the tier."""
+    port = 23700
+    durable = False
+
+    @classmethod
+    def setUpClass(cls):
+        from roce.native.build_lib import ensure_softverbs_lib
+        cls.lib = ensure_softverbs_lib()
+        cls.tmp = tempfile.mkdtemp()
+        env = dict(os.environ, ROCE_TRANSPORT_LIB=cls.lib, PYTHONPATH=ROOT,
+                   ROCEPOOL_OST_TIER=f"file:{cls.tmp}/tier{{n}}:1", ROCEPOOL_OST_RAM_CACHE_MIB="2")
+        if cls.durable:
+            env.update(ROCEPOOL_OST_LOG=f"{cls.tmp}/ost{{n}}.log", ROCEPOOL_MDT_LOG=f"{cls.tmp}/mdt{{n}}.log")
+        cls.srv = subprocess.Popen([sys.executable, "-u", os.path.join(ROOT, "tests", "fakes", "native_cluster.py"),
+                                    ROOT, str(cls.port), "1", "1"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True, env=env)
+        line = cls.srv.stdout.readline()
+        assert line.startswith("READY"), line + cls.srv.stderr.read()
+        _, _, cls.ost = line.split()
+        os.environ["ROCE_TRANSPORT_LIB"] = cls.lib
+        from roce.remote_engine import RemoteEngine
+        from roce.roce_transport import RoCETransport
+        cls.transport = RoCETransport()
+        cls.e = RemoteEngine(cls.ost, cls.transport)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.stdin.close()
+        cls.srv.wait(timeout=10)
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def evict(self):
+        """8 MiB of other objects through a 2 MiB RAM cache"""
+        for i in range(8):
+            self.e.put(f"filler/{random.random()}", os.urandom(1 << 20))
+
+    def test_holes_on_a_fresh_slab(self):
+        self.e.write_at("z/holes", 300000, b"\x55" * 1000)
+        self.e.write_at("z/holes", 700000, b"\x66" * 1000)
+        self.evict()
+        got = self.e.get("z/holes")
+        self.assertEqual(got, bytes(300000) + b"\x55" * 1000 + bytes(399000) + b"\x66" * 1000)
+
+    def test_truncate_then_extend(self):
+        self.e.write_at("z/trunc", 0, b"\xaa" * 200000)
+        self.evict()
+        self.e.truncate_object("z/trunc", 10000)
+        self.evict()
+        self.e.write_at("z/trunc", 150000, b"\xbb" * 100)
+        self.evict()
+        self.assertEqual(self.e.get("z/trunc"), b"\xaa" * 10000 + bytes(140000) + b"\xbb" * 100)
+
+    def test_shorter_put_then_extend(self):
+        self.e.put("z/put", b"\xcc" * 200000)
+        self.evict()
+        self.e.put("z/put", b"\xdd" * 5000)
+        self.evict()
+        self.e.write_at("z/put", 100000, b"E" * 10)
+        self.evict()
+        self.assertEqual(self.e.get("z/put"), b"\xdd" * 5000 + bytes(95000) + b"E" * 10)
+
+    def test_a_reused_slab(self):
+        for i in range(6):  # whole 1 MiB slabs of 0x11, freed: their class's free list
+            self.e.write_at(f"z/old{i}", 0, b"\x11" * ((1 << 20) - 4096))
+        self.evict()
+        for i in range(6):
+            self.e.delete(f"z/old{i}")
+        for i in range(6):  # pieces past the start: 1 MiB slabs again, off the free list
+            self.e.write_at(f"z/new{i}", 600000, b"\x22" * 100)
+        self.evict()
+        for i in range(6):
+            self.assertEqual(self.e.get(f"z/new{i}"), bytes(600000) + b"\x22" * 100, i)
+
+
+class TierZeroTailDurableTests(TierZeroTailTests):
+    """the same with the OST's log: every write goes through to the tier"""
+    port = 23720
+    durable = True
+
+    def test_strided_pieces_are_written_once(self):
+        """ior-hard's shape: 47008-byte pieces of 1 MiB stripe objects,
+        out of order. 6 x i3en, durable: 3582 GiB of tier writes for 1944
+        GiB of data -- each gap a piece left written as zeros, then again
+        with the piece that filled it"""
+        piece, nobj = 47008, 12
+        want, jobs = {}, []
+        for o in range(nobj):
+            data = random.Random(o).randbytes(22 * piece)
+            want[f"s/{o}"] = data
+            order = list(range(22))
+            random.Random(100 + o).shuffle(order)
+            jobs.append([(f"s/{o}", k * piece, data[k * piece:(k + 1) * piece]) for k in order])
+        before = _stats(self.transport, self.ost)["tier_bytes_written"]
+        for r in range(22):
+            for o in range(nobj):
+                self.e.write_at(*jobs[o][r])
+        written = _stats(self.transport, self.ost)["tier_bytes_written"] - before
+        self.evict()
+        for k, v in want.items():
+            self.assertEqual(self.e.get(k), v, k)
+        self.assertLessEqual(written, 1.1 * nobj * 22 * piece, written)

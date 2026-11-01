@@ -157,6 +157,36 @@ IO500_PHASES = ("ior-easy-write", "mdtest-easy-write", "ior-hard-write", "mdtest
                 "mdtest-hard-delete", "ior-rnd4K-easy-read")
 
 
+def shlex_quote(p: str) -> str:
+    """a path for sh -c, its * left to the shell (a tier spec's {n})"""
+    import shlex
+    return "*".join(shlex.quote(x) for x in p.split("*"))
+
+
+def tier_files(spec: str | None) -> str | None:
+    """the shell glob of a file tier spec's files: every OST on the node
+    expands its "{n}" (rocepool_servers.c wal_path) -- None for a device"""
+    if not spec or not spec.startswith("file:"):
+        return None
+    path = spec[5:].rsplit(":", 1)[0] if re.search(r":\d+$", spec[5:]) else spec[5:]
+    if path.startswith("/dev/"):
+        return None
+    return shlex_quote(path.replace("{n}", "*"))
+
+
+def remove_tier_files(cluster, node: int, spec: str | None, env: dict) -> None:
+    """The tier files hold one run's data only: removed at the end of a run
+    -- and before one starts, in case an earlier run on these hosts ended
+    without its cleanup: an existing file is not known to read zeros, so
+    every gap a write leaves would be written (ost_tier.c zero_tail)."""
+    g = tier_files(spec)
+    if g:
+        try:
+            cluster.run(node, ["sh", "-c", f"rm -f {g}"], env, net=False, capture_output=True, timeout=120)
+        except (subprocess.SubprocessError, OSError):
+            pass
+
+
 def tier_dir(spec: str | None) -> str | None:
     """the directory of a file tier spec (file:PATH[:GIB]); None otherwise"""
     if not spec or not spec.startswith("file:"):
@@ -919,6 +949,8 @@ def main() -> int:
                 s["env"] = {k2: v.replace("{n}", str(k)) for k2, v in tier_env[s["node"]].items()}
                 s["env"]["ROCEPOOL_OST_RAM_CACHE_MIB"] = str(ram_mib)
                 s["tier"] = s["env"]["ROCEPOOL_OST_TIER"]
+                if cluster.real:
+                    remove_tier_files(cluster, s["node"], s["tier"], env)
         # the data budget from what the OSTs can hold: striping spreads the
         # data evenly, so the smallest OST bounds it (tier: its size + RAM
         # cache; RAM only: its share of 40% of its host's RAM). A budget
@@ -1393,16 +1425,26 @@ def main() -> int:
                 p.kill()
         cluster.down()
         # the OSTs' tier files hold this run's data only: removed with it (a
-        # raw namespace -- file:/dev/... -- is left as it is)
+        # raw namespace -- file:/dev/... -- is left as it is). First how
+        # fragmented the file system left them: durable OSTs write each
+        # piece through, and ior-hard-read ran 27% slower than RAM-only
+        # with each tier read ~1.8x as long -- the extent count says whether
+        # the layout is why (filefrag, FIEMAP)
+        frag = {}
         for s in servers:
-            spec = s.get("tier") or ""
-            if spec.startswith("file:") and cluster.real:
-                path = spec[5:].rsplit(":", 1)[0] if re.search(r":\d+$", spec[5:]) else spec[5:]
-                if not path.startswith("/dev/"):
-                    try:
-                        cluster.run(s["node"], ["rm", "-f", path], env, net=False, capture_output=True, timeout=120)
-                    except (subprocess.SubprocessError, OSError):
-                        pass
+            g = tier_files(s.get("tier"))
+            if g and cluster.real and f"node{s['node']}" not in frag:
+                try:
+                    r = cluster.run(s["node"], ["sh", "-c", f"filefrag {g} 2>&1 | tail -4"], env, net=False,
+                                    capture_output=True, text=True, timeout=180)
+                    frag[f"node{s['node']}"] = (r.stdout or "").strip()[-600:]
+                except (subprocess.SubprocessError, OSError) as exc:
+                    frag[f"node{s['node']}"] = f"filefrag: {exc}"
+        if frag:
+            report["tier_fragmentation"] = frag
+        for s in servers:
+            if cluster.real:
+                remove_tier_files(cluster, s["node"], s.get("tier"), env)
         with open(args.report, "w") as f:
             json.dump(report, f, indent=1)
     from tools import io500_model

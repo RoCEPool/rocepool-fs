@@ -440,6 +440,13 @@ typedef struct {
     wal_t *wal;
     int durable;
     atomic_ullong log_fail;
+    /* durable: slabs freed by a change, given back to the tier only once the
+     * log record of that change is durable -- before, a crash replays the
+     * old object onto its old slab, which may meanwhile hold another's */
+    pthread_mutex_t dq_lk;
+    struct { tier_ext_t ext; uint64_t lsn; } *dq;
+    size_t ndq, cdq;
+    atomic_ullong frees_deferred;
     roce_server_t *server;          /* for the arena chunks' rkeys (set once the server runs) */
     atomic_ullong leases, lease_misses;
     pthread_mutex_t lru_lock;
@@ -460,6 +467,7 @@ static ost_store *ost_new(void) {
         if (!s->stripes[i].slots) return NULL;
     }
     pthread_mutex_init(&s->lru_lock, NULL);
+    pthread_mutex_init(&s->dq_lk, NULL);
     arena_init(&s->arena);
     const char *spec = getenv("ROCEPOOL_OST_TIER");
     /* every OST needs a device or file (and log) of its own; "{n}" in a spec
@@ -650,6 +658,62 @@ static int ent_slab(ost_store *s, kv_entry *e, size_t size, tier_ext_t *old, int
     return 0;
 }
 
+/* the slabs this request freed (slab_release), queued with its LSN at its end */
+static __thread struct { ost_store *s; tier_ext_t *ext; size_t n, cap; } tl_frees;
+
+static void slab_release(ost_store *s, const tier_ext_t *ext) {
+    if (!s->wal) { ost_tier_free(s->tier, ext); return; }
+    if (tl_frees.n == tl_frees.cap) {
+        size_t nc = tl_frees.cap ? 2 * tl_frees.cap : 8;
+        tier_ext_t *ne = realloc(tl_frees.ext, nc * sizeof(*ne));
+        if (!ne) return;  /* out of memory: the slab leaks, never freed early */
+        tl_frees.ext = ne;
+        tl_frees.cap = nc;
+    }
+    tl_frees.s = s;
+    tl_frees.ext[tl_frees.n++] = *ext;
+}
+
+/* at the end of a request: its freed slabs wait for its record (lsn) */
+static void slab_release_queue(uint64_t lsn) {
+    ost_store *s = tl_frees.s;
+    if (!tl_frees.n || !s) return;
+    if (lsn == UINT64_MAX || lsn == 0) {  /* no record of the change: never safe to reuse */
+        tl_frees.n = 0;
+        return;
+    }
+    pthread_mutex_lock(&s->dq_lk);
+    for (size_t i = 0; i < tl_frees.n; i++) {
+        if (s->ndq == s->cdq) {
+            size_t nc = s->cdq ? 2 * s->cdq : 256;
+            void *nq = realloc(s->dq, nc * sizeof(*s->dq));
+            if (!nq) break;
+            s->dq = nq;
+            s->cdq = nc;
+        }
+        s->dq[s->ndq].ext = tl_frees.ext[i];
+        s->dq[s->ndq].lsn = lsn;
+        s->ndq++;
+    }
+    atomic_fetch_add(&s->frees_deferred, tl_frees.n);
+    pthread_mutex_unlock(&s->dq_lk);
+    tl_frees.n = 0;
+}
+
+/* give back the slabs whose freeing record is durable now */
+static void slab_reap(ost_store *s) {
+    if (!s->wal || !__atomic_load_n(&s->ndq, __ATOMIC_RELAXED)) return;
+    uint64_t durable = wal_durable(s->wal);
+    if (pthread_mutex_trylock(&s->dq_lk)) return;  /* another thread is at it */
+    size_t k = 0;
+    for (size_t i = 0; i < s->ndq; i++) {
+        if (s->dq[i].lsn <= durable) ost_tier_free(s->tier, &s->dq[i].ext);
+        else s->dq[k++] = s->dq[i];
+    }
+    s->ndq = k;
+    pthread_mutex_unlock(&s->dq_lk);
+}
+
 /* write the RAM copy's bytes [off, off+len) through to the tier */
 static int ent_sync(ost_store *s, kv_entry *e, uint64_t off, size_t len, size_t reserve) {
     tier_ext_t old;
@@ -659,7 +723,27 @@ static int ent_sync(ost_store *s, kv_entry *e, uint64_t off, size_t len, size_t 
     if (moved) { off = 0; len = e->size; }  /* a new slab: the whole object */
     if (len) rc = ost_tier_write(s->tier, &e->ext, off, e->data + off, len);
     if (len && !rc) atomic_fetch_add(&s->tier_bytes_written, len);
-    if (moved) ost_tier_free(s->tier, &old);
+    if (moved) slab_release(s, &old);
+    return rc;
+}
+
+/* A write of [off, off+len) to the RAM copy, through to the tier: the gap
+ * from the old size to off (zeros in RAM) only where the slab may hold old
+ * bytes. On a slab never written since the tier was created (zero_tail)
+ * the gap already reads as zeros -- writing it made ior-hard's
+ * out-of-order pieces write each stripe ~1.84 times (6 x i3en: 3582 GiB
+ * for 1944 GiB of data, 4x the CPU per write). */
+static int ent_sync_write(ost_store *s, kv_entry *e, uint64_t old_size, uint64_t off, size_t len, size_t reserve) {
+    tier_ext_t old;
+    int moved;
+    int rc = ent_slab(s, e, e->size, &old, &moved, reserve);
+    if (rc) return rc;
+    uint64_t from = off, to = off + len;
+    if (moved) from = 0, to = e->size;  /* a new slab: the whole object */
+    else if (off > old_size && !e->ext.zero_tail) from = old_size;
+    if (to > from) rc = ost_tier_write(s->tier, &e->ext, from, e->data + from, (size_t)(to - from));
+    if (to > from && !rc) atomic_fetch_add(&s->tier_bytes_written, to - from);
+    if (moved) slab_release(s, &old);
     return rc;
 }
 
@@ -682,7 +766,7 @@ static int direct_ok(ost_store *s, const uint8_t *src, uint64_t off, size_t len)
 static void ent_destroy(ost_store *s, kv_entry *e) {  /* unlinked from its stripe already */
     if (s->tier) {
         lru_drop(s, e);
-        if (e->on_tier) ost_tier_free(s->tier, &e->ext);
+        if (e->on_tier) slab_release(s, &e->ext);
         if (e->data) atomic_fetch_sub(&s->ram_bytes, cap_mem(e->data_cap));
     }
     ent_free_data(s, e->data, e->data_cap);
@@ -913,11 +997,14 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         if (s->tier) {
             tier_ext_t oldext;
             int moved;
+            int was_on = e->on_tier;
             rc = ent_slab(s, e, dlen, &oldext, &moved, 0);
+            /* the same slab, a shorter object: its old bytes lie past the end */
+            if (!rc && was_on && !moved && old_size > dlen) e->ext.zero_tail = 0;
             if (!rc) rc = direct ? ost_tier_write_direct(s->tier, &e->ext, 0, src, dlen)
                                  : ost_tier_write(s->tier, &e->ext, 0, data, dlen);
             if (!rc) atomic_fetch_add(&s->tier_bytes_written, dlen);
-            if (!rc && moved) ost_tier_free(s->tier, &oldext);
+            if (!rc && moved) slab_release(s, &oldext);
             if (!rc) e->tier_dirty = 0;
             if (!rc && direct) atomic_fetch_add(&s->direct_writes, 1);
             if (old) atomic_fetch_sub(&s->ram_bytes, cap_mem(old_cap));
@@ -1055,7 +1142,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
             int moved;
             rc = ent_slab(s, e, new_size, &oldext, &moved, grow_reserve(off, new_size));  /* never moves: checked above */
             (void)moved;
-            if (!rc && off > old_size) {  /* the gap reads as zeros */
+            if (!rc && off > old_size && !e->ext.zero_tail) {  /* the gap reads as zeros (a fresh slab does already) */
                 size_t gap = (size_t)off - old_size;
                 uint8_t *z = calloc(1, gap);
                 rc = z ? ost_tier_write(s->tier, &e->ext, old_size, z, gap) : -ENOMEM;
@@ -1068,7 +1155,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
             /* evicted, and the write fits its slab: write the tier in place
              * (was: read the whole object back into RAM first -- for
              * 47008 bytes, up to a stripe's worth of NVMe reads) */
-            if (off > old_size) {  /* the gap reads as zeros */
+            if (off > old_size && !e->ext.zero_tail) {  /* the gap reads as zeros (a fresh slab does already) */
                 size_t gap = (size_t)off - old_size;
                 uint8_t *z = calloc(1, gap);
                 rc = z ? ost_tier_write(s->tier, &e->ext, old_size, z, gap) : -ENOMEM;
@@ -1112,8 +1199,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
                      * the middle of an object rewrote everything after it
                      * -- IOR hard's out-of-order 47008-byte pieces made
                      * ~10x their bytes in tier writes.) */
-                    uint64_t from = off > old_size ? old_size : off;
-                    rc = ent_sync(s, e, from, (size_t)(off + dlen - from), grow_reserve(off, new_size));
+                    rc = ent_sync_write(s, e, old_size, off, dlen, grow_reserve(off, new_size));
                     lru_touch(s, e);
                 }
             }
@@ -1181,6 +1267,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
             if (e->size > size) {
                 freed = e->size - size;
                 e->size = (size_t)size;
+                e->ext.zero_tail = 0;  /* past the new size: the old bytes, on the tier */
                 e->version++;
                 e->updated_at = now_s();
                 if (e->data) { obj_begin(e->data); obj_publish(&s->arena, e->data, e->size); }
@@ -2566,8 +2653,12 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
             tl_wal = md->wal;
             tl_wal_lsn = wal_last(md->wal);
         }
+    } else if (n->kind == ROCEPOOL_NATIVE_OST) {
+        slab_reap(n->ost);
+        out = ost_handle(n->ost, &f, resp_len);
+        slab_release_queue(tl_wal_lsn);
     } else {
-        out = n->kind == ROCEPOOL_NATIVE_OST ? ost_handle(n->ost, &f, resp_len) : mdt_handle(n->mdt, &f, resp_len);
+        out = mdt_handle(n->mdt, &f, resp_len);
     }
     if (md && md->wal && (f.flags & RQF_ASYNC) && out && out[4] == OP_MDT_OK) {
         /* the client keeps what it is told is not committed yet. A file's
