@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -386,6 +387,44 @@ int ost_tier_write(ost_tier_t *t, const tier_ext_t *ext, uint64_t off, const voi
     return xpwrite(t->fd, buf, len, ext->off + off);
 }
 
+/* Tier reads bypass the page cache (O_DIRECT, as the writes do): through
+ * it, a 1 MiB GET cost the OST ~1 ms of CPU on i3en (6 x 48 cores, the
+ * ior-easy-read phase: its threads 93-99% busy) -- pages allocated, and
+ * reclaimed under the memory pressure of terabytes read through 384 GiB
+ * hosts, then copied; data read once gains nothing from the cache. The
+ * page-aligned span is read into this thread's aligned buffer (or straight
+ * into the caller's when it is aligned itself) and the bytes copied out.
+ * ROCEPOOL_OST_TIER_DIRECT_READ=0: through the page cache, as before. */
+static atomic_int g_direct_reads_off;
+static int direct_reads_on(void) {
+    static int v = -1;
+    if (v < 0) { const char *e = getenv("ROCEPOOL_OST_TIER_DIRECT_READ"); v = !(e && !strcmp(e, "0")); }
+    return v && !atomic_load(&g_direct_reads_off);
+}
+static atomic_ullong g_direct_reads;
+unsigned long long ost_tier_direct_reads(void) { return atomic_load(&g_direct_reads); }
+static __thread uint8_t *tl_dbuf;
+static __thread size_t tl_dcap;
+static int read_direct_any(ost_tier_t *t, const tier_ext_t *ext, uint64_t off, void *buf, size_t len) {
+    uint64_t s = off & ~(uint64_t)(TIER_PAGE - 1), e = (off + len + TIER_PAGE - 1) & ~(uint64_t)(TIER_PAGE - 1);
+    if (e > CLASS_BYTES[ext->cls] || ext->off % TIER_PAGE) return 1;  /* not this one: the buffered path */
+    atomic_fetch_add(&g_direct_reads, 1);
+    if (s == off && e == off + len && ((uintptr_t)buf % TIER_PAGE) == 0)
+        return xpread(t->dfd, buf, len, ext->off + off);
+    size_t n = (size_t)(e - s);
+    if (tl_dcap < n) {
+        void *b = NULL;
+        size_t cap = n < (1u << 20) ? (1u << 20) : n;
+        if (posix_memalign(&b, TIER_PAGE, cap)) return -ENOMEM;
+        free(tl_dbuf);
+        tl_dbuf = b;
+        tl_dcap = cap;
+    }
+    int rc = xpread(t->dfd, tl_dbuf, n, ext->off + s);
+    if (!rc) memcpy(buf, tl_dbuf + (off - s), len);
+    return rc;
+}
+
 int ost_tier_read(ost_tier_t *t, const tier_ext_t *ext, uint64_t off, void *buf, size_t len) {
     int rc = bounds(t, ext, off, len);
     if (rc || !len) return rc;
@@ -399,6 +438,12 @@ int ost_tier_read(ost_tier_t *t, const tier_ext_t *ext, uint64_t off, void *buf,
         return 0;
     }
 #endif
+    if (t->dfd >= 0 && direct_reads_on()) {
+        rc = read_direct_any(t, ext, off, buf, len);
+        if (rc <= 0 && rc != -EINVAL) return rc;
+        if (rc == -EINVAL) atomic_store(&g_direct_reads_off, 1);  /* the file system refused: buffered from now on */
+        if (rc == -EINVAL) fprintf(stderr, "rocepool OST: direct tier reads refused (EINVAL): through the page cache\n");
+    }
     return xpread(t->fd, buf, len, ext->off + off);
 }
 

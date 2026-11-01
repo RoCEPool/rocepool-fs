@@ -2670,9 +2670,10 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
                             (unsigned long long)atomic_load(&n->ost->leases), (unsigned long long)atomic_load(&n->ost->lease_misses),
                             (unsigned long long)atomic_load(&n->ost->arena.bytes));
         if (!rc && n->ost->tier)
-            rc = buf_printf(&b, ", \"tier_read_threads\": %d, \"async_tier_reads\": %llu, \"async_tier_rereads\": %llu",
+            rc = buf_printf(&b, ", \"tier_read_threads\": %d, \"async_tier_reads\": %llu, \"async_tier_rereads\": %llu, "
+                            "\"tier_direct_reads\": %llu",
                             n->ost->rd_threads, (unsigned long long)atomic_load(&n->ost->async_reads),
-                            (unsigned long long)atomic_load(&n->ost->async_rereads));
+                            (unsigned long long)atomic_load(&n->ost->async_rereads), ost_tier_direct_reads());
         if (!rc && n->ost->tier)
             rc = buf_printf(&b, ", \"tier\": \"%s\", \"tier_capacity\": %llu, \"tier_used\": %llu, \"tier_direct\": %s, "
                             "\"ram_cache_bytes\": %llu, \"ram_cache_budget\": %llu, \"direct_writes\": %llu, "
