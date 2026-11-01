@@ -604,3 +604,14 @@ class UnscoredPhaseTests(unittest.TestCase):
         self.assertEqual(got["ior-rnd4K-easy-read"], {"value": 1.34361, "unit": "GiB/s", "time_s": 328.546,
                                                       "invalid": False})
         self.assertTrue(got["ior-rnd4K-easy-read2"]["invalid"])
+
+
+class TierFilesTests(unittest.TestCase):
+    def test_globs(self):
+        from tools.io500_run import tier_files
+        self.assertEqual(tier_files("file:/nvmedata/rocepool_ost_3.tier:21921"), "/nvmedata/rocepool_ost_3.tier")
+        self.assertEqual(tier_files("file:/nvmedata/rocepool_ost_{n}.tier:9"), "/nvmedata/rocepool_ost_*.tier")
+        self.assertEqual(tier_files("file:/a b/t.tier"), "'/a b/t.tier'")
+        self.assertIsNone(tier_files("file:/dev/nvme1n1"))
+        self.assertIsNone(tier_files("spdk:0000:00:1f.0"))
+        self.assertIsNone(tier_files(None))

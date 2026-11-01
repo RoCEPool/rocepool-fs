@@ -25,6 +25,13 @@ typedef struct ost_tier ost_tier_t;
 typedef struct {
     uint64_t off;    /* byte offset on the device */
     uint32_t cls;    /* size class index; capacity = ost_tier_class_bytes(cls) */
+    /* 1: the slab has never been written since the tier was created (a
+     * fallocated or sparse file reads zeros there), so whatever lies past
+     * the object's size in it reads as zeros -- a gap a write leaves need
+     * not be written. Set by ost_tier_alloc; the store clears it when the
+     * object shrinks; 0 for slabs restored from a log, reused, or on a
+     * device whose old contents are unknown. */
+    uint8_t zero_tail;
 } tier_ext_t;
 
 #define TIER_PAGE 4096u

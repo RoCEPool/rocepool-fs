@@ -36,7 +36,13 @@ struct ost_tier {
     uint64_t capacity, used;
     pthread_mutex_t lock;        /* allocator */
     uint64_t next_zone;          /* bump pointer over the device */
-    freelist_t free[N_CLASSES];
+    freelist_t free[N_CLASSES];  /* slabs freed (written before) */
+    freelist_t zfree[N_CLASSES]; /* slabs freed and zeroed again (fallocate ZERO_RANGE: read zeros) */
+    uint64_t bump[N_CLASSES], bump_end[N_CLASSES];  /* the class's zone being carved, never handed out */
+    /* offsets from here on were never written: the tier file was empty
+     * when opened (fallocated / sparse: reads zeros). capacity: nothing
+     * known (an existing file, a device, after a restore) */
+    uint64_t zero_from;
     /* file backend */
     int fd, dfd;                 /* buffered and O_DIRECT descriptors (dfd < 0: no direct I/O) */
     uint32_t lba;                /* device sector size */
@@ -64,19 +70,24 @@ int ost_tier_alloc(ost_tier_t *t, size_t size, tier_ext_t *ext) {
     if (cls == UINT32_MAX) return -EFBIG;
     pthread_mutex_lock(&t->lock);
     freelist_t *f = &t->free[cls];
-    if (f->n == 0) {
-        if (t->next_zone + ZONE_BYTES > t->capacity) { pthread_mutex_unlock(&t->lock); return -ENOSPC; }
-        uint64_t z = t->next_zone;
-        t->next_zone += ZONE_BYTES;
-        size_t sb = CLASS_BYTES[cls];
-        /* push in reverse so the zone is handed out front to back */
-        for (uint64_t off = z + ZONE_BYTES - sb; ; off -= sb) {
-            if (fl_push(f, off)) break;
-            if (off == z) break;
+    size_t sb = CLASS_BYTES[cls];
+    if (t->zfree[cls].n) {  /* freed, zeroed again: reads zeros */
+        ext->off = t->zfree[cls].offs[--t->zfree[cls].n];
+        ext->zero_tail = 1;
+    } else if (f->n) {  /* a slab freed earlier: written before */
+        ext->off = f->offs[--f->n];
+        ext->zero_tail = 0;
+    } else {
+        if (t->bump[cls] + sb > t->bump_end[cls]) {  /* a new zone for the class, carved front to back */
+            if (t->next_zone + ZONE_BYTES > t->capacity) { pthread_mutex_unlock(&t->lock); return -ENOSPC; }
+            t->bump[cls] = t->next_zone;
+            t->bump_end[cls] = t->next_zone + ZONE_BYTES;
+            t->next_zone += ZONE_BYTES;
         }
-        if (f->n == 0) { pthread_mutex_unlock(&t->lock); return -ENOMEM; }
+        ext->off = t->bump[cls];
+        t->bump[cls] += sb;
+        ext->zero_tail = ext->off >= t->zero_from;
     }
-    ext->off = f->offs[--f->n];
     ext->cls = cls;
     t->used += CLASS_BYTES[cls];
     pthread_mutex_unlock(&t->lock);
@@ -85,8 +96,16 @@ int ost_tier_alloc(ost_tier_t *t, size_t size, tier_ext_t *ext) {
 
 void ost_tier_free(ost_tier_t *t, const tier_ext_t *ext) {
     if (ext->cls >= N_CLASSES) return;
+    /* a file tier's slab made to read zeros again -- a metadata change, its
+     * blocks stay allocated (unwritten): the next object on it skips the
+     * gaps its writes leave, as on a slab never written. The harness's
+     * client probe frees slabs before the run: without this the run's
+     * objects landed on them and every gap was written. */
+    int zeroed = !strcmp(t->kind, "file") && t->fd >= 0 &&
+                 fallocate(t->fd, FALLOC_FL_ZERO_RANGE | FALLOC_FL_KEEP_SIZE, (off_t)ext->off,
+                           (off_t)CLASS_BYTES[ext->cls]) == 0;
     pthread_mutex_lock(&t->lock);
-    fl_push(&t->free[ext->cls], ext->off);  /* on ENOMEM the slab leaks: acceptable */
+    fl_push(zeroed ? &t->zfree[ext->cls] : &t->free[ext->cls], ext->off);  /* on ENOMEM the slab leaks: acceptable */
     t->used -= CLASS_BYTES[ext->cls];
     pthread_mutex_unlock(&t->lock);
 }
@@ -100,9 +119,12 @@ static int cmp_u64(const void *a, const void *b) {
 
 int ost_tier_restore(ost_tier_t *t, const tier_ext_t *used, size_t n) {
     pthread_mutex_lock(&t->lock);
-    for (int c = 0; c < N_CLASSES; c++) t->free[c].n = 0;
+    for (int c = 0; c < N_CLASSES; c++) t->free[c].n = t->zfree[c].n = 0;
+    for (int c = 0; c < N_CLASSES; c++) t->bump[c] = t->bump_end[c] = 0;
     t->used = 0;
     t->next_zone = 0;
+    /* what the last life wrote past its logged objects is unknown */
+    t->zero_from = t->capacity;
     if (!n) { pthread_mutex_unlock(&t->lock); return 0; }
     uint64_t nz = 0;
     for (size_t i = 0; i < n; i++) {
@@ -171,6 +193,9 @@ static int file_open(ost_tier_t *t, const char *spec, char *err, size_t err_len)
         t->capacity = bytes;
     } else {
         t->capacity = size_gib << 30;
+        /* a file created just now (empty): every block reads zeros until
+         * written -- fallocated (unwritten extents) or sparse alike */
+        if (st.st_size == 0) t->zero_from = 0;
         if ((uint64_t)st.st_size < t->capacity && ftruncate(t->fd, (off_t)t->capacity)) {
             snprintf(err, err_len, "tier: ftruncate %s to %llu GiB: %s", path, (unsigned long long)size_gib, strerror(errno));
             return -1;
@@ -306,6 +331,7 @@ ost_tier_t *ost_tier_open(const char *spec, char *err, size_t err_len) {
     if (!t) { snprintf(err, err_len, "tier: out of memory"); return NULL; }
     pthread_mutex_init(&t->lock, NULL);
     t->fd = t->dfd = -1;
+    t->zero_from = UINT64_MAX;  /* nothing known to read zeros unless the backend says so */
     int rc;
     if (!strncmp(spec, "file:", 5)) rc = file_open(t, spec + 5, err, err_len);
 #ifdef ROCEPOOL_SPDK
@@ -315,6 +341,7 @@ ost_tier_t *ost_tier_open(const char *spec, char *err, size_t err_len) {
 #endif
     else { snprintf(err, err_len, "tier: unknown backend in %s (file:PATH[:GIB] | spdk:TRADDR[:NSID])", spec); rc = -1; }
     if (rc) { ost_tier_close(t); return NULL; }
+    if (t->zero_from > t->capacity) t->zero_from = t->capacity;
     if (t->capacity < ZONE_BYTES) { snprintf(err, err_len, "tier: device smaller than one 64 MiB zone"); ost_tier_close(t); return NULL; }
     return t;
 }
@@ -323,7 +350,7 @@ void ost_tier_close(ost_tier_t *t) {
     if (!t) return;
     if (t->fd >= 0) close(t->fd);
     if (t->dfd >= 0) close(t->dfd);
-    for (int i = 0; i < N_CLASSES; i++) free(t->free[i].offs);
+    for (int i = 0; i < N_CLASSES; i++) { free(t->free[i].offs); free(t->zfree[i].offs); }
     free(t);
 }
 
