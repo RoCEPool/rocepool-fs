@@ -38,6 +38,10 @@ typedef struct wal wal_t;
 
 /* open (create) the log for appending; NULL + err on failure */
 wal_t *wal_open(const char *path, char *err, size_t err_len);
+/* the same in a given mode: direct (0/1) and commits in flight (>= 1) --
+ * -1 / 0 for either: from ROCEPOOL_LOG_DIRECT / ROCEPOOL_LOG_PIPELINE, else
+ * measured (calibration) */
+wal_t *wal_open_as(const char *path, int direct, int pipeline, char *err, size_t err_len);
 /* also fdatasync this descriptor in every commit, before the log (data the
  * log's records point at) */
 int wal_add_sync(wal_t *w, int fd);

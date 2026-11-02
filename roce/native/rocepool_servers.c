@@ -930,7 +930,18 @@ static int ost_open_log(ost_store *s, const char *spec, int n) {
                 (double)(mono_ns() - t0) / 1e9, (unsigned long long)atomic_load(&s->objects),
                 (unsigned long long)atomic_load(&s->bytes));
     }
-    s->wal = wal_open(path, err, sizeof(err));
+    /* An OST's commit is its tier's fdatasync more than its log record: the
+     * calibration (records on a scratch log) does not see that. On 6 x i3en
+     * it chose direct writes, 4 commits in flight, for some OSTs: their 4
+     * fdatasyncs of the one tier file at a time took 2.5-2.9 ms each (1 in
+     * flight, appends: 0.7-1.2 ms), and as every IOR rank waits for all its
+     * stripes they set ior-hard-write's pace (6.46 -> 3.56 GiB/s). So
+     * appends, one commit in flight, as before the calibration; measured
+     * only with ROCEPOOL_OST_LOG_CALIBRATE=1. The MDT's log (no tier) keeps
+     * its measured mode. */
+    const char *cal = getenv("ROCEPOOL_OST_LOG_CALIBRATE");
+    int measured = cal && !strcmp(cal, "1");
+    s->wal = measured ? wal_open(path, err, sizeof(err)) : wal_open_as(path, 0, 1, err, sizeof(err));
     if (!s->wal) { fprintf(stderr, "rocepool OST: %s\n", err); return -1; }
     wal_add_sync(s->wal, ost_tier_sync_fd(s->tier));
     s->durable = 1;  /* every write goes through to the tier before its reply */
