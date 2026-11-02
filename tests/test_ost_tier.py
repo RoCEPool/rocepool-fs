@@ -294,6 +294,7 @@ class TierZeroTailTests(unittest.TestCase):
     back after eviction, so the bytes come from the tier."""
     port = 23700
     durable = False
+    skip_gaps = "1"  # ROCEPOOL_OST_SKIP_ZERO_GAPS (default off: gaps written, for XFS's sake)
 
     @classmethod
     def setUpClass(cls):
@@ -301,7 +302,8 @@ class TierZeroTailTests(unittest.TestCase):
         cls.lib = ensure_softverbs_lib()
         cls.tmp = tempfile.mkdtemp()
         env = dict(os.environ, ROCE_TRANSPORT_LIB=cls.lib, PYTHONPATH=ROOT,
-                   ROCEPOOL_OST_TIER=f"file:{cls.tmp}/tier{{n}}:1", ROCEPOOL_OST_RAM_CACHE_MIB="2")
+                   ROCEPOOL_OST_TIER=f"file:{cls.tmp}/tier{{n}}:1", ROCEPOOL_OST_RAM_CACHE_MIB="2",
+                   ROCEPOOL_OST_SKIP_ZERO_GAPS=cls.skip_gaps)
         if cls.durable:
             env.update(ROCEPOOL_OST_LOG=f"{cls.tmp}/ost{{n}}.log", ROCEPOOL_MDT_LOG=f"{cls.tmp}/mdt{{n}}.log")
         cls.srv = subprocess.Popen([sys.executable, "-u", os.path.join(ROOT, "tests", "fakes", "native_cluster.py"),
@@ -391,4 +393,16 @@ class TierZeroTailDurableTests(TierZeroTailTests):
         self.evict()
         for k, v in want.items():
             self.assertEqual(self.e.get(k), v, k)
-        self.assertLessEqual(written, 1.1 * nobj * 22 * piece, written)
+        if self.skip_gaps == "1":
+            self.assertLessEqual(written, 1.1 * nobj * 22 * piece, written)
+        else:  # the default: each gap written once, as zeros (one extent conversion, not one per piece)
+            self.assertGreater(written, 1.3 * nobj * 22 * piece, written)
+            self.assertLessEqual(written, 2.0 * nobj * 22 * piece, written)
+
+
+class TierGapsWrittenDurableTests(TierZeroTailDurableTests):
+    """the default (ROCEPOOL_OST_SKIP_ZERO_GAPS unset): a fresh slab's gaps
+    are written too -- the same bytes read back, more written"""
+    port = 23740
+    skip_gaps = "0"
+

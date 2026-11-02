@@ -728,6 +728,20 @@ static void slab_reap(ost_store *s) {
     pthread_mutex_unlock(&s->dq_lk);
 }
 
+/* A gap a write leaves before itself (old size .. offset) on a slab never
+ * written (zero_tail) reads as zeros without being written -- skipped only
+ * with ROCEPOOL_OST_SKIP_ZERO_GAPS=1. On XFS (i3en's tier: a preallocated
+ * file of unwritten extents) every piece written apart from the others then
+ * needs its own extent conversion, flushed through the journal by each
+ * fdatasync: ior-hard-write fell from 6.46 to 3.56 GiB/s on 6 x i3en
+ * (commits 708 -> 1754 us) though writing 1.85x fewer bytes. Written, the
+ * gap makes a slab's pieces land in ~4 conversions instead of ~22. */
+static int gap_reads_zeros(const kv_entry *e) {
+    static int skip = -1;
+    if (skip < 0) { const char *v = getenv("ROCEPOOL_OST_SKIP_ZERO_GAPS"); skip = v && !strcmp(v, "1"); }
+    return skip && e->ext.zero_tail;
+}
+
 /* write the RAM copy's bytes [off, off+len) through to the tier */
 static int ent_sync(ost_store *s, kv_entry *e, uint64_t off, size_t len, size_t reserve) {
     tier_ext_t old;
@@ -754,7 +768,7 @@ static int ent_sync_write(ost_store *s, kv_entry *e, uint64_t old_size, uint64_t
     if (rc) return rc;
     uint64_t from = off, to = off + len;
     if (moved) from = 0, to = e->size;  /* a new slab: the whole object */
-    else if (off > old_size && !e->ext.zero_tail) from = old_size;
+    else if (off > old_size && !gap_reads_zeros(e)) from = old_size;
     if (to > from) rc = ost_tier_write(s->tier, &e->ext, from, e->data + from, (size_t)(to - from));
     if (to > from && !rc) atomic_fetch_add(&s->tier_bytes_written, to - from);
     if (moved) slab_release(s, &old);
@@ -1290,7 +1304,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
             int moved;
             rc = ent_slab(s, e, new_size, &oldext, &moved, grow_reserve(off, new_size));  /* never moves: checked above */
             (void)moved;
-            if (!rc && off > old_size && !e->ext.zero_tail) {  /* the gap reads as zeros (a fresh slab does already) */
+            if (!rc && off > old_size && !gap_reads_zeros(e)) {  /* the gap reads as zeros (a fresh slab does already) */
                 size_t gap = (size_t)off - old_size;
                 uint8_t *z = calloc(1, gap);
                 rc = z ? ost_tier_write(s->tier, &e->ext, old_size, z, gap) : -ENOMEM;
@@ -1303,7 +1317,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
             /* evicted, and the write fits its slab: write the tier in place
              * (was: read the whole object back into RAM first -- for
              * 47008 bytes, up to a stripe's worth of NVMe reads) */
-            if (off > old_size && !e->ext.zero_tail) {  /* the gap reads as zeros (a fresh slab does already) */
+            if (off > old_size && !gap_reads_zeros(e)) {  /* the gap reads as zeros (a fresh slab does already) */
                 size_t gap = (size_t)off - old_size;
                 uint8_t *z = calloc(1, gap);
                 rc = z ? ost_tier_write(s->tier, &e->ext, old_size, z, gap) : -ENOMEM;

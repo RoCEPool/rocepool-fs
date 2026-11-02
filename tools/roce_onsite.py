@@ -385,28 +385,56 @@ def parse_peers(spec: str) -> list[tuple[str, str]]:
     return out
 
 
+def write_sets(environ: dict) -> list[tuple[str, dict, list]]:
+    """The settings write_probe compares: (tag, env forced on every host,
+    io500_run options). ROCEPOOL_WRITE_PROBE_SETS="name:VAR=v,VAR=v;name:..."
+    -- IO_THREADS and CLIENT_EPS set the interception client's threads and
+    OFI endpoints per rank (io500_run options), anything else is set on
+    every host's servers and clients. Else, as before, one variable
+    (ROCEPOOL_WRITE_PROBE_VAR, default the bulk spin) over
+    ROCEPOOL_WRITE_PROBE_SPINS."""
+    sets = environ.get("ROCEPOOL_WRITE_PROBE_SETS", "").strip()
+    out = []
+    if sets:
+        for part in [p.strip() for p in sets.split(";") if p.strip()]:
+            name, _, body = part.partition(":")
+            fenv, opts = {}, []
+            for kv in [x.strip() for x in body.split(",") if x.strip()]:
+                k, _, v = kv.partition("=")
+                if k == "IO_THREADS":
+                    opts += ["--intercept-io-threads", v]
+                elif k == "CLIENT_EPS":
+                    opts += ["--client-eps", v]
+                else:
+                    fenv[k] = v
+            out.append((name.strip(), fenv, opts))
+        return out
+    var = environ.get("ROCEPOOL_WRITE_PROBE_VAR", "ROCE_POLL_BULK_SPIN_US")
+    tag = "spin" if var == "ROCE_POLL_BULK_SPIN_US" else var.lower().replace("roce_", "").replace("_us", "")
+    for sp in [x.strip() for x in environ.get("ROCEPOOL_WRITE_PROBE_SPINS", "0,200,1000").split(",") if x.strip()]:
+        out.append((f"{tag}{sp}", {var: sp}, []))
+    return out
+
+
 def write_probe(cfile: str, env: dict, cluster: dict, step) -> None:
     """IOR's two write phases (ior-easy-write, ior-hard-write) across every
-    host, 30 s each, through the interception client, once per bulk-transfer
-    spin: the setting is judged under the real load (a calibration on one
-    host chose 2 ms, which made IOR's writes slower), and the OSTs'
-    transport counters say where each request's time went."""
-    # the variable varied (ROCEPOOL_WRITE_PROBE_VAR, default the bulk spin)
-    # is set on every host (ROCEPOOL_FORCE_ENV): a value only node 0 got made
-    # an earlier comparison one-sided
-    var = os.environ.get("ROCEPOOL_WRITE_PROBE_VAR", "ROCE_POLL_BULK_SPIN_US")
-    spins = [s.strip() for s in os.environ.get("ROCEPOOL_WRITE_PROBE_SPINS", "0,200,1000").split(",") if s.strip()]
-    tag = "spin" if var == "ROCE_POLL_BULK_SPIN_US" else var.lower().replace("roce_", "").replace("_us", "")
+    host, 30 s each, through the interception client, once per setting
+    (write_sets): judged under the real load (a calibration on one host
+    chose a bulk spin of 2 ms, which made IOR's writes slower), and the
+    OSTs' transport counters say where each request's time went. A forced
+    variable is set on every host (ROCEPOOL_FORCE_ENV): a value only node 0
+    got made an earlier comparison one-sided."""
     rows = []
-    for sp in spins:
-        name, fname = f"writes-{tag}{sp}", f"onsite_writes_{tag}{sp}.json"
+    for tag, fenv, opts in write_sets(os.environ):
+        name, fname = f"writes-{tag}", f"onsite_writes_{tag}.json"
         out = os.path.join(ROOT, fname)
-        begin(name, f"ior-easy-write + ior-hard-write on {len(cluster['nodes'])} hosts, {var}={sp} on every host")
+        what = ", ".join([f"{k}={v}" for k, v in fenv.items()] + ([" ".join(opts)] if opts else []))
+        begin(name, f"ior-easy-write + ior-hard-write on {len(cluster['nodes'])} hosts, {what}")
         cmd = [sys.executable, os.path.join(ROOT, "tools", "io500_run.py"), "--report", out, "--project", "auto",
                "--client", "intercept", "--direct-read", "off", "--stonewall", "30",
-               "--phases", "ior-easy-write,ior-hard-write"]
+               "--phases", "ior-easy-write,ior-hard-write", *opts]
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600,
-                           env=dict(env, ROCEPOOL_CLUSTER=cfile, ROCEPOOL_FORCE_ENV=var, **{var: sp}))
+                           env=dict(env, ROCEPOOL_CLUSTER=cfile, ROCEPOOL_FORCE_ENV=",".join(fenv), **fenv))
         try:
             with open(out) as f:
                 rep = json.load(f)
@@ -414,7 +442,7 @@ def write_probe(cfile: str, env: dict, cluster: dict, step) -> None:
         except (OSError, ValueError):
             ph = {}
         ok = r.returncode == 0 and "ior-easy-write" in ph and "ior-hard-write" in ph
-        rows.append(f"{var}={sp}: ior-easy-write {ph.get('ior-easy-write')} GiB/s, "
+        rows.append(f"{tag} ({what}): ior-easy-write {ph.get('ior-easy-write')} GiB/s, "
                     f"ior-hard-write {ph.get('ior-hard-write')} GiB/s")
         step(name, PASS if ok else FAIL, rows[-1] if ok else (r.stdout + r.stderr)[-1500:], report_file=fname)
     step("writes", PASS, "\n".join(rows))
