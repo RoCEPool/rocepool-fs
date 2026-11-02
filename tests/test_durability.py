@@ -745,3 +745,30 @@ print("ok")
         self.assertTrue(set(eval(seen)) <= {0, ord("A")}, seen)
         # (whether a read was out across the delete is timing: async_tier_rereads
         # says; 6-8 of ~80 here on OFI -- not asserted, it would be flaky)
+
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class LogModeTests(unittest.TestCase):
+    """an OST's log appends with one commit in flight (its commit is mostly
+    the tier's fdatasync, which the calibration does not see: measured
+    modes made 6 x i3en's ior-hard-write 45% slower); an MDT's is measured"""
+    port = 25200
+
+    def test_ost_appends_mdt_measured(self):
+        from roce.native.build_lib import ensure_softverbs_lib
+        lib = ensure_softverbs_lib()
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        for i, env in enumerate(({}, {"ROCEPOOL_OST_LOG_CALIBRATE": "1"})):
+            srv = _Servers(lib, d, self.port + 10 * i, nm=1, no=1, env=env)
+            srv.start()
+            try:
+                ost, mdt = _stats(lib, srv.osts)["log"], _stats(lib, srv.mdts)["log"]
+            finally:
+                srv.stop()
+            self.assertGreater(mdt["calibration_records_s"]["append"], 0, mdt)
+            if env:
+                self.assertGreater(ost["calibration_records_s"]["append"], 0, ost)
+            else:
+                self.assertEqual((ost["direct"], ost["pipeline"]), (False, 1), ost)
+                self.assertEqual(ost["calibration_records_s"]["append"], 0, ost)

@@ -102,7 +102,7 @@ if [ -n "$SIM" ]; then
   RC=$?
   echo "== 4/4 完成（rc=$RC）：报告 io500_report.json，原始输出 .bench_cache/io500_run/"
 else
-  BENCH=full; [ $QUICK = 1 ] && BENCH=quick
+  BENCH=${ROCEPOOL_BENCH:-full}; [ $QUICK = 1 ] && BENCH=quick   # ROCEPOOL_BENCH=writes: targeted write probes
   [ -n "$PEERS" ] && echo "   节点：本机 + $PEERS" || echo "   单机（网卡回环）"
   if ls -d /sys/class/infiniband/efa* >/dev/null 2>&1; then echo "   网卡：AWS EFA -> libfabric(ofi) 传输后端"
   elif ls -d /sys/class/infiniband/rxe* >/dev/null 2>&1; then echo "   网卡：Soft-RoCE(rxe) -> verbs 传输后端"

@@ -550,7 +550,9 @@ static void calibrate(const char *path, int want_direct, int want_pipe, int *dir
             *direct ? "direct writes" : "appends", *pipe);
 }
 
-wal_t *wal_open(const char *path, char *err, size_t err_len) {
+wal_t *wal_open(const char *path, char *err, size_t err_len) { return wal_open_as(path, -1, 0, err, err_len); }
+
+wal_t *wal_open_as(const char *path, int as_direct, int as_pipe, char *err, size_t err_len) {
     pthread_once(&crc_once, crc_init);
     int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
     if (fd < 0) { snprintf(err, err_len, "log %s: %s", path, strerror(errno)); return NULL; }
@@ -566,8 +568,10 @@ wal_t *wal_open(const char *path, char *err, size_t err_len) {
         if (n < 0) { snprintf(err, err_len, "log %s: %s", path, strerror((int)-n)); close(fd); return NULL; }
     }
     /* ROCEPOOL_LOG_DIRECT / ROCEPOOL_LOG_PIPELINE set: as told; else measured */
-    int want_pipe = env_int("ROCEPOOL_LOG_PIPELINE", 0, 0, WAL_MAX_PIPE);
-    int want_direct = getenv("ROCEPOOL_LOG_DIRECT") && *getenv("ROCEPOOL_LOG_DIRECT")
+    int want_pipe = as_pipe > 0 ? (as_pipe > WAL_MAX_PIPE ? WAL_MAX_PIPE : as_pipe)
+                                : env_int("ROCEPOOL_LOG_PIPELINE", 0, 0, WAL_MAX_PIPE);
+    int want_direct = as_direct >= 0 ? (as_direct ? 1 : 0)
+                      : getenv("ROCEPOOL_LOG_DIRECT") && *getenv("ROCEPOOL_LOG_DIRECT")
                           ? env_int("ROCEPOOL_LOG_DIRECT", 1, 0, 1) : -1;
     int direct = want_direct > 0, pipe = want_pipe ? want_pipe : 1;
     double res[3] = {0, 0, 0};

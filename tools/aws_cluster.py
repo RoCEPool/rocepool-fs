@@ -438,8 +438,10 @@ class Run:
                  "onsite_crossover.json", "onsite_stress.json", "onsite_ior.json", "onsite_ior_hard.json",
                  "onsite_kv.json", "onsite_gds.json", "onsite_kvcache.json", "selftest.log"]
         # targeted measurements (roce_onsite.py --bench writes): onsite_writes_spin<N>.json
-        r = self.ssh(head, "cd /root/rocepool && ls onsite_writes_*.json 2>/dev/null", check=False, timeout=60)
-        files += [f for f in r.stdout.split() if f.startswith("onsite_writes_") and f.endswith(".json")]
+        # and the probes before the valid run: ranks per node, OFI endpoints per rank, the rates it was sized by
+        r = self.ssh(head, "cd /root/rocepool && ls onsite_writes_*.json onsite_io500_ranks.json onsite_io500_eps*.json "
+                           "onsite_rates.json 2>/dev/null", check=False, timeout=60)
+        files += [f for f in r.stdout.split() if f.startswith("onsite_") and f.endswith(".json")]
         got = []
         for f in files:
             try:

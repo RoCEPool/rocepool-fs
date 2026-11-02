@@ -330,3 +330,32 @@ class EpsChoiceTests(unittest.TestCase):
               "\t\tmax_qp:\t\t\t\t1024\n\t\tmax_qp_wr:\t\t\t4096\n"
         self.assertEqual(max_qp_of(out), 1024)
         self.assertIsNone(max_qp_of("No IB devices found\n"))
+
+
+class TransportIsOfiTests(unittest.TestCase):
+    """the endpoint probes run on OFI: told by the preflight's backend, not
+    the library's name (on site: libroce_transport.so -- probes skipped)"""
+
+    def test_backend(self):
+        from tools.roce_onsite import transport_is_ofi
+        site = {"lib": "/root/rocepool/roce/native/libroce_transport.so", "env": {"ROCE_BACKEND": "ofi"}}
+        self.assertTrue(transport_is_ofi(site, {}))
+        self.assertTrue(transport_is_ofi({"lib": "/x/libroce_transport.so"}, {"ROCE_BACKEND": "ofi"}))
+        self.assertTrue(transport_is_ofi({"lib": "/r/roce/native/ofi/libroce_transport_ofi.so"}, {}))
+        self.assertFalse(transport_is_ofi({"lib": "/x/libroce_transport.so", "env": {"ROCE_BACKEND": "rc"}}, {}))
+        self.assertFalse(transport_is_ofi({"lib": "/r/softverbs/libroce_transport_softverbs.so"}, {}))
+
+
+class WriteSetsTests(unittest.TestCase):
+    """the settings a targeted write probe compares"""
+
+    def test_sets_and_the_old_spins(self):
+        from tools.roce_onsite import write_sets
+        got = write_sets({"ROCEPOOL_WRITE_PROBE_SETS":
+                          "fill16:ROCEPOOL_OST_SKIP_ZERO_GAPS=0,IO_THREADS=16; skip4:ROCEPOOL_OST_SKIP_ZERO_GAPS=1,IO_THREADS=4,CLIENT_EPS=4"})
+        self.assertEqual(got, [("fill16", {"ROCEPOOL_OST_SKIP_ZERO_GAPS": "0"}, ["--intercept-io-threads", "16"]),
+                               ("skip4", {"ROCEPOOL_OST_SKIP_ZERO_GAPS": "1"},
+                                ["--intercept-io-threads", "4", "--client-eps", "4"])])
+        self.assertEqual(write_sets({}), [("spin0", {"ROCE_POLL_BULK_SPIN_US": "0"}, []),
+                                          ("spin200", {"ROCE_POLL_BULK_SPIN_US": "200"}, []),
+                                          ("spin1000", {"ROCE_POLL_BULK_SPIN_US": "1000"}, [])])
