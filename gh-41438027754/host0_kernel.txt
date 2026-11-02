@@ -1,0 +1,220 @@
+[Mon Nov  2 12:31:07 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:07 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-10486107) [-22]
+[Mon Nov  2 12:31:08 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:08 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-4194777) [-22]
+[Mon Nov  2 12:31:08 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:08 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-4194818) [-22]
+[Mon Nov  2 12:31:12 2026] efa_com_cmd_exec: 40 callbacks suppressed
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:12 2026] efa_com_dereg_mr: 40 callbacks suppressed
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-15728964) [-22]
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-4194814) [-22]
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-8389034) [-22]
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-4194821) [-22]
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-10485876) [-22]
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3146295) [-22]
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3146285) [-22]
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-10486109) [-22]
+[Mon Nov  2 12:31:13 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:13 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-15729172) [-22]
+[Mon Nov  2 12:31:13 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:13 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3146301) [-22]
+[Mon Nov  2 12:31:21 2026] efa_com_cmd_exec: 4 callbacks suppressed
+[Mon Nov  2 12:31:21 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:21 2026] efa_com_dereg_mr: 4 callbacks suppressed
+[Mon Nov  2 12:31:21 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-9437909) [-22]
+[Mon Nov  2 12:31:21 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:21 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-8389696) [-22]
+[Mon Nov  2 12:31:21 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:21 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-8389699) [-22]
+[Mon Nov  2 12:31:21 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:21 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-14680072) [-22]
+[Mon Nov  2 12:31:22 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:22 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-9437840) [-22]
+[Mon Nov  2 12:31:22 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:22 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-7340456) [-22]
+[Mon Nov  2 12:31:22 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:22 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097465) [-22]
+[Mon Nov  2 12:31:22 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:22 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-9437914) [-22]
+[Mon Nov  2 12:31:22 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:22 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-9437974) [-22]
+[Mon Nov  2 12:31:22 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:22 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-10486257) [-22]
+[Mon Nov  2 12:31:41 2026] efa_com_cmd_exec: 14 callbacks suppressed
+[Mon Nov  2 12:31:41 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:41 2026] efa_com_dereg_mr: 14 callbacks suppressed
+[Mon Nov  2 12:31:41 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-4194869) [-22]
+[Mon Nov  2 12:31:41 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:31:41 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-4194825) [-22]
+[Mon Nov  2 12:38:05 2026] ena 0000:00:05.0: Type was not set for devlink port.
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-6291673) [-22]
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097860) [-22]
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097869) [-22]
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097865) [-22]
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-5243255) [-22]
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-10486853) [-22]
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-4194681) [-22]
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:54 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097863) [-22]
+[Mon Nov  2 12:42:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-4194432) [-22]
+[Mon Nov  2 12:42:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:55 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-10486032) [-22]
+[Mon Nov  2 12:42:59 2026] efa_com_cmd_exec: 40 callbacks suppressed
+[Mon Nov  2 12:42:59 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:59 2026] efa_com_dereg_mr: 40 callbacks suppressed
+[Mon Nov  2 12:42:59 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3145952) [-22]
+[Mon Nov  2 12:42:59 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:59 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3146112) [-22]
+[Mon Nov  2 12:42:59 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:59 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-9437480) [-22]
+[Mon Nov  2 12:42:59 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:59 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-9437214) [-22]
+[Mon Nov  2 12:42:59 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:59 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3145858) [-22]
+[Mon Nov  2 12:42:59 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:59 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-6291539) [-22]
+[Mon Nov  2 12:42:59 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:42:59 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-9437471) [-22]
+[Mon Nov  2 12:43:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:43:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-8388766) [-22]
+[Mon Nov  2 12:43:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:43:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-6291532) [-22]
+[Mon Nov  2 12:43:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:43:00 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-9437335) [-22]
+[Mon Nov  2 12:43:11 2026] efa_com_cmd_exec: 36 callbacks suppressed
+[Mon Nov  2 12:43:11 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:43:11 2026] efa_com_dereg_mr: 36 callbacks suppressed
+[Mon Nov  2 12:43:11 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-12583442) [-22]
+[Mon Nov  2 12:43:11 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:43:11 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-2097201) [-22]
+[Mon Nov  2 12:43:11 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:43:11 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-10486020) [-22]
+[Mon Nov  2 12:43:11 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:43:11 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-11534915) [-22]
+[Mon Nov  2 12:43:11 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:43:11 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3145851) [-22]
+[Mon Nov  2 12:43:11 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:43:11 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-9438339) [-22]
+[Mon Nov  2 12:43:11 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:43:11 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-11534482) [-22]
+[Mon Nov  2 12:43:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:43:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-15729943) [-22]
+[Mon Nov  2 12:43:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:43:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-14680092) [-22]
+[Mon Nov  2 12:43:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:43:12 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-7340142) [-22]
+[Mon Nov  2 12:43:23 2026] efa_com_cmd_exec: 14 callbacks suppressed
+[Mon Nov  2 12:43:23 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:43:23 2026] efa_com_dereg_mr: 14 callbacks suppressed
+[Mon Nov  2 12:43:23 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-9438200) [-22]
+[Mon Nov  2 12:43:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 12:43:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-13631542) [-22]
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-9438629) [-22]
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-12582969) [-22]
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-7340203) [-22]
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-8388788) [-22]
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-7340685) [-22]
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-7340269) [-22]
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-11534602) [-22]
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-10485784) [-22]
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:19 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-4195250) [-22]
+[Mon Nov  2 13:34:20 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:20 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-8388907) [-22]
+[Mon Nov  2 13:34:24 2026] efa_com_cmd_exec: 40 callbacks suppressed
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:24 2026] efa_com_dereg_mr: 40 callbacks suppressed
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-1049808) [-22]
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-4194349) [-22]
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-11534397) [-22]
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-10485901) [-22]
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-10485852) [-22]
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-11535127) [-22]
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-3146463) [-22]
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-10486223) [-22]
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:24 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-9437396) [-22]
+[Mon Nov  2 13:34:25 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:25 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-13632790) [-22]
+[Mon Nov  2 13:34:34 2026] efa_com_cmd_exec: 4 callbacks suppressed
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:34 2026] efa_com_dereg_mr: 4 callbacks suppressed
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-6291821) [-22]
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-11534483) [-22]
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-11534986) [-22]
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-8388775) [-22]
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-4194426) [-22]
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-15729179) [-22]
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-12583173) [-22]
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:34 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-11535065) [-22]
+[Mon Nov  2 13:34:35 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:35 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-11534398) [-22]
+[Mon Nov  2 13:34:35 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:35 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-14680302) [-22]
+[Mon Nov  2 13:34:45 2026] efa_com_cmd_exec: 14 callbacks suppressed
+[Mon Nov  2 13:34:45 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:45 2026] efa_com_dereg_mr: 14 callbacks suppressed
+[Mon Nov  2 13:34:45 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-10485863) [-22]
+[Mon Nov  2 13:34:45 2026] efa 0000:00:1b.0 rdmap0s27: Failed to process command DEREG_MR (opcode 8) err -22
+[Mon Nov  2 13:34:45 2026] efa 0000:00:1b.0 rdmap0s27: Failed to de-register mr(lkey-11535067) [-22]
+[Mon Nov  2 13:34:48 2026] workqueue: xlog_ioend_work [xfs] hogged CPU for >10000us 4 times, consider switching to WQ_UNBOUND
+[Mon Nov  2 13:34:54 2026] workqueue: xlog_ioend_work [xfs] hogged CPU for >10000us 5 times, consider switching to WQ_UNBOUND
+[Mon Nov  2 13:34:59 2026] workqueue: xlog_ioend_work [xfs] hogged CPU for >10000us 7 times, consider switching to WQ_UNBOUND
+
+               total        used        free      shared  buff/cache   available
+Mem:          382679       14350      367805           2        3395      368329
+Swap:              0           0           0
+
+    PID   RSS    VSZ STAT     ELAPSED COMMAND
+ 310230 49776 558064 Ssl        37:57 fwupd
+   1138 45152 3479524 Ssl    01:58:29 snapd
+    516 27312 288968 SLsl    01:58:39 multipathd
+   1265 23180 110024 Ssl     01:58:29 unattended-upgr
+   1519 22340 2646184 Ssl    01:58:28 amazon-ssm-agen
+   1132 20788  32444 Ss      01:58:29 networkd-dispat
+    457 18188  50536 S<s     01:58:40 systemd-journal
+   1143 14280 469136 Ssl     01:58:29 udisksd
+      1 13904  22648 Ss      01:58:42 systemd
+    843 13000  21612 Ss      01:58:39 systemd-resolve
+   1341 12908 318168 Ssl     01:58:29 ModemManager
+  35926 11764  20348 Ss      01:55:12 systemd
+ 319092 10872  15016 Ss         00:00 sshd
+   1133 10204 383684 Ssl     01:58:29 polkitd

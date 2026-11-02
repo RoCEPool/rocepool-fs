@@ -1,0 +1,162 @@
+[aws 11:35:56] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 11:35:56] 6 x i3en.12xlarge: 48 vCPU, 384 GiB, 50 Gigabit, NVMe 30000 GB, EFA yes
+[aws 11:35:57] vCPU quota 300 >= 288 needed (instances already running count against it too)
+[aws 11:36:07] launched i-031f9771ffdba1fcd, i-0eb3f76f844fb4407, i-0c57c407a75c29160, i-051b48d04145c3f05, i-02eed586158039028, i-0458c08f172478c91
+[aws 11:36:54] running: 13.184.107.164 (172.31.12.220), 3.145.33.26 (172.31.11.186), 13.184.111.71 (172.31.3.151), 16.59.28.63 (172.31.8.149), 18.116.10.99 (172.31.2.132), 3.21.246.217 (172.31.9.18)
+[aws 11:39:17] 13.184.107.164: ready (efa)
+[aws 11:39:45] 3.145.33.26: ready (efa)
+[aws 11:39:46] 13.184.111.71: ready (efa)
+[aws 11:39:46] 16.59.28.63: ready (efa)
+[aws 11:39:46] 18.116.10.99: ready (efa)
+[aws 11:39:46] 3.21.246.217: ready (efa)
+[aws 11:39:51] run.sh started on 13.184.107.164 (6 hosts); following its progress
+  | == rocepool 20261017a run Mon Nov  2 11:39:51 UTC 2026 ==
+  | == 1/4 依赖
+  | == 2/4 编译 + 自检
+  |    模拟器版库、FUSE 客户端、拦截库、KV 库：已编译
+  | == 集群节点：root 免密登录、主机名
+  |    本机：<this host>；其余 5 台
+  |    节点就绪：root@172.31.11.186=172.31.11.186,root@172.31.3.151=172.31.3.151,root@172.31.8.149=172.31.8.149,root@172.31.2.132=172.31.2.132,root@172.31.9.18=172.31.9.18
+  | == 3/4 运行
+  |    节点：本机 + root@172.31.11.186=172.31.11.186,root@172.31.3.151=172.31.3.151,root@172.31.8.149=172.31.8.149,root@172.31.2.132=172.31.2.132,root@172.31.9.18=172.31.9.18
+  |    网卡：RoCE -> verbs 传输后端
+  | [PASS]   kernel   7.0.0-1014-aws: fork() is safe with registered memory
+  | [PASS]   memlock  locked-memory limit 47834 MiB >= 2560 MiB needed
+  | [PASS]   power    governor n/a, no deep idle states enabled
+  | [PASS]   device   1 AWS EFA device(s): rdmap0s27 -- the ofi (libfabric) transport backend
+  | [PASS]   ip       172.31.12.220: the bootstrap/control address (data goes over rdmap0s27)
+  | [PASS]   libfabric libfabric's efa provider is up (fi_info -p efa -t FI_EP_RDM)
+  | [WARN]   rdma_read i3en.12xlarge: not known to do EFA RDMA read in hardware (Nitro v4+ does); libfabric emulates reads with the target's CPU -- correct, slower one-sided reads; the client probe in tools/io500_run.py decides between one-sided and RPC reads
+  | [PASS]   lossless EFA's SRD transport is reliable over AWS's lossy fabric: no PFC/DSCP to configure
+  | [PASS]   tuning   48 CPUs: completion busy-poll 20 us before sleeping (ROCE_POLL_SPIN_US=20; tools/roce_onsite.py then measures the best value on this NIC)
+  | [WARN] preflight  rdmap0s27 port None (None) ip 172.31.12.220; env: {'ROCE_BACKEND': 'ofi', 'ROCE_OFI_PROVIDER': 'efa', 'ROCE_POLL_SPIN_US': '20'}; fixes: ['disabled 48 deep idle states (exit latency > 20 us) (until reboot)']
+  | [ ... ] peers      checking root@172.31.11.186, root@172.31.3.151, root@172.31.8.149, root@172.31.2.132, root@172.31.9.18 (SSH, root, RoCE IP, hostname)
+  | [PASS] peers      local: ip-172-31-12-220 172.31.12.220; root@172.31.11.186: ip-172-31-11-186 172.31.11.186; root@172.31.3.151: ip-172-31-3-151 172.31.3.151; root@172.31.8.149: ip-172-31-8-149 172.31.8.149; root@172.31.2.132: ip-172-31-2-132 172.31.2.132; root@172.31.9.18: ip-172-31-9-18 172.31.9.18
+  | [PASS] build      [build] transport backend: ofi / [build] using libfabric at /opt/amazon/efa / [build] OST tier: kernel backend only (set SPDK_DIR=<built spdk tree> for the SPDK backend) / [build] built /root/rocepool/roce/native/libroce_transport.so / [build] built /root/rocepool/roce/native/rocepool-fuse (native FUSE client) / [build] built /root/rocepool/roce/native/librocepool_kv.so (native KV client API) and rocepool-kv-bench / [build] built /root/rocepool/roce/native/librocepool_intercept.so (LD_PRELOAD interception client) / [build] built /root/rocepool/roce/native/librocepool_cufile.so and cufile/libcufile.so.0 (GPUDirect Storage, cuFile API)
+  | [PASS] transport  pooling, stale-connection recovery, drain, SRQ back-pressure, bounded registration, native OST/MDT parity + CAS atomicity over 172.31.12.220 (91.7s)
+  | [ ... ] spin       measuring the completion busy-poll on this NIC (about 30 s)
+  | [PASS] spin       ROCE_POLL_SPIN_US=50 (measured: 0 us: 1 thr 16310/s p50 61 us, 8 thr 29590/s; 20 us: 1 thr 12342/s p50 81 us, 8 thr 23735/s; 50 us: 1 thr 26251/s p50 38 us, 8 thr 37932/s; 100 us: 1 thr 25800/s p50 38 us, 8 thr 39143/s; 200 us: 1 thr 26147/s p50 38 us, 8 thr 38636/s; 400 us: 1 thr 25526/s p50 38 us, 8 thr 38726/s)
+  | [ ... ] peer       copying this tree to root@172.31.11.186:/tmp/rocepool_onsite, then its preflight and build
+  | [WARN] peer       root@172.31.11.186: rdmap0s27 172.31.11.186; env {'ROCE_BACKEND': 'ofi', 'ROCE_OFI_PROVIDER': 'efa', 'ROCE_POLL_SPIN_US': '20'}; failing: none
+  | [PASS] peer-build /opt/amazon/efa
+  | [build] OST tier: kernel backend only (set SPDK_DIR=<built spdk tree> for the SPDK backend)
+  | [build] built /tmp/rocepool_onsite/roce/native/libroce_transport.so
+  | [build] built /tmp/rocepool_onsite/roce/native/rocepool-fuse (native FUSE client)
+  | [build] built /tmp/rocepool_onsite/roce/native/librocepool_kv.so (native KV client API) and rocepool-kv-bench
+  | [build] built /tmp/rocepool_onsite/roce/native/librocepool_intercept.so (LD_PRELOAD interception client)
+  | [build] built /tmp/rocepool_onsite/roce/native/librocepool_cufile.so and cufile/libcufile.so.0 (GPUDirect Storage, cuFile API)
+  | [ ... ] functional smoke / pool / mpi / hpc / stream phases over RoCE (a few minutes)
+  | [PASS] functional [PASS] smoke [PASS] pool [PASS] mpi [PASS] hpc [PASS] stream
+  | [ ... ] bench      concurrency ladder 1,10,50,100,200,500 clients (md, md_shared, data)
+  | [PASS] bench      N=   1 md        ok/s=  7374.1 err=  0.0% p99max=     0.3ms srv_threads=  14 srv_fds=    8 TIME_WAIT=     0 listen_ovf=    0 hung=0 dead=[]
+  | [ ... ] ior        IOR + mdtest through the native FUSE client (builds MPI/IOR from deps/ the first time)
+  | [PASS] ior        [deps] mpich: unpacked the bundled mpich-4.2.3-ch3.tar.xz
+  | [deps] ior: unpacked the bundled ior-49b11cc.tar.xz
+  | [PASS] shared_1m        write    45.82 MiB/s ( 1033.18 IOPS)   read   942.28 MiB/s ( 1069.09 IOPS)
+  | [PASS] shared_64k       write   336.42 MiB/s (  8030.0 IOPS)   read  1009.82 MiB/s ( 18627.0 IOPS)
+  | [PASS] fpp_1m           write   992.94 MiB/s (  4200.0 IOPS)   read  1715.99 MiB/s ( 1836.59 IOPS)
+  | [PASS] shared_4m_large  write   848.55 MiB/s (  212.56 IOPS)   read  1002.49 MiB/s (  478.78 IOPS)
+  | [PASS] fpp_256k         write   491.32 MiB/s (  9750.0 IOPS)   read  1722.29 MiB/s (  7275.0 IOPS)
+  | [PASS] mdtest           File creation=6,229/s  File stat=1,023,001/s  File read=85,000/s  File removal=14,494/s  Tree creation=2,494/s  Tree removal=4,049/s
+  | [ ... ] ior_hard   IO500's hard pair: ior-hard + mdtest-hard
+  | [PASS] ior_hard   [PASS] ior_hard         write   144.06 MiB/s (  6789.0 IOPS)   read   342.51 MiB/s (  8236.0 IOPS)
+  | [PASS] mdtest           File creation=5,378/s  File stat=314,710/s  File read=21,877/s  File removal=14,890/s  Tree creation=4,165/s  Tree removal=2,494/s
+  | [ ... ] kv         native KV API vs the Python client
+  | [PASS] kv         {"client": "native", "mode": "get", "threads": 1, "value_bytes": 64, "ops_per_s": 19903.7, "p50_us": 47.3, "p99_us": 135.6, "rpcs": 200037}
+  | [ ... ] gds        GPUs and GPUDirect Storage streaming into GPU memory
+  | [PASS] gds        no NVIDIA GPU on this host: nothing to stream into (GPUDirect path covered by tests/test_gds.py)
+  | [ ... ] kvcache    KV-cache reuse: prefix lookup + load into GPU memory, TTFT
+  | [PASS] kvcache    llama3-70b, 6144 of 8192 tokens cached (1920 MiB KV): host load p50 3405.1 ms (2.2 GB/s, block keys) -> TTFT 5258.8 ms vs 7414.8 ms recomputed (x1.41, prefill estimated)
+  | [ ... ] cluster-prep MPI + IO500 (built from deps/ the first time: ~10 min), then this tree and those builds to every peer, their preflight and build
+  | [deps] io500: unpacked the bundled io500-sc26.tar.xz
+  |       |     ^~~~~~~~~~~~~~~~~~
+  |       |     ^~~~~~~~~~~~~~~~~~
+  |       |                                     ^
+  |                  from ior.c:15:
+  |     inlined from ‘GetPlatformName’ at ior.c:591:9:
+  |    30 |   return __builtin___sprintf_chk (__s, __USE_FORTIFY_LEVEL - 1,
+  |       |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  |    31 |                                   __glibc_objsize (__s), __fmt,
+  |       |                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  |    32 |                                   __va_arg_pack ());
+  |       |                                   ~~~~~~~~~~~~~~~~~
+  | [io500] built io500-sc26_v4 (IOR e4e457852b2f, pfind 27427343bb66)
+  | [WARN] cluster-prep root@172.31.11.186: copied to /root/rocepool (+ .bench_cache/mpich, .bench_cache/io500_src/io500, .bench_cache/io500_src/bin); preflight WARN (rdmap0s27 172.31.11.186)
+  | [PASS] nvme-preflight local: tier file:/nvmedata/rocepool_ost_{n}.tier:21921 (O_DIRECT write 1911 MiB/s); P2P memory none
+  | [ ... ] io500      official IO500 on 172.31.12.220, 172.31.11.186, 172.31.3.151, 172.31.8.149, 172.31.2.132, 172.31.9.18 (about 15-30 min)
+  | [PASS] io500         [  146.7s] phase timestamp
+  |    [  147.3s] phase ior-hard-write
+  |    [  209.4s] phase mdtest-hard-write
+  |    [  273.6s] phase find
+  |    [  292.6s] phase ior-easy-read
+  |    [  339.8s] phase mdtest-easy-stat
+  |    [  393.8s] phase ior-hard-read
+  |    [  407.7s] phase mdtest-hard-stat
+  |    [  427.3s] phase mdtest-easy-delete
+  |    [  495.3s] phase mdtest-hard-read
+  |    [  516.8s] phase mdtest-hard-delete
+  |    [  542.8s] phase ior-rnd4K-easy-read
+  | == IO500 says the result is INVALID; find matched 582620 files
+  | == submission bundle: /root/rocepool/.bench_cache/io500_run/submission.tgz -- IO500 io500-sc26_v4, io500-verify hashes OK, run invalid, system-information.json not made (schema tools)
+  |       192.8  (bw  25.69 GiB/s, md  1446.9 kIOPS)  as measured, valid 300 s run
+  |       192.8  (bw  25.69 GiB/s, md  1446.9 kIOPS)  + one directory's entries spread over all MDTs (name hash), finer MDT locks (done: ROCEPOOL_DIR_STRIPE=1 + MD_BUCKETS; a no-op on a run that already has them)
+  |       192.8  (bw  25.69 GiB/s, md  1446.9 kIOPS)  + FOPEN_PARALLEL_DIRECT_WRITES: no per-node inode lock on a shared file
+  |       192.8  (bw  25.69 GiB/s, md  1446.9 kIOPS)  + FUSE over io_uring (per-core queues, Linux 6.14+): ~3x per-mount rate, less wake-up cost (implemented: io500_run.py probes it against /dev/fuse on the hosts and uses the faster; a no-op on a run that already used it)
+  |       192.8  (bw  25.69 GiB/s, md  1446.9 kIOPS)  + the LD_PRELOAD interception library in every rank (no FUSE channel, no kernel on the I/O path; implemented: io500_run.py --client auto probes it against FUSE and uses the faster; a no-op on a run that already used it)
+  |       192.8  (bw  25.69 GiB/s, md  1446.9 kIOPS)  + one-sided reads and lookups (client RDMA READs stripes and MDT entries; implemented: io500_run.py --direct-read auto probes it; a no-op on a run that already used it -- its effect is in the measured per-op server CPU)
+  |       192.8  (bw  25.69 GiB/s, md  1446.9 kIOPS)  + the OST's NVMe tier for the 300 s write phases (implemented: roce/native/ost_tier.c, io500_run.py --ost-tier auto; a no-op on a run that already had it -- its limits are then the drives' capacity and write bandwidth)
+  | [ ... ] io500-ranks official IO500 on 172.31.12.220, 172.31.11.186, 172.31.3.151, 172.31.8.149, 172.31.2.132, 172.31.9.18 (about 15-30 min)
+  | [PASS] io500-ranks    [  148.7s] phase timestamp
+  |    [  149.5s] phase ior-hard-write
+  |    [  211.3s] phase mdtest-hard-write
+  |    [  276.7s] phase find
+  |    [  300.9s] phase ior-easy-read
+  |    [  348.1s] phase mdtest-easy-stat
+  |    [  397.5s] phase ior-hard-read
+  |    [  412.0s] phase mdtest-hard-stat
+  |    [  434.2s] phase mdtest-easy-delete
+  |    [  501.2s] phase mdtest-hard-read
+  |    [  526.2s] phase mdtest-hard-delete
+  |    [  558.0s] phase ior-rnd4K-easy-read
+  | == IO500 says the result is INVALID; find matched 649628 files
+  | == submission bundle: /root/rocepool/.bench_cache/io500_run/submission.tgz -- IO500 io500-sc26_v4, io500-verify hashes OK, run invalid, system-information.json not made (schema tools)
+  |       180.4  (bw  22.40 GiB/s, md  1453.9 kIOPS)  as measured, valid 300 s run
+  |       180.4  (bw  22.40 GiB/s, md  1453.9 kIOPS)  + one directory's entries spread over all MDTs (name hash), finer MDT locks (done: ROCEPOOL_DIR_STRIPE=1 + MD_BUCKETS; a no-op on a run that already has them)
+  |       180.4  (bw  22.40 GiB/s, md  1453.9 kIOPS)  + FOPEN_PARALLEL_DIRECT_WRITES: no per-node inode lock on a shared file
+  |       180.4  (bw  22.40 GiB/s, md  1453.9 kIOPS)  + FUSE over io_uring (per-core queues, Linux 6.14+): ~3x per-mount rate, less wake-up cost (implemented: io500_run.py probes it against /dev/fuse on the hosts and uses the faster; a no-op on a run that already used it)
+  |       180.4  (bw  22.40 GiB/s, md  1453.9 kIOPS)  + the LD_PRELOAD interception library in every rank (no FUSE channel, no kernel on the I/O path; implemented: io500_run.py --client auto probes it against FUSE and uses the faster; a no-op on a run that already used it)
+  |       180.4  (bw  22.40 GiB/s, md  1453.9 kIOPS)  + one-sided reads and lookups (client RDMA READs stripes and MDT entries; implemented: io500_run.py --direct-read auto probes it; a no-op on a run that already used it -- its effect is in the measured per-op server CPU)
+  |       180.4  (bw  22.40 GiB/s, md  1453.9 kIOPS)  + the OST's NVMe tier for the 300 s write phases (implemented: roce/native/ost_tier.c, io500_run.py --ost-tier auto; a no-op on a run that already had it -- its limits are then the drives' capacity and write bandwidth)
+  | [PASS] ranks-choice 32 ranks/node: score 105.06; 48 ranks/node: score 93.52 -> the valid run uses 32
+  | [ ... ] io500-valid official IO500 on 172.31.12.220, 172.31.11.186, 172.31.3.151, 172.31.8.149, 172.31.2.132, 172.31.9.18 (300 s per phase: about an hour)
+  | [WARN] io500-valid submission: system-information.json not made (IO500's schema tools need vi4io.org); the form takes the same facts from rocepool-system.json
+  |    [  384.6s] phase mdtest-easy-write
+  |    [  703.4s] phase timestamp
+  |    [  703.8s] phase ior-hard-write
+  |    [ 1003.5s] phase mdtest-hard-write
+  |    [ 1313.2s] phase find
+  |    [ 1410.0s] phase ior-easy-read
+  |    [ 1643.8s] phase mdtest-easy-stat
+  |    [ 1884.5s] phase ior-hard-read
+  |    [ 1957.7s] phase mdtest-hard-stat
+  |    [ 2042.9s] phase mdtest-easy-delete
+  |    [ 2356.1s] phase mdtest-hard-read
+  |    [ 2448.1s] phase mdtest-hard-delete
+  | == IO500 says the result is VALID; find matched 3635012 files
+  | == submission bundle: /root/rocepool/.bench_cache/io500_run/submission.tgz -- IO500 io500-sc26_v4, io500-verify OK (valid), system-information.json not made (schema tools)
+  |       200.5  (bw  25.83 GiB/s, md  1557.1 kIOPS)  as measured, valid 300 s run
+  |       200.5  (bw  25.83 GiB/s, md  1557.1 kIOPS)  + one directory's entries spread over all MDTs (name hash), finer MDT locks (done: ROCEPOOL_DIR_STRIPE=1 + MD_BUCKETS; a no-op on a run that already has them)
+  |       200.5  (bw  25.83 GiB/s, md  1557.1 kIOPS)  + FOPEN_PARALLEL_DIRECT_WRITES: no per-node inode lock on a shared file
+  |       200.5  (bw  25.83 GiB/s, md  1557.1 kIOPS)  + FUSE over io_uring (per-core queues, Linux 6.14+): ~3x per-mount rate, less wake-up cost (implemented: io500_run.py probes it against /dev/fuse on the hosts and uses the faster; a no-op on a run that already used it)
+  |       200.5  (bw  25.83 GiB/s, md  1557.1 kIOPS)  + the LD_PRELOAD interception library in every rank (no FUSE channel, no kernel on the I/O path; implemented: io500_run.py --client auto probes it against FUSE and uses the faster; a no-op on a run that already used it)
+  |       200.5  (bw  25.83 GiB/s, md  1557.1 kIOPS)  + one-sided reads and lookups (client RDMA READs stripes and MDT entries; implemented: io500_run.py --direct-read auto probes it; a no-op on a run that already used it -- its effect is in the measured per-op server CPU)
+  |       200.5  (bw  25.83 GiB/s, md  1557.1 kIOPS)  + the OST's NVMe tier for the 300 s write phases (implemented: roce/native/ost_tier.c, io500_run.py --ost-tier auto; a no-op on a run that already had it -- its limits are then the drives' capacity and write bandwidth)
+  | verdict: WARN   report: onsite_report.json
+  | == 4/4 完成（rc=0）：onsite_io500.json onsite_io500_valid.json onsite_report.json 
+  |    正式分数: 102.298408  带宽 GiB/s: 12.294614  元数据 kIOPS: 851.182806  (WEKA Afton 105.94 / 33.28 / 337.29)
+  | == 结果包：/root/rocepool/rocepool-results-ip-172-31-12-220-20261102-133445.tar.gz（把这个文件发回来即可）
+[aws 13:35:05] reports in aws_runs/gh-41438027754/: onsite_report.json, onsite_io500.json, onsite_io500_valid.json, run.log, aws_run.out, onsite_crossover.json, onsite_stress.json, onsite_ior.json, onsite_ior_hard.json, onsite_kv.json, onsite_gds.json, onsite_kvcache.json, host0_kernel.txt, host1_kernel.txt, host2_kernel.txt, host3_kernel.txt, host4_kernel.txt, host5_kernel.txt, io500_logs.tar.gz, io500_submission.tgz, io500_submission_quick.tgz
+[aws 13:35:06] IO500 score 102.298408  bw 12.294614 GiB/s  md 851.182806 kIOPS (6 x i3en.12xlarge, efa)
+[aws 13:35:06] run.sh exit code 0
+[aws 13:35:07] terminating i-031f9771ffdba1fcd, i-0eb3f76f844fb4407, i-0c57c407a75c29160, i-051b48d04145c3f05, i-02eed586158039028, i-0458c08f172478c91
+[aws 13:35:56] all resources released
