@@ -543,7 +543,7 @@ def cluster_step(args, ip: str, lib: str, fuse_client: str, intercept_lib: str, 
     ranks_choice = None  # (ranks per node, the quick report it was measured in)
     eps_choice = None    # (endpoints per rank, the IOR probe report it was measured in)
     eps_probed = False
-    ofi = "ofi" in os.path.basename(cluster.get("lib") or "")
+    ofi = transport_is_ofi(cluster, env)
     i = 0
     while i < len(runs):
         name, fname, extra = runs[i]
@@ -739,6 +739,15 @@ def client_eps_max(report_path: str, ranks_per_node: int | None = None) -> int:
     reserve = 2 * server_eps(cores) + 2 * ranks + 16
     n = (min(qps) - reserve) // ranks
     return max(OFI_CLIENT_EPS_DEFAULT, min(OFI_CLIENT_EPS_MAX, n))
+
+
+def transport_is_ofi(cluster: dict, env: dict) -> bool:
+    """the cluster runs the OFI (libfabric: EFA) transport. Not from the
+    library's file name -- built on site it is libroce_transport.so, and the
+    first valid run with endpoint probes skipped them for that -- but from
+    the backend the preflight chose (ROCE_BACKEND)"""
+    backend = (cluster.get("env") or {}).get("ROCE_BACKEND") or env.get("ROCE_BACKEND") or ""
+    return backend == "ofi" or "/ofi/" in (cluster.get("lib") or "") or "_ofi" in os.path.basename(cluster.get("lib") or "")
 
 
 def eps_probes(quick_report: str, ranks_per_node: int | None, stonewall: str) -> list[tuple]:

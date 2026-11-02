@@ -330,3 +330,17 @@ class EpsChoiceTests(unittest.TestCase):
               "\t\tmax_qp:\t\t\t\t1024\n\t\tmax_qp_wr:\t\t\t4096\n"
         self.assertEqual(max_qp_of(out), 1024)
         self.assertIsNone(max_qp_of("No IB devices found\n"))
+
+
+class TransportIsOfiTests(unittest.TestCase):
+    """the endpoint probes run on OFI: told by the preflight's backend, not
+    the library's name (on site: libroce_transport.so -- probes skipped)"""
+
+    def test_backend(self):
+        from tools.roce_onsite import transport_is_ofi
+        site = {"lib": "/root/rocepool/roce/native/libroce_transport.so", "env": {"ROCE_BACKEND": "ofi"}}
+        self.assertTrue(transport_is_ofi(site, {}))
+        self.assertTrue(transport_is_ofi({"lib": "/x/libroce_transport.so"}, {"ROCE_BACKEND": "ofi"}))
+        self.assertTrue(transport_is_ofi({"lib": "/r/roce/native/ofi/libroce_transport_ofi.so"}, {}))
+        self.assertFalse(transport_is_ofi({"lib": "/x/libroce_transport.so", "env": {"ROCE_BACKEND": "rc"}}, {}))
+        self.assertFalse(transport_is_ofi({"lib": "/r/softverbs/libroce_transport_softverbs.so"}, {}))
