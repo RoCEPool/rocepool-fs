@@ -22,6 +22,7 @@ import json
 import os
 import re
 import select
+import shlex
 import shutil
 import signal
 import subprocess
@@ -439,6 +440,196 @@ def _rocepool_commit() -> str:
     return ""
 
 
+# Runs on every host for the submission's hardware record (job/hardware/):
+# what IO500's form asks (CPU, sockets, cores, memory, drives, data file
+# system, network) as the host itself reports it. No serial numbers, no
+# account or instance IDs: the instance TYPE only.
+INVENTORY_SH = r"""
+sec() { echo; echo "## $1"; }
+sec hostname; hostname
+sec instance-type
+t=$(curl -sf --noproxy '*' -m 2 -X PUT http://169.254.169.254/latest/api/token \
+      -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' 2>/dev/null)
+curl -sf --noproxy '*' -m 2 -H "X-aws-ec2-metadata-token: $t" \
+  http://169.254.169.254/latest/meta-data/instance-type 2>/dev/null || echo "${ROCEPOOL_INSTANCE_TYPE:-unknown}"; echo
+sec uname; uname -srvmo
+sec os-release; cat /etc/os-release 2>/dev/null
+sec lscpu; LC_ALL=C lscpu 2>/dev/null
+sec memory; free -b 2>/dev/null
+sec block-devices; lsblk -b -d -o NAME,MODEL,SIZE,ROTA,TYPE,TRAN 2>/dev/null
+sec nvme
+for d in /sys/class/nvme/nvme*; do [ -e "$d" ] || continue
+  echo "$(basename "$d") model=$(cat "$d/model" 2>/dev/null | xargs) firmware=$(cat "$d/firmware_rev" 2>/dev/null | xargs)"
+done
+sec raid; cat /proc/mdstat 2>/dev/null
+sec data-filesystems; df -B1 -T "$@" 2>/dev/null
+sec network
+for n in /sys/class/net/*; do b=$(basename "$n"); [ "$b" = lo ] && continue
+  echo "$b driver=$(basename "$(readlink -f "$n/device/driver" 2>/dev/null)" 2>/dev/null) speed_mbps=$(cat "$n/speed" 2>/dev/null) mtu=$(cat "$n/mtu" 2>/dev/null)"
+done
+sec rdma-devices; ls /sys/class/infiniband 2>/dev/null
+sec libfabric; fi_info --version 2>/dev/null; fi_info -p efa -t FI_EP_RDM 2>/dev/null | head -n 12
+sec efa-installer; cat /opt/amazon/efa_installed_packages 2>/dev/null
+"""
+
+SECRETISH = re.compile(r"KEY|SECRET|TOKEN|PASS|CRED|SESSION|COOKIE|^AWS_|^GITHUB_|^GH_|^ACTIONS_")
+# what the job script records of the launching environment: the names that
+# change what the run does (the rest -- HOME, TERM, ... -- is not recorded)
+JOB_ENV = re.compile(r"^(ROCE|ROCEPOOL|FI_|MPIR_|MPICH_|HYDRA_|IOR_|LD_|OMP_)")
+
+
+def job_env(env: dict) -> dict:
+    """env -> the variables a job script records: run-relevant, not secret"""
+    return {k: v for k, v in sorted(env.items()) if JOB_ENV.match(k) and not SECRETISH.search(k)}
+
+
+def _q(argv: list[str]) -> str:
+    return " ".join(shlex.quote(a) for a in argv)
+
+
+def parse_inventory(text: str) -> dict:
+    """job/hardware/node<i>.txt -> the form's fields (missing = None)"""
+    secs, cur = {}, None
+    for line in text.splitlines():
+        if line.startswith("## "):
+            cur = line[3:].strip()
+            secs[cur] = []
+        elif cur:
+            secs[cur].append(line)
+    lscpu = {}
+    for line in secs.get("lscpu", []):
+        k, _, v = line.partition(":")
+        lscpu[k.strip()] = v.strip()
+    num = lambda v: int(v) if v and v.isdigit() else None  # noqa: E731
+    mem = next((int(l.split()[1]) for l in secs.get("memory", []) if l.startswith("Mem:")), None)
+    os_name = next((l.split("=", 1)[1].strip('"') for l in secs.get("os-release", []) if l.startswith("PRETTY_NAME=")),
+                   None)
+    nvme = [m.groupdict() for m in (re.match(r"(?P<name>\S+) model=(?P<model>.*?) firmware=(?P<firmware>.*)$", l)
+                                    for l in secs.get("nvme", [])) if m]
+    models = {}
+    for d in nvme:
+        models[d.get("model", "?")] = models.get(d.get("model", "?"), 0) + 1
+    fs = []
+    for l in secs.get("data-filesystems", [])[1:]:
+        f = l.split()
+        if len(f) >= 7 and f[2].isdigit():
+            fs.append({"device": f[0], "type": f[1], "size_bytes": int(f[2]), "used_bytes": int(f[3]),
+                       "avail_bytes": int(f[4]), "mount": f[6]})
+    nics = []
+    for l in secs.get("network", []):
+        f = l.split()
+        if f:
+            d = dict(kv.split("=", 1) for kv in f[1:] if "=" in kv)
+            sp = d.get("speed_mbps", "")
+            nics.append({"name": f[0], "driver": d.get("driver") or None,
+                         "speed_gbps": int(sp) / 1000 if sp.isdigit() and int(sp) > 0 else None})
+    itype = next((l.strip() for l in secs.get("instance-type", []) if l.strip()), None)
+    if itype and not re.fullmatch(r"[a-z0-9-]+\.[a-z0-9-]+", itype):  # not an answer (a proxy's error page, ...)
+        itype = None
+    return {"hostname": next((l.strip() for l in secs.get("hostname", []) if l.strip()), None),
+            "instance_type": None if itype == "unknown" else itype,
+            "os": os_name, "kernel": " ".join((secs.get("uname") or [""])[0].split()[:2]) or None,
+            "cpu_model": lscpu.get("Model name"), "sockets": num(lscpu.get("Socket(s)")),
+            "cores_per_socket": num(lscpu.get("Core(s) per socket")),
+            "threads_per_core": num(lscpu.get("Thread(s) per core")), "cpus": num(lscpu.get("CPU(s)")),
+            "cpu_max_mhz": lscpu.get("CPU max MHz") or None, "numa_nodes": num(lscpu.get("NUMA node(s)")),
+            "mem_bytes": mem, "nvme_drives": len(nvme), "nvme_models": models, "data_filesystems": fs,
+            "rdma_devices": [l.strip() for l in secs.get("rdma-devices", []) if l.strip()],
+            "nics": nics, "libfabric": next((l.split(":", 1)[1].strip() for l in secs.get("libfabric", [])
+                                             if l.startswith("fi_info:")), None)}
+
+
+def archive_job(work: str, cluster, servers: list, cmd: list[str], env: dict, mpi_bin: str, ini: str,
+                data_dirs: list[str]) -> dict:
+    """At launch, <work>/job/: what produced this run, for the submission's
+    JOB SCRIPT and hardware fields (earlier runs had to reconstruct them).
+      io500.sh             the commands, as run: every server's start
+                           command (node, argv, environment), the wait for
+                           their READY lines, the mpiexec command line and
+                           the variables it was given
+      hosts, launch.sh     the MPI hostfile and hydra launcher it used
+      config.ini           the IO500 configuration
+      roce_env.node<i>.sh  each host's own RoCE/EFA settings (sourced by
+                           every command that host runs)
+      mpi.txt              mpichversion
+      hardware/node<i>.txt the host's own inventory (INVENTORY_SH)
+      hardware.json        the same, parsed; NIC speed from the host, else
+                           as declared (ROCEPOOL_NIC_GBPS, e.g. AWS's
+                           "50 Gigabit")
+    Secret-looking variables (SECRETISH) are never written."""
+    job = os.path.join(work, "job")
+    os.makedirs(os.path.join(job, "hardware"), exist_ok=True)
+    for f in ("hosts", "launch.sh"):
+        if os.path.exists(os.path.join(work, f)):
+            shutil.copy(os.path.join(work, f), os.path.join(job, f))
+    shutil.copy(ini, os.path.join(job, "config.ini"))
+    try:
+        r = subprocess.run([os.path.join(mpi_bin, "mpichversion")], capture_output=True, text=True, timeout=30)
+        mpi_txt = r.stdout or r.stderr
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        mpi_txt = f"mpichversion: {exc}\n"
+    with open(os.path.join(job, "mpi.txt"), "w") as f:
+        f.write(mpi_txt)
+
+    def one(node):
+        i = node.index
+        rc = cluster.run(i, ["sh", "-c", f"cd {shlex.quote(ROOT)} && cat roce_env.sh 2>/dev/null"], env, net=False,
+                         capture_output=True, text=True, timeout=60)
+        # df of the servers' data directories (none given: the tree's own
+        # file system -- never every mount of the host)
+        inv = cluster.run(i, ["sh", "-c", INVENTORY_SH, "inventory", *(data_dirs or [ROOT])], env, net=False,
+                          capture_output=True, text=True, timeout=120)
+        return i, rc.stdout, inv.stdout
+    with cf.ThreadPoolExecutor(max(1, len(cluster.nodes))) as ex:
+        got = sorted(ex.map(one, cluster.nodes))
+    hw = []
+    declared = env.get("ROCEPOOL_NIC_GBPS")
+    for i, roce_env, inv in got:
+        with open(os.path.join(job, f"roce_env.node{i}.sh"), "w") as f:
+            f.write(roce_env or "# (no roce_env.sh on this host)\n")
+        with open(os.path.join(job, "hardware", f"node{i}.txt"), "w") as f:
+            f.write(inv)
+        h = dict(parse_inventory(inv), node=i)
+        ip = cluster.nodes[i].ip
+        nic = next((n for n in h["nics"] if n["speed_gbps"]), None)
+        h["nic_gbps"], h["nic_gbps_source"] = (nic["speed_gbps"], f"/sys/class/net/{nic['name']}/speed") if nic else \
+            ((float(declared), env.get("ROCEPOOL_NIC_GBPS_SOURCE", "declared (ROCEPOOL_NIC_GBPS)"))
+             if declared else (None, None))
+        h["cluster_ip"] = ip
+        hw.append(h)
+    with open(os.path.join(job, "hardware.json"), "w") as f:
+        json.dump(hw, f, indent=1)
+
+    lines = ["#!/bin/bash",
+             f"# RoCEPool IO500 job script -- written by tools/io500_run.py at launch, "
+             f"{time.strftime('%Y-%m-%d %H:%M:%S %Z')}, RoCEPool commit {_rocepool_commit() or 'unknown'}.",
+             "# The commands this run executed, with their arguments and environment as given.",
+             "# Every command on a host first sources that host's roce_env.sh (job/roce_env.node<i>.sh).",
+             "# Not recorded: the rest of the inherited shell environment (PATH, HOME, ...).",
+             "set -e", f"cd {shlex.quote(ROOT)}", "", "# 1. storage servers (node: kind address), output to their logs"]
+    logs = []
+    for s in servers:
+        argv = s.get("cmd") or []
+        node = cluster.nodes[s["node"]]
+        local = argv[:1] != ["ssh"] and not node.sim
+        pre = f"env {_q([f'{k}={v}' for k, v in job_env(s.get('cmd_env') or {}).items()])} " if local else ""
+        lines.append(f"# node {s['node']}: {s['kind']} {s['addr']}")
+        # an ssh'd command carries its variables inline: blank any secret-looking one
+        line = re.sub(r"\b(\w*(?:KEY|SECRET|TOKEN|PASS|CRED)\w*)=('[^']*'|\S+)", r"\1=<not recorded>", _q(argv))
+        lines.append(f"{pre}{line} > {shlex.quote(s.get('log', '/dev/null'))} 2>&1 < /dev/null &")
+        logs.append(s.get("log", "/dev/null"))
+    lines += ["", "# ... each prints READY when it serves",
+              f"for log in {_q(logs)}; do until grep -q '^READY' \"$log\"; do sleep 1; done; done", "",
+              "# 2. IO500: the unmodified app, every rank through the hostfile + launcher above",
+              f"cd {shlex.quote(work)}"]
+    lines += [f"export {k}={shlex.quote(v)}" for k, v in job_env(env).items()]
+    lines += [f"{_q(cmd)} > io500.out 2>&1", ""]
+    with open(os.path.join(job, "io500.sh"), "w") as f:
+        f.write("\n".join(lines))
+    os.chmod(os.path.join(job, "io500.sh"), 0o755)
+    return {"dir": job, "hardware": hw}
+
+
 def submission_bundle(work: str, ini: str, report: dict, servers: list, env: dict) -> dict:
     """What an IO500 submission uploads (io500.org/submission), in
     <work>/submission/ and <work>/submission.tgz:
@@ -455,7 +646,12 @@ def submission_bundle(work: str, ini: str, report: dict, servers: list, env: dic
                                schema tools (OS, CPU, memory of the head
                                node + the results), where they can run
       rocepool-system.json     the storage system: nodes, servers, client,
-                               durability, software commit, settings
+                               durability, software commit, settings, the
+                               hardware record and MPI's node grouping
+      job/                     the JOB SCRIPT as run and each host's hardware
+                               inventory (archive_job), the MPI hostfile and
+                               launcher, and job/rank_hosts.txt: which host
+                               every rank ran on
       SHA256SUMS
     Nothing secret is in it: no keys, no cluster file, no host addresses
     beyond the private ones the servers bound."""
@@ -468,6 +664,8 @@ def submission_bundle(work: str, ini: str, report: dict, servers: list, env: dic
     shutil.copy(ini, os.path.join(sub, "config.ini"))
     if os.path.exists(os.path.join(work, "io500.out")):
         shutil.copy(os.path.join(work, "io500.out"), os.path.join(sub, "io500.out"))
+    if os.path.isdir(os.path.join(work, "job")):
+        shutil.copytree(os.path.join(work, "job"), os.path.join(sub, "job"))
     build = report.get("io500_build") or io500_build_info()
     with open(os.path.join(sub, "io500_build.json"), "w") as f:
         json.dump(build, f, indent=1)
@@ -525,6 +723,7 @@ def submission_bundle(work: str, ini: str, report: dict, servers: list, env: dic
         "servers": [{"kind": s.get("kind"), "node": s.get("node"),
                      "env": {k: v for k, v in (s.get("env") or {}).items() if k in keep_env}} for s in servers],
         "io500_build": build,
+        "hardware": report.get("hardware"), "mpi_node_check": report.get("mpi_node_check"),
     }
     with open(os.path.join(sub, "rocepool-system.json"), "w") as f:
         json.dump(system, f, indent=1)
@@ -1098,8 +1297,10 @@ def main() -> int:
             # overwrote each other's output -- READY lines lost, start-up
             # misjudged as a hang
             s["log"] = os.path.join(work, f"{s['kind']}{s['node']}_{s['addr'].rsplit(':', 1)[1]}.log")
-            procs.append(cluster.popen(s["node"], [py, "-u", helper, f"{s['kind']}-native", s["addr"]],
-                                       dict(env, **s.get("env", {})),
+            senv = dict(env, **s.get("env", {}))
+            sargv = [py, "-u", helper, f"{s['kind']}-native", s["addr"]]
+            s["cmd"], s["cmd_env"] = cluster.nodes[s["node"]].wrap(sargv, env=senv), senv  # job/io500.sh
+            procs.append(cluster.popen(s["node"], sargv, senv,
                                        stdin=subprocess.PIPE, stdout=open(s["log"], "w"), stderr=subprocess.STDOUT))
         for s, p in zip(servers, procs):
             line = _file_line_until(s["log"], p, "READY", 120)
@@ -1297,10 +1498,20 @@ def main() -> int:
                   phases=[p.strip() for p in args.phases.split(",")] if args.phases else None)
         hostfile, _, extra = cluster.mpi_files(work, args.ranks_per_node)
         cmd = [os.path.join(mpi_bin, "mpiexec"), *extra, *bind_args, *mpi_extra, "-f", hostfile, "-n", str(ranks), io500, ini]
+        data_dirs = sorted({d for sv in servers for k in ("ROCEPOOL_OST_TIER", "ROCEPOOL_MDT_LOG", "ROCEPOOL_OST_LOG")
+                            for d in [tier_dir((sv.get("env") or {}).get(k)) if k == "ROCEPOOL_OST_TIER"
+                                      else os.path.dirname((sv.get("env") or {}).get(k) or "") or None] if d})
+        try:
+            job = archive_job(work, cluster, servers, cmd, env, mpi_bin, ini, data_dirs)
+            report["hardware"] = job["hardware"]
+            print(f"== job script + hardware record: {job['dir']}", flush=True)
+        except Exception as exc:  # noqa: BLE001 -- a record, never the reason a run does not happen
+            print(f"== WARNING job archive incomplete: {exc}", flush=True)
         nc = mpi_node_check(mpi_bin, [*extra, *bind_args, "-f", hostfile], ranks, args.ranks_per_node, n, env, work)
         report["mpi_node_check"] = {k: v for k, v in nc.items() if k != "ranks"}
         if nc["ranks"]:
-            with open(os.path.join(work, "rank_hosts.txt"), "w") as f:
+            os.makedirs(os.path.join(work, "job"), exist_ok=True)
+            with open(os.path.join(work, "job", "rank_hosts.txt"), "w") as f:
                 f.write("# rank host ranks-sharing-its-node (MPI_COMM_TYPE_SHARED), from the run's mpiexec\n")
                 f.writelines(f"{r} {h} {loc}\n" for r, h, loc in nc["ranks"])
         if nc["ok"]:

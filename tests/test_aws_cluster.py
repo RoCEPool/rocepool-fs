@@ -84,6 +84,9 @@ class AwsClusterTests(unittest.TestCase):
         self.assertIn("--peers root@172.31.0.2=172.31.0.2,root@172.31.0.3=172.31.0.3", start[-1])
         self.assertIn("--quick", start[-1])
         self.assertIn("--ip 172.31.0.1", start[-1])
+        # the NIC speed and type AWS states, for the hardware record (ENA has no link speed)
+        self.assertIn("ROCEPOOL_NIC_GBPS=200 ", start[-1])
+        self.assertIn("ROCEPOOL_INSTANCE_TYPE=c6in.32xlarge ", start[-1])
         self.assertTrue(any(c[0] == "scp" and c[-1] == "root@54.0.0.1:/root/rocepool.tar.gz" for c in ssh))
         # reports home, score shown, everything released
         d = os.path.join(ROOT, "aws_runs", "rp-test")

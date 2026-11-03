@@ -46,6 +46,7 @@ import concurrent.futures as cf
 import io
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -408,7 +409,15 @@ class Run:
             cmd = (f"cd /root/rocepool && export HEAD_IP={st['hosts'][0]['private']} PEER_IPS={shlex.quote(ips)}; "
                    f"( {a.command} ) > aws_run.out 2>&1; echo $? > aws_run.rc")
         else:
-            cmd = "cd /root/rocepool && nohup ./run.sh " + " ".join(shlex.quote(f) for f in flags) + \
+            # the NIC speed as AWS states it ("50 Gigabit"): ENA reports no
+            # link speed (/sys/class/net/*/speed = -1), and the submission's
+            # hardware record wants one (io500_run job/hardware)
+            net = (st.get("facts") or {}).get("network") or ""
+            m = re.match(r"(?:Up to )?(\d+(?:\.\d+)?) Gigabit", net)
+            pre = f"ROCEPOOL_NIC_GBPS={m.group(1)} ROCEPOOL_NIC_GBPS_SOURCE={shlex.quote('AWS: ' + net)} " if m else ""
+            if st.get("type"):
+                pre += f"ROCEPOOL_INSTANCE_TYPE={shlex.quote(st['type'])} "
+            cmd = f"cd /root/rocepool && {pre}nohup ./run.sh " + " ".join(shlex.quote(f) for f in flags) + \
                 " > aws_run.out 2>&1; echo $? > aws_run.rc"
         self.ssh(head, f"setsid bash -c {shlex.quote(cmd)} >/dev/null 2>&1 < /dev/null &")
         log(f"{'command' if a.command else 'run.sh'} started on {head} ({len(st['hosts'])} hosts); following its progress")

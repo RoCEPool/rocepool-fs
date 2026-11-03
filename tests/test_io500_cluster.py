@@ -435,6 +435,15 @@ class IO500ClusterTests(unittest.TestCase):
         for s in report["servers"]:
             with open(s["log"]) as f:
                 self.assertIn(f"READY {s['addr']}", f.read(), s)
+        # MPI groups each host's ranks (IOR/mdtest's read-back shift is one
+        # node), and the job script / hardware record was archived at launch
+        nc = report["mpi_node_check"]
+        self.assertTrue(nc["ok"], nc)
+        self.assertEqual(nc["nodes"], 3)
+        job = os.path.join(ROOT, ".bench_cache", "io500_run", "job")
+        for f in ("io500.sh", "hosts", "launch.sh", "rank_hosts.txt", "hardware.json"):
+            self.assertTrue(os.path.exists(os.path.join(job, f)), f)
+        self.assertEqual(len(report["hardware"]), 3)
 
 
 if __name__ == "__main__":
@@ -637,3 +646,147 @@ class ServerReadyLineTests(unittest.TestCase):
         with open(log, "w") as f:
             f.write("rocepool OST: NOT READYING anything\n")
         self.assertFalse(_file_line_until(log, p, "READY", 0.2).startswith("READY"))
+
+
+class JobArchiveTests(unittest.TestCase):
+    """io500_run.archive_job: the JOB SCRIPT and hardware record a
+    submission needs, written at launch (gh-41438027754 had to reconstruct
+    them afterwards)"""
+
+    def test_inventory_of_this_host(self):
+        from tools.io500_run import INVENTORY_SH, parse_inventory
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        out = subprocess.run(["sh", "-c", INVENTORY_SH, "inventory", d], capture_output=True, text=True,
+                             timeout=120, env=dict(os.environ, ROCEPOOL_INSTANCE_TYPE="x9.test")).stdout
+        h = parse_inventory(out)
+        self.assertEqual(h["cpus"], os.cpu_count())
+        self.assertGreater(h["mem_bytes"], 2**28)
+        self.assertTrue(h["kernel"].startswith("Linux "), h)
+        self.assertTrue(h["data_filesystems"] and h["data_filesystems"][0]["size_bytes"] > 0, h)
+        # EC2 answers from its metadata service; elsewhere the declared type
+        # (here: a proxy's error page must not be taken for one)
+        self.assertRegex(h["instance_type"], r"^[a-z0-9-]+\.[a-z0-9-]+$")
+        self.assertNotRegex(out, r"(?i)\bserial\b")  # no drive serial numbers
+
+    def test_parse_site_like_inventory(self):
+        from tools.io500_run import parse_inventory
+        inv = ("## hostname\nip-10-0-0-1\n## instance-type\ni3en.12xlarge\n## uname\nLinux 6.8.0-1015-aws #16 x86_64\n"
+               "## lscpu\nCPU(s):  48\nModel name:  Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz\n"
+               "Thread(s) per core:  2\nCore(s) per socket:  24\nSocket(s):  1\nNUMA node(s):  1\n"
+               "## memory\n              total        used\nMem:    405000000000  1000\n"
+               "## nvme\nnvme0 model=Amazon Elastic Block Store firmware=1.0\n"
+               "nvme1 model=Amazon EC2 NVMe Instance Storage firmware=0\n"
+               "nvme2 model=Amazon EC2 NVMe Instance Storage firmware=0\n"
+               "## data-filesystems\nFilesystem Type 1B-blocks Used Available Use% Mounted on\n"
+               "/dev/md0 xfs 30000000000000 600000000000 29400000000000 2% /nvmedata\n"
+               "## network\nens5 driver=ena speed_mbps= mtu=9001\n## rdma-devices\nrdmap0s6\n"
+               "## libfabric\nfi_info: 1.22.0amzn4.0\n")
+        h = parse_inventory(inv)
+        self.assertEqual((h["sockets"], h["cores_per_socket"], h["threads_per_core"], h["cpus"]), (1, 24, 2, 48))
+        self.assertEqual(h["instance_type"], "i3en.12xlarge")
+        self.assertEqual(h["nvme_models"], {"Amazon Elastic Block Store": 1, "Amazon EC2 NVMe Instance Storage": 2})
+        self.assertEqual(h["data_filesystems"][0]["mount"], "/nvmedata")
+        self.assertEqual(h["nics"], [{"name": "ens5", "driver": "ena", "speed_gbps": None}])
+        self.assertEqual(h["libfabric"], "1.22.0amzn4.0")
+
+    def test_archive(self):
+        from tools import io500_run
+        from tools.cluster import Cluster, Node
+        w = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, w, ignore_errors=True)
+        c = Cluster([Node(0, "10.0.0.1"), Node(1, "10.0.0.2", peer="root@10.0.0.2")], real=True)
+
+        def run(i, argv, env=None, **kw):  # every node answers as this host
+            return subprocess.run(argv, capture_output=True, text=True, timeout=120)
+        c.run = run
+        open(os.path.join(w, "hosts"), "w").write("10.0.0.1:2\n10.0.0.2:2\n")
+        open(os.path.join(w, "config.ini"), "w").write("[global]\n")
+        env = {"ROCEPOOL_PREFIX": "/mnt/x", "ROCEPOOL_AWS_SECRET_KEY": "nope", "AWS_ACCESS_KEY_ID": "nope",
+               "GITHUB_TOKEN": "nope", "FI_PROVIDER": "efa", "HOME": "/root", "ROCEPOOL_NIC_GBPS": "50",
+               "ROCEPOOL_NIC_GBPS_SOURCE": "AWS: 50 Gigabit"}
+        servers = [{"kind": "mdt", "node": 0, "addr": "10.0.0.1:7000", "log": os.path.join(w, "mdt0.log"),
+                    "cmd": ["python3", "-u", "h.py", "mdt-native", "10.0.0.1:7000"],
+                    "cmd_env": dict(env, ROCEPOOL_MDT_LOG="/nvmedata/mdt.log")},
+                   {"kind": "ost", "node": 1, "addr": "10.0.0.2:7100", "log": os.path.join(w, "ost1.log"),
+                    "cmd": ["ssh", "-o", "BatchMode=yes", "root@10.0.0.2", "cd /r && exec env ROCEPOOL_X=1 ROCEPOOL_API_TOKEN=nope python3 h.py"],
+                    "cmd_env": env}]
+        cmd = ["/m/bin/mpiexec", "-f", os.path.join(w, "hosts"), "-n", "4", "/io500", "config.ini"]
+        job = io500_run.archive_job(w, c, servers, cmd, env, "/nonexistent/bin", os.path.join(w, "config.ini"), [w])
+        jd = os.path.join(w, "job")
+        for f in ("io500.sh", "hosts", "config.ini", "mpi.txt", "hardware.json", "hardware/node0.txt",
+                  "hardware/node1.txt", "roce_env.node0.sh", "roce_env.node1.sh"):
+            self.assertTrue(os.path.exists(os.path.join(jd, f)), f)
+        sh = open(os.path.join(jd, "io500.sh")).read()
+        for secret in ("nope", "AWS_ACCESS", "GITHUB_TOKEN", "SECRET"):
+            self.assertNotIn(secret, sh)
+        self.assertNotIn("HOME=", sh)
+        self.assertIn("export FI_PROVIDER=efa", sh)
+        self.assertIn("ROCEPOOL_MDT_LOG=/nvmedata/mdt.log", sh)       # the local server's own settings
+        self.assertIn("root@10.0.0.2", sh)                             # the remote one, as ssh'd
+        self.assertIn("/m/bin/mpiexec -f", sh)
+        self.assertIn("grep -q '^READY'", sh)
+        r = subprocess.run(["bash", "-n", os.path.join(jd, "io500.sh")], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        hw = json.load(open(os.path.join(jd, "hardware.json")))
+        self.assertEqual([h["node"] for h in hw], [0, 1])
+        self.assertEqual(hw[1]["cluster_ip"], "10.0.0.2")
+        if not any(n["speed_gbps"] for n in hw[0]["nics"]):  # no link speed here: the declared one
+            self.assertEqual((hw[0]["nic_gbps"], hw[0]["nic_gbps_source"]), (50.0, "AWS: 50 Gigabit"))
+        self.assertEqual(job["hardware"], hw)
+        # the bundle carries it
+        os.makedirs(os.path.join(w, "results"))
+        open(os.path.join(w, "results", "result.txt"), "w").write("x\n")
+        from unittest import mock
+        with mock.patch.object(io500_run, "IO500_SRC", w):
+            sb = io500_run.submission_bundle(w, os.path.join(w, "config.ini"), {"hardware": hw}, [], {})
+        self.assertTrue(os.path.exists(os.path.join(sb["dir"], "job", "io500.sh")))
+        self.assertIn("job/hardware/node1.txt", open(os.path.join(sb["dir"], "SHA256SUMS")).read())
+        self.assertEqual(json.load(open(os.path.join(sb["dir"], "rocepool-system.json")))["hardware"], hw)
+
+
+class MpiNodeCheckTests(unittest.TestCase):
+    """io500_run.mpi_node_check: IOR/mdtest shift their read-back by the
+    ranks MPI says share node 0 -- with ch3:sock that was 1 rank, not one
+    node (gh-41438027754: 31 of 32 ranks read their own host's data)"""
+
+    def fake_mpi(self, report: str) -> str:
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        b = os.path.join(d, "bin")
+        os.makedirs(b)
+        open(os.path.join(b, "mpiexec"), "w").write(f"#!/bin/sh\nprintf '{report}'\n")
+        os.chmod(os.path.join(b, "mpiexec"), 0o755)
+        return b
+
+    def check(self, report, **kw):
+        from unittest import mock
+        from tools import io500_run
+        b = self.fake_mpi(report)
+        with mock.patch("tools.bench_ior.ensure_shared_check", return_value="/probe"):
+            return io500_run.mpi_node_check(b, ["-f", "hosts"], kw.get("ranks", 4), 2, 2, {}, b)
+
+    def test_grouping(self):
+        ok = self.check("RP_RANK 1 h0 2\\nRP_RANK 0 h0 2\\nRP_RANK 2 h1 2\\nRP_RANK 3 h1 2\\n"
+                        "RP_SHARED world=4 nodes=2 min=2 max=2\\n")
+        self.assertTrue(ok["ok"], ok)
+        self.assertEqual(ok["ranks"][0], [0, "h0", 2])
+        # what ch3:sock gave: every rank its own node
+        bad = self.check("RP_SHARED world=4 nodes=4 min=1 max=1\\n")
+        self.assertFalse(bad["ok"])
+        self.assertIn("shift the read-back by 1 rank", bad["why"])
+        self.assertFalse(self.check("mpiexec: cannot connect\\n")["ok"])
+
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class SharedProbeTests(unittest.TestCase):
+    """the bundled MPICH (tools/bench_ior.ensure_mpi) groups a host's ranks"""
+
+    def test_bundled_mpich_groups_one_host(self):
+        from tools import bench_ior
+        b = os.path.join(bench_ior.MPICH_PREFIX, "bin")
+        if bench_ior.mpich_device(b) != bench_ior.MPICH_DEVICE:
+            self.skipTest(f"bundled MPICH not built as {bench_ior.MPICH_DEVICE} here")
+        exe = bench_ior.ensure_shared_check(b)
+        r = subprocess.run([os.path.join(b, "mpiexec"), "-n", "4", exe], capture_output=True, text=True, timeout=120)
+        self.assertIn("RP_SHARED world=4 nodes=1 min=4 max=4", r.stdout, r.stdout + r.stderr)
