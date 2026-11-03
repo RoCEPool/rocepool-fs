@@ -31,7 +31,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Runs on every node: python3 -c NAMES_SCRIPT '{"name": "ip", ...}' check
 #                  or python3 -c NAMES_SCRIPT '{"name": "ip", ...}' fix '["name", ...]'
-# MPICH (ch3:sock, as built by tools/bench_ior.ensure_mpi) finds a rank by
+# MPICH (ch3:nemesis, as built by tools/bench_ior.ensure_mpi) finds a rank by
 # its host's NAME: every host must resolve every host's hostname to the same
 # reachable address. Found rehearsing the N-host run: a name that does not
 # resolve made MPI_Init hang silently; one that resolves to loopback
@@ -323,7 +323,12 @@ class Cluster:
         for n in self.nodes:
             if self.real and not n.local:
                 self.run(n.index, ["mkdir", "-p", workdir], net=False, capture_output=True, timeout=60)
-        label = (lambda n: n.ip) if self.real else (lambda n: f"rpnode{n.index}")
+        # simulated nodes: their ranks run in this host's network namespace
+        # (the launcher enters only the node's mount namespace), so each gets
+        # a loopback address of its own -- a name, as before, does not
+        # resolve, and ch3:nemesis looks the label up (gethostbyname) to
+        # advertise it; ch3:sock did not
+        label = (lambda n: n.ip) if self.real else (lambda n: f"127.0.0.{n.index + 2}")
         hostfile = os.path.join(workdir, "hosts")
         with open(hostfile, "w") as f:
             for n in self.nodes:

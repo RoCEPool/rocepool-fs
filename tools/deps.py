@@ -1,7 +1,7 @@
 """Bundled third-party sources (deps/), so a site with no Internet access
 builds everything from the package itself.
 
-    deps/mpich-4.2.3-ch3.tar.xz     MPICH (ch3:sock; the parts other devices need removed)
+    deps/mpich-4.2.3-ch3.tar.xz     MPICH (ch3 sock+nemesis; the parts other devices need removed)
     deps/io500-<tag>.tar.xz         the official IO500 app at the list's tag (tools/io500_run.IO500_TAG),
                                     unmodified, with its pinned IOR, pfind (+lz4), schema tools, as git
                                     checkouts (its own prepare.sh builds it; needs autotools for IOR)

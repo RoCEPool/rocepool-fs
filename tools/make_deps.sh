@@ -3,7 +3,7 @@
 # Needs network, git, curl, autotools. The package ships the result, so
 # sites never run this.
 #   MPICH 4.2.3     release tarball minus modules/{yaksa,ucx,libfabric}
-#                   (built as ch3:sock + dataloop: tools/bench_ior.py)
+#                   (built as ch3:nemesis + dataloop: tools/bench_ior.py)
 #   IO500           tag IO500_TAG (tools/io500_run.py) of github.com/IO500/io500,
 #                   unmodified, + its pinned IOR / pfind (+lz4) / schema tools
 #                   under build/ as git checkouts (prepare.sh builds them as is)

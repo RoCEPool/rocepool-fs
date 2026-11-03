@@ -94,11 +94,14 @@ def ensure_io500(mpi_bin: str) -> str:
     deps/io500-<tag>.tar.xz (the tag's git checkouts; works without a
     network), else a clone of the tag. A build that is not that (an older
     tag, a patched tree) is rebuilt."""
+    from tools.bench_ior import built_before_mpi
     exe = os.path.join(IO500_SRC, "io500")
-    if os.path.exists(exe) and io500_build_info()["pristine"]:
+    stale_mpi = built_before_mpi(exe, mpi_bin)
+    if os.path.exists(exe) and io500_build_info()["pristine"] and not stale_mpi:
         return exe
     if os.path.exists(IO500_SRC):
-        print(f"[io500] rebuilding: {io500_build_info().get('why', 'stale build')}", flush=True)
+        why = "linked against an older MPI build" if stale_mpi else io500_build_info().get("why", "stale build")
+        print(f"[io500] rebuilding: {why}", flush=True)
         shutil.rmtree(IO500_SRC)
     from tools import deps
     if not deps.extract("io500", IO500_SRC):
@@ -661,6 +664,42 @@ KERNEL_LOG_CMD = ("{ dmesg -T 2>/dev/null || journalctl -k --no-pager -n 3000 2>
                   "grep -iE 'out of memory|oom|killed process|segfault|general protection|rocepool|python3' | tail -30")
 
 
+def mpi_node_check(mpi_bin: str, launch: list[str], ranks: int, ranks_per_node: int, nodes: int, env: dict,
+                   cwd: str) -> dict:
+    """Runs tools.bench_ior's MPI_COMM_TYPE_SHARED probe with the run's own
+    mpiexec arguments (`launch`: everything before the program). IOR and
+    mdtest shift their read-back by the ranks MPI says share node 0; if
+    that is not ranks_per_node the shift reads the writer's own host (IO500
+    rule 2). Returns {"ok", "nodes", "min", "max", "ranks": [[rank, host,
+    local], ...], "why"}."""
+    from tools.bench_ior import ensure_shared_check
+    exe = ensure_shared_check(mpi_bin)
+    cmd = [os.path.join(mpi_bin, "mpiexec"), *launch, "-n", str(ranks), exe]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env, cwd=cwd)
+        out = r.stdout + r.stderr
+    except subprocess.TimeoutExpired as exc:
+        out = f"timed out: {exc}"
+    res = {"ok": False, "ranks": []}
+    for line in out.splitlines():
+        m = re.match(r"RP_RANK (\d+) (\S+) (\d+)$", line.strip())
+        if m:
+            res["ranks"].append([int(m.group(1)), m.group(2), int(m.group(3))])
+        m = re.match(r"RP_SHARED world=(\d+) nodes=(\d+) min=(\d+) max=(\d+)", line.strip())
+        if m:
+            res.update(world=int(m.group(1)), nodes=int(m.group(2)), min=int(m.group(3)), max=int(m.group(4)))
+    res["ranks"].sort()
+    if "nodes" not in res:
+        res["why"] = f"the probe did not report: {out[-800:]}"
+    elif (res["world"], res["nodes"], res["min"], res["max"]) != (ranks, nodes, ranks_per_node, ranks_per_node):
+        res["why"] = (f"MPI groups the {res['world']} ranks into {res['nodes']} nodes of {res['min']}..{res['max']} "
+                      f"ranks; the run places {nodes} x {ranks_per_node}. IOR/mdtest would shift the read-back "
+                      f"by {res['min']} rank(s), not one node")
+    else:
+        res["ok"] = True
+    return res
+
+
 def _file_line_until(path: str, p: subprocess.Popen, prefix: str, timeout: float) -> str:
     """the first line starting with `prefix` in the file p writes to (from
     `prefix` on: the server's stdout READY and the C library's stderr share
@@ -1115,6 +1154,7 @@ def main() -> int:
                    **{k: env[k] for k in ("ROCEPOOL_DIRTY_CAP_MIB", "ROCEPOOL_RPC_TIMEOUT_MS", "ROCEPOOL_SCACHE_SLOTS",
                                            "ROCE_BUFPOOL_MAX", "ROCE_TRANSPORT_LIB", "ROCEPOOL_MDT_ASYNC") if k in env}}
         icp_genv = [a for k, v in icp_env.items() for a in ("-genv", k, v)]
+
         bind_args = []
         if bind != "none":
             # hydra needs hwloc for -bind-to; use it only when this build has it
@@ -1124,6 +1164,10 @@ def main() -> int:
             else:
                 print(f"== mpiexec cannot -bind-to {bind} (no hwloc?): ranks unbound", flush=True)
         report["rank_binding"] = bind_args[1] if bind_args else "none"
+        # waiting ranks yield their core every 10 polls (tools/bench_ior
+        # MPICH_CONFIGURE): the servers on the same hosts need it
+        report["mpi_polls_before_yield"] = env.get("MPIR_CVAR_POLLS_BEFORE_YIELD", "10")
+        bind_args += ["-genv", "MPIR_CVAR_POLLS_BEFORE_YIELD", report["mpi_polls_before_yield"]]
 
         def client_up(mode: str, uring: bool, direct: bool, tag: str) -> list[str]:
             """brings the client up on every node; returns the extra mpiexec args"""
@@ -1253,6 +1297,19 @@ def main() -> int:
                   phases=[p.strip() for p in args.phases.split(",")] if args.phases else None)
         hostfile, _, extra = cluster.mpi_files(work, args.ranks_per_node)
         cmd = [os.path.join(mpi_bin, "mpiexec"), *extra, *bind_args, *mpi_extra, "-f", hostfile, "-n", str(ranks), io500, ini]
+        nc = mpi_node_check(mpi_bin, [*extra, *bind_args, "-f", hostfile], ranks, args.ranks_per_node, n, env, work)
+        report["mpi_node_check"] = {k: v for k, v in nc.items() if k != "ranks"}
+        if nc["ranks"]:
+            with open(os.path.join(work, "rank_hosts.txt"), "w") as f:
+                f.write("# rank host ranks-sharing-its-node (MPI_COMM_TYPE_SHARED), from the run's mpiexec\n")
+                f.writelines(f"{r} {h} {loc}\n" for r, h, loc in nc["ranks"])
+        if nc["ok"]:
+            print(f"== MPI node grouping: {nc['nodes']} nodes x {nc['min']} ranks (IOR/mdtest read-back shift "
+                  f"= one node)", flush=True)
+        elif args.valid:
+            raise RuntimeError(f"not a valid run: {nc['why']}")
+        else:
+            print(f"== WARNING MPI node grouping: {nc['why']}", flush=True)
         snap = Snapshotter(cluster, servers)
         snaps = [("start", snap.take())]
         out_path = os.path.join(work, "io500.out")
