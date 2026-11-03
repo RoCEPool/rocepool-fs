@@ -31,7 +31,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Runs on every node: python3 -c NAMES_SCRIPT '{"name": "ip", ...}' check
 #                  or python3 -c NAMES_SCRIPT '{"name": "ip", ...}' fix '["name", ...]'
-# MPICH (ch3:sock, as built by tools/bench_ior.ensure_mpi) finds a rank by
+# MPICH (ch3:nemesis, as built by tools/bench_ior.ensure_mpi) finds a rank by
 # its host's NAME: every host must resolve every host's hostname to the same
 # reachable address. Found rehearsing the N-host run: a name that does not
 # resolve made MPI_Init hang silently; one that resolves to loopback

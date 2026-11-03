@@ -42,6 +42,44 @@ CACHE = os.path.join(ROOT, ".bench_cache")
 MPICH_PREFIX = os.path.join(CACHE, "mpich")
 IOR_SRC = os.path.join(CACHE, "ior_src")
 MPICH_TARBALL_URL = "https://github.com/pmodels/mpich/releases/download/v4.2.3/mpich-4.2.3.tar.gz"
+# ch3:nemesis, not ch3:sock: sock has no shared-memory path, so
+# MPI_Comm_split_type(MPI_COMM_TYPE_SHARED) gives every rank a node of its
+# own. IOR and mdtest size their read-back shift (-C/-Q, mdtest -N) with
+# that: on the 6-host run (gh-41438027754) they saw "192 nodes, 1 task per
+# node" and shifted by 1 rank, so 31 of 32 ranks read what their own host
+# wrote (IO500 rule 2). nemesis groups the ranks of a host correctly.
+MPICH_DEVICE = "ch3:nemesis"
+SHARED_CHECK_SRC = r"""
+#include <mpi.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+/* what IOR's GetNumTasksOnNode0 / GetNumNodes see: the ranks sharing each
+   rank's node (MPI_COMM_TYPE_SHARED), next to the host it really runs on */
+int main(int argc, char **argv) {
+    int rank, size, local, world_min, world_max, nodes = 0, leader;
+    char host[256] = {0};
+    MPI_Comm shm;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shm);
+    MPI_Comm_size(shm, &local);
+    MPI_Comm_rank(shm, &leader);
+    leader = leader == 0;
+    MPI_Reduce(&local, &world_min, 1, MPI_INT, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&local, &world_max, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&leader, &nodes, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    gethostname(host, sizeof host - 1);
+    printf("RP_RANK %d %s %d\n", rank, host, local);
+    fflush(stdout);
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (rank == 0)
+        printf("RP_SHARED world=%d nodes=%d min=%d max=%d\n", size, nodes, world_min, world_max);
+    MPI_Finalize();
+    return 0;
+}
+"""
 
 
 def _run(cmd, **kw):
@@ -85,7 +123,15 @@ def ensure_mpi() -> str:
         return os.path.dirname(system_mpicc)
     bin_dir = os.path.join(MPICH_PREFIX, "bin")
     if os.path.exists(os.path.join(bin_dir, "mpicc")):
-        return bin_dir
+        have = mpich_device(bin_dir)
+        if have == MPICH_DEVICE:
+            ensure_shared_check(bin_dir)
+            return bin_dir
+        # an earlier tree's ch3:sock build: rebuild from clean source (the
+        # IO500 / IOR builds see the newer libmpi and rebuild themselves)
+        print(f"[mpi] rebuilding MPICH: device {have or 'unknown'}, want {MPICH_DEVICE}", flush=True)
+        shutil.rmtree(MPICH_PREFIX)
+        shutil.rmtree(os.path.join(CACHE, "mpich-src"), ignore_errors=True)
     from tools import deps
     os.makedirs(CACHE, exist_ok=True)
     srcdir = os.path.join(CACHE, "mpich-src")
@@ -98,13 +144,67 @@ def ensure_mpi() -> str:
         if os.path.exists(srcdir):
             shutil.rmtree(srcdir)
         os.rename(os.path.join(CACHE, "mpich-4.2.3"), srcdir)
-    # ch3:sock + the dataloop datatype engine: what the bundled, trimmed
-    # source keeps (no yaksa / ucx / libfabric modules) -- and all IOR needs
-    _run(["./configure", f"--prefix={MPICH_PREFIX}", "--disable-fortran", "--with-device=ch3:sock",
+    # ch3 (nemesis: shared memory within a host, TCP between hosts) + the
+    # dataloop datatype engine: what the bundled, trimmed source keeps (no
+    # yaksa / ucx / libfabric modules) -- and all IOR needs
+    _run(["./configure", f"--prefix={MPICH_PREFIX}", "--disable-fortran", f"--with-device={MPICH_DEVICE}",
           "--with-datatype-engine=dataloop"], cwd=srcdir)
     _run(["make", "-j", str(os.cpu_count() or 2)], cwd=srcdir)
     _run(["make", "install"], cwd=srcdir)
+    ensure_shared_check(bin_dir)
     return bin_dir
+
+
+def mpich_device(bin_dir: str) -> str | None:
+    """the device an MPICH install was built with ("ch3:nemesis"), None if
+    it is not MPICH or does not say"""
+    try:
+        out = subprocess.run([os.path.join(bin_dir, "mpichversion")], capture_output=True, text=True,
+                             timeout=30).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    for line in out.splitlines():
+        if line.startswith("MPICH Device:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
+def shared_check_path(bin_dir: str) -> str:
+    """next to mpicc: the bundled MPICH's bin/ is shipped to every peer
+    (roce_onsite cluster-prep), so the program is at the same path there"""
+    own = os.path.realpath(bin_dir).startswith(os.path.realpath(MPICH_PREFIX))
+    return os.path.join(bin_dir if own else CACHE, "rp_shared_check")
+
+
+def ensure_shared_check(bin_dir: str) -> str:
+    """builds the MPI_COMM_TYPE_SHARED probe (SHARED_CHECK_SRC) with this
+    MPI, again whenever libmpi is newer than it"""
+    exe = shared_check_path(bin_dir)
+    mpicc = os.path.join(bin_dir, "mpicc")
+    if os.path.exists(exe) and os.path.getmtime(exe) >= _libmpi_mtime(bin_dir):
+        return exe
+    os.makedirs(os.path.dirname(exe), exist_ok=True)
+    src = exe + ".c"
+    with open(src, "w") as f:
+        f.write(SHARED_CHECK_SRC)
+    subprocess.run([mpicc, "-O1", "-o", exe, src], check=True)
+    return exe
+
+
+def _libmpi_mtime(bin_dir: str) -> float:
+    """when this MPI's library was installed (0: not found)"""
+    lib = os.path.join(os.path.dirname(bin_dir), "lib")
+    try:
+        return max((os.path.getmtime(os.path.join(lib, f)) for f in os.listdir(lib) if f.startswith("libmpi.")),
+                   default=0.0)
+    except OSError:
+        return 0.0
+
+
+def built_before_mpi(exe: str, bin_dir: str) -> bool:
+    """exe was linked against an older install of this MPI (MPICH rebuilt
+    with another device): relink it"""
+    return os.path.exists(exe) and os.path.getmtime(exe) < _libmpi_mtime(bin_dir)
 
 
 def ensure_ior(mpi_bin: str) -> tuple[str, str]:
@@ -112,7 +212,7 @@ def ensure_ior(mpi_bin: str) -> tuple[str, str]:
     from source against the MPI found/built above if not already built."""
     ior_bin = os.path.join(IOR_SRC, "src", "ior")
     mdtest_bin = os.path.join(IOR_SRC, "src", "mdtest")
-    if os.path.exists(ior_bin) and os.path.exists(mdtest_bin):
+    if os.path.exists(ior_bin) and os.path.exists(mdtest_bin) and not built_before_mpi(ior_bin, mpi_bin):
         return ior_bin, mdtest_bin
     from tools import deps
     if not os.path.exists(IOR_SRC) and not deps.extract("ior", IOR_SRC):
@@ -122,6 +222,8 @@ def ensure_ior(mpi_bin: str) -> tuple[str, str]:
     if not os.path.exists(os.path.join(IOR_SRC, "configure")):  # the bundled copy comes bootstrapped
         _run(["./bootstrap"], cwd=IOR_SRC, env=env)
     _run(["./configure", "CC=mpicc"], cwd=IOR_SRC, env=env)
+    if os.path.exists(ior_bin):  # linked against an older MPI build: relink everything
+        _run(["make", "clean"], cwd=IOR_SRC, env=env)
     _run(["make", "-j", str(os.cpu_count() or 2)], cwd=IOR_SRC, env=env)
     return ior_bin, mdtest_bin
 
