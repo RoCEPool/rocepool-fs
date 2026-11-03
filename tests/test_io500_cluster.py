@@ -790,3 +790,25 @@ class SharedProbeTests(unittest.TestCase):
         exe = bench_ior.ensure_shared_check(b)
         r = subprocess.run([os.path.join(b, "mpiexec"), "-n", "4", exe], capture_output=True, text=True, timeout=120)
         self.assertIn("RP_SHARED world=4 nodes=1 min=4 max=4", r.stdout, r.stdout + r.stderr)
+
+
+class MpichVersionEnvTests(unittest.TestCase):
+    """ensure_mpi asks mpichversion about THIS install: with LD_LIBRARY_PATH
+    naming another MPI's lib/ it reported that one, and every run rebuilt
+    MPICH and IO500 (seen in a local A/B that swapped libmpi)"""
+
+    def test_ignores_ld_library_path(self):
+        from unittest import mock
+        from tools import bench_ior
+        b = os.path.join(bench_ior.MPICH_PREFIX, "bin")
+        if not os.path.exists(os.path.join(b, "mpichversion")):
+            self.skipTest("bundled MPICH not built here")
+        own = bench_ior.mpich_configure(b)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        # a stand-in "other MPI": a libmpi.so.12 that is not loadable fails
+        # mpichversion outright if it is picked up
+        open(os.path.join(d, "libmpi.so.12"), "w").write("not a library")
+        with mock.patch.dict(os.environ, {"LD_LIBRARY_PATH": d}):
+            self.assertEqual(bench_ior.mpich_configure(b), own)
+            self.assertEqual(bench_ior.mpich_device(b), bench_ior.MPICH_DEVICE)

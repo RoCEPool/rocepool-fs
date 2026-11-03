@@ -164,13 +164,21 @@ def ensure_mpi() -> str:
     return bin_dir
 
 
+def _own_lib_env() -> dict:
+    """mpichversion reports the libmpi it LOADS: with LD_LIBRARY_PATH naming
+    another MPI's lib/ (a site's module, an A/B run) it reported that one,
+    and ensure_mpi rebuilt this install on every run. Ask without it, so the
+    answer is about this install (its RUNPATH)."""
+    return {k: v for k, v in os.environ.items() if k != "LD_LIBRARY_PATH"}
+
+
 def mpich_configure(bin_dir: str) -> list[str]:
     """the configure arguments an MPICH install was built with ([] if it
     does not say)"""
     import shlex
     try:
         out = subprocess.run([os.path.join(bin_dir, "mpichversion")], capture_output=True, text=True,
-                             timeout=30).stdout
+                             timeout=30, env=_own_lib_env()).stdout
     except (OSError, subprocess.TimeoutExpired):
         return []
     for line in out.splitlines():
@@ -184,7 +192,7 @@ def mpich_device(bin_dir: str) -> str | None:
     it is not MPICH or does not say"""
     try:
         out = subprocess.run([os.path.join(bin_dir, "mpichversion")], capture_output=True, text=True,
-                             timeout=30).stdout
+                             timeout=30, env=_own_lib_env()).stdout
     except (OSError, subprocess.TimeoutExpired):
         return None
     for line in out.splitlines():
