@@ -65,7 +65,7 @@ REAL(lseek); REAL(lseek64); REAL(fstat); REAL(fstat64); REAL(stat); REAL(stat64)
 REAL(fstatat); REAL(fstatat64); REAL(unlink); REAL(unlinkat); REAL(mkdir); REAL(mkdirat); REAL(rmdir);
 REAL(access); REAL(faccessat); REAL(opendir); REAL(fdopendir); REAL(readdir); REAL(readdir64); REAL(closedir);
 REAL(dirfd); REAL(rewinddir); REAL(telldir); REAL(seekdir); REAL(fsync); REAL(fdatasync); REAL(ftruncate); REAL(ftruncate64); REAL(truncate);
-REAL(truncate64); REAL(dup); REAL(dup2); REAL(dup3); REAL(fcntl); REAL(realpath); REAL(statfs); REAL(statvfs);
+REAL(truncate64); REAL(dup); REAL(dup2); REAL(dup3); REAL(fcntl); REAL(realpath); REAL(statfs); REAL(statvfs); REAL(statfs64); REAL(statvfs64);
 REAL(chmod); REAL(fchmod); REAL(chown); REAL(rename); REAL(renameat); REAL(utimes); REAL(futimens); REAL(utimensat);
 REAL(fchdir); REAL(chdir); REAL(fopen); REAL(fopen64); REAL(fdopen);
 
@@ -124,7 +124,7 @@ static void load_libc(void) {
     LOAD(fstatat); LOAD(fstatat64); LOAD(unlink); LOAD(unlinkat); LOAD(mkdir); LOAD(mkdirat); LOAD(rmdir);
     LOAD(access); LOAD(faccessat); LOAD(opendir); LOAD(fdopendir); LOAD(readdir); LOAD(readdir64); LOAD(closedir);
     LOAD(dirfd); LOAD(rewinddir); LOAD(telldir); LOAD(seekdir); LOAD(fsync); LOAD(fdatasync); LOAD(ftruncate); LOAD(ftruncate64); LOAD(truncate);
-    LOAD(truncate64); LOAD(dup); LOAD(dup2); LOAD(dup3); LOAD(fcntl); LOAD(realpath); LOAD(statfs); LOAD(statvfs);
+    LOAD(truncate64); LOAD(dup); LOAD(dup2); LOAD(dup3); LOAD(fcntl); LOAD(realpath); LOAD(statfs); LOAD(statvfs); LOAD(statfs64); LOAD(statvfs64);
     LOAD(chmod); LOAD(fchmod); LOAD(chown); LOAD(rename); LOAD(renameat); LOAD(utimes); LOAD(futimens); LOAD(utimensat);
     LOAD(fchdir); LOAD(chdir); LOAD(fopen); LOAD(fopen64); LOAD(fdopen);
     g_libc_ok = 1;
@@ -1040,16 +1040,28 @@ int chdir(const char *path) {
 }
 int fchdir(int fd) { ENSURE(); if (fd_get(fd)) { errno = ENOTSUP; return -1; } return real_fchdir(fd); }
 
+/* the pool's real capacity: the OSTs' tiers and the MDTs' entry tables
+ * (fs_statfs); a pool that cannot say (RAM-only OSTs) gets a nominal 1 TiB,
+ * half used, as before */
 static void fake_statfs(struct statfs *st) {
     memset(st, 0, sizeof(*st));
     st->f_type = 0x52435031;  /* "RCP1" */
     st->f_bsize = 4096;
     st->f_frsize = 4096;
+    st->f_namelen = 255;
+    uint64_t bt, bu, ft, fu;
+    if (fs_statfs(&bt, &bu, &ft, &fu) == 0 && bt) {
+        st->f_blocks = bt / 4096;
+        st->f_bfree = st->f_bavail = bu < bt ? (bt - bu) / 4096 : 0;
+        st->f_files = ft ? ft : (1ull << 30);
+        st->f_ffree = ft > fu ? ft - fu : 0;
+        if (!ft) st->f_ffree = st->f_files / 2;
+        return;
+    }
     st->f_blocks = (1ull << 40) / 4096;
     st->f_bfree = st->f_bavail = st->f_blocks / 2;
     st->f_files = 1ull << 30;
     st->f_ffree = st->f_files / 2;
-    st->f_namelen = 255;
 }
 int statfs(const char *path, struct statfs *st) {
     ENSURE();
@@ -1068,6 +1080,28 @@ int statvfs(const char *path, struct statvfs *st) {
     st->f_bsize = fs.f_bsize; st->f_frsize = fs.f_frsize; st->f_blocks = fs.f_blocks;
     st->f_bfree = fs.f_bfree; st->f_bavail = fs.f_bavail; st->f_files = fs.f_files; st->f_ffree = fs.f_ffree;
     st->f_favail = fs.f_ffree; st->f_namemax = 255;
+    return 0;
+}
+/* the large-file names (Python's os.statvfs, programs built with
+ * _FILE_OFFSET_BITS=64 call these): the same structures on 64-bit Linux */
+int statfs64(const char *path, struct statfs64 *st) {
+    ENSURE();
+    char rel[PATH_MAX];
+    if (!ours(AT_FDCWD, path, rel, sizeof(rel))) return real_statfs64(path, st);
+    struct statfs fs;
+    fake_statfs(&fs);
+    _Static_assert(sizeof(struct statfs) == sizeof(struct statfs64), "statfs64 layout");
+    memcpy(st, &fs, sizeof(fs));
+    return 0;
+}
+int statvfs64(const char *path, struct statvfs64 *st) {
+    ENSURE();
+    char rel[PATH_MAX];
+    if (!ours(AT_FDCWD, path, rel, sizeof(rel))) return real_statvfs64(path, st);
+    struct statvfs v;
+    if (statvfs(path, &v)) return -1;
+    _Static_assert(sizeof(struct statvfs) == sizeof(struct statvfs64), "statvfs64 layout");
+    memcpy(st, &v, sizeof(v));
     return 0;
 }
 

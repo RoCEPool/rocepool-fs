@@ -772,3 +772,40 @@ class LogModeTests(unittest.TestCase):
             else:
                 self.assertEqual((ost["direct"], ost["pipeline"]), (False, 1), ost)
                 self.assertEqual(ost["calibration_records_s"]["append"], 0, ost)
+
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class StatfsTests(unittest.TestCase):
+    """statfs/statvfs through the interception library = the pool's real
+    capacity (the OSTs' tiers, the MDTs' tables): a fixed 1 TiB / 50% made
+    IO500's 6.8 TB look larger than the file system (IOR, mdtest "FS:")"""
+    port = 25300
+
+    def test_capacity_is_the_tiers(self):
+        from roce.native.build_lib import ensure_intercept_lib, ensure_softverbs_lib
+        lib, icp = ensure_softverbs_lib(), ensure_intercept_lib()
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        srv = _Servers(lib, d, self.port, nm=1, no=2)
+        srv.start()
+        self.addCleanup(srv.stop)
+        code = r'''
+import os
+P = os.environ["ROCEPOOL_PREFIX"]
+os.mkdir(P + "/d")  # as IOR and mdtest do: statfs of a path inside the file system
+a = os.statvfs(P + "/d")
+with open(P + "/d/f", "wb") as f: f.write(os.urandom(48 << 20))
+import time; time.sleep(11)  # past the 10 s cache
+b = os.statvfs(P + "/d")
+print(a.f_blocks * a.f_frsize, a.f_bfree * a.f_frsize, b.f_bfree * b.f_frsize, a.f_files)
+'''
+        e = dict(os.environ, ROCE_TRANSPORT_LIB=lib, PYTHONPATH=ROOT, LD_PRELOAD=icp, ROCEPOOL_PREFIX=d + "/rp",
+                 ROCEPOOL_MDTS=srv.mdts, ROCEPOOL_OSTS=srv.osts)
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=e, timeout=120)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        total, free_before, free_after, files = (int(x) for x in out.stdout.split())
+        st = [_stats(lib, a) for a in srv.osts.split(",")]
+        self.assertEqual(total, sum(x["tier_capacity"] for x in st) // 4096 * 4096)
+        self.assertNotEqual(total, 1 << 40)  # not the old fixed value
+        self.assertGreaterEqual(free_before - free_after, 40 << 20)  # the 48 MiB written shows as used
+        self.assertEqual(files, _stats(lib, srv.mdts)["table_slots"])
