@@ -143,6 +143,10 @@ char *xstrdup(const char *s);
 double mono_s(void);
 double wall_s(void);
 extern rp_peer_t g_mdts[MAX_PEERS], g_osts[MAX_PEERS];
+/* the pool's capacity for statfs: the OSTs' tiers summed (bytes), the MDTs'
+ * entry tables (inodes); 0 = the servers did not say (RAM-only OSTs, an old
+ * server, unreachable) -- cached 10 s */
+int fs_statfs(uint64_t *bytes_total, uint64_t *bytes_used, uint64_t *files_total, uint64_t *files_used);
 
 /* ---- namespace (paths are normalised: no leading slash; "" = root) ---- */
 int fs_getattr(const char *path, attr_t *a);

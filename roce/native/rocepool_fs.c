@@ -2504,6 +2504,58 @@ ssize_t handle_read(handle_t *h, uint64_t off, uint8_t *out, size_t len) {
     return (ssize_t)len;
 }
 
+/* ---------------------------------------------------------------- statfs
+ * Summed from the servers' STATS (an OST's tier_capacity / tier_used, an
+ * MDT's table_slots / table_used): IOR and mdtest print it as "FS: ... Used
+ * FS: ..." -- a fixed 1 TiB / 50% there made a 6.8 TB write look larger than
+ * the file system. */
+static uint64_t json_u64(const char *j, size_t n, const char *key, int *found) {
+    char pat[64];
+    snprintf(pat, sizeof(pat), "\"%s\": ", key);
+    size_t pl = strlen(pat);
+    for (size_t i = 0; i + pl < n; i++)
+        if (!memcmp(j + i, pat, pl)) { *found = 1; return strtoull(j + i + pl, NULL, 10); }
+    *found = 0;
+    return 0;
+}
+
+static pthread_mutex_t g_statfs_lk = PTHREAD_MUTEX_INITIALIZER;
+static double g_statfs_at;
+static uint64_t g_statfs_v[4];
+static int g_statfs_rc = -1;
+
+int fs_statfs(uint64_t *bt, uint64_t *bu, uint64_t *ft, uint64_t *fu) {
+    pthread_mutex_lock(&g_statfs_lk);
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    double now = ts.tv_sec + ts.tv_nsec / 1e9;
+    if (g_statfs_rc < 0 || now - g_statfs_at > 10) {
+        uint64_t v[4] = {0, 0, 0, 0};
+        int got = 0;
+        for (int k = 0; k < 2; k++) {
+            int n = k ? cfg.nmdt : cfg.nost;
+            for (int i = 0; i < n; i++) {
+                rp_resp_t r;
+                if (rp_rpc(k ? &g_mdts[i] : &g_osts[i], RP_STATS, "", NULL, 0, NULL, 0, &r)) continue;
+                if (r.op == RP_STATS_OK) {
+                    int f1, f2;
+                    uint64_t a = json_u64((const char *)r.val, r.vlen, k ? "table_slots" : "tier_capacity", &f1);
+                    uint64_t b = json_u64((const char *)r.val, r.vlen, k ? "table_used" : "tier_used", &f2);
+                    if (f1 && f2) { v[2 * k] += a; v[2 * k + 1] += b; if (!k) got = 1; }
+                }
+                rp_resp_free(&r);
+            }
+        }
+        memcpy(g_statfs_v, v, sizeof(v));
+        g_statfs_rc = got ? 0 : 1;
+        g_statfs_at = now;
+    }
+    *bt = g_statfs_v[0]; *bu = g_statfs_v[1]; *ft = g_statfs_v[2]; *fu = g_statfs_v[3];
+    int rc = g_statfs_rc;
+    pthread_mutex_unlock(&g_statfs_lk);
+    return rc;
+}
+
 /* ---------------------------------------------------------------- init */
 int rpfs_init(void) {
     const char *ie = getenv("ROCEPOOL_CLIENT_INLINE");
