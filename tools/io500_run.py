@@ -1154,6 +1154,7 @@ def main() -> int:
                    **{k: env[k] for k in ("ROCEPOOL_DIRTY_CAP_MIB", "ROCEPOOL_RPC_TIMEOUT_MS", "ROCEPOOL_SCACHE_SLOTS",
                                            "ROCE_BUFPOOL_MAX", "ROCE_TRANSPORT_LIB", "ROCEPOOL_MDT_ASYNC") if k in env}}
         icp_genv = [a for k, v in icp_env.items() for a in ("-genv", k, v)]
+
         bind_args = []
         if bind != "none":
             # hydra needs hwloc for -bind-to; use it only when this build has it
@@ -1163,6 +1164,10 @@ def main() -> int:
             else:
                 print(f"== mpiexec cannot -bind-to {bind} (no hwloc?): ranks unbound", flush=True)
         report["rank_binding"] = bind_args[1] if bind_args else "none"
+        # waiting ranks yield their core every 10 polls (tools/bench_ior
+        # MPICH_CONFIGURE): the servers on the same hosts need it
+        report["mpi_polls_before_yield"] = env.get("MPIR_CVAR_POLLS_BEFORE_YIELD", "10")
+        bind_args += ["-genv", "MPIR_CVAR_POLLS_BEFORE_YIELD", report["mpi_polls_before_yield"]]
 
         def client_up(mode: str, uring: bool, direct: bool, tag: str) -> list[str]:
             """brings the client up on every node; returns the extra mpiexec args"""

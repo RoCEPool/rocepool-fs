@@ -49,6 +49,15 @@ MPICH_TARBALL_URL = "https://github.com/pmodels/mpich/releases/download/v4.2.3/m
 # node" and shifted by 1 rank, so 31 of 32 ranks read what their own host
 # wrote (IO500 rule 2). nemesis groups the ranks of a host correctly.
 MPICH_DEVICE = "ch3:nemesis"
+# nemesis waits by polling, and MPICH's Linux default is not to yield at
+# all: on a host shared with the storage servers, ranks waiting in a
+# barrier or at a phase's stonewall took the cores the servers needed (a
+# CPU-bound task beside 3 waiting ranks on 2 cores ran at half speed).
+# usleep(0) every MPIR_CVAR_POLLS_BEFORE_YIELD polls (io500_run sets 10)
+# is a scheduling point: the same task ran at full speed. (ch3:sock blocks
+# instead, but cannot group a node's ranks.)
+MPICH_CONFIGURE = ["--disable-fortran", f"--with-device={MPICH_DEVICE}", "--with-datatype-engine=dataloop",
+                   "--enable-yield=usleep"]
 SHARED_CHECK_SRC = r"""
 #include <mpi.h>
 #include <stdio.h>
@@ -123,13 +132,14 @@ def ensure_mpi() -> str:
         return os.path.dirname(system_mpicc)
     bin_dir = os.path.join(MPICH_PREFIX, "bin")
     if os.path.exists(os.path.join(bin_dir, "mpicc")):
-        have = mpich_device(bin_dir)
-        if have == MPICH_DEVICE:
+        have = mpich_configure(bin_dir)
+        if all(f in have for f in MPICH_CONFIGURE):
             ensure_shared_check(bin_dir)
             return bin_dir
-        # an earlier tree's ch3:sock build: rebuild from clean source (the
-        # IO500 / IOR builds see the newer libmpi and rebuild themselves)
-        print(f"[mpi] rebuilding MPICH: device {have or 'unknown'}, want {MPICH_DEVICE}", flush=True)
+        # an earlier tree's build (ch3:sock, or no yield): rebuild from clean
+        # source (the IO500 / IOR builds see the newer libmpi and relink)
+        print(f"[mpi] rebuilding MPICH: built with {' '.join(have) or 'unknown'}, want {' '.join(MPICH_CONFIGURE)}",
+              flush=True)
         shutil.rmtree(MPICH_PREFIX)
         shutil.rmtree(os.path.join(CACHE, "mpich-src"), ignore_errors=True)
     from tools import deps
@@ -147,12 +157,26 @@ def ensure_mpi() -> str:
     # ch3 (nemesis: shared memory within a host, TCP between hosts) + the
     # dataloop datatype engine: what the bundled, trimmed source keeps (no
     # yaksa / ucx / libfabric modules) -- and all IOR needs
-    _run(["./configure", f"--prefix={MPICH_PREFIX}", "--disable-fortran", f"--with-device={MPICH_DEVICE}",
-          "--with-datatype-engine=dataloop"], cwd=srcdir)
+    _run(["./configure", f"--prefix={MPICH_PREFIX}", *MPICH_CONFIGURE], cwd=srcdir)
     _run(["make", "-j", str(os.cpu_count() or 2)], cwd=srcdir)
     _run(["make", "install"], cwd=srcdir)
     ensure_shared_check(bin_dir)
     return bin_dir
+
+
+def mpich_configure(bin_dir: str) -> list[str]:
+    """the configure arguments an MPICH install was built with ([] if it
+    does not say)"""
+    import shlex
+    try:
+        out = subprocess.run([os.path.join(bin_dir, "mpichversion")], capture_output=True, text=True,
+                             timeout=30).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    for line in out.splitlines():
+        if line.startswith("MPICH configure:"):
+            return shlex.split(line.split(":", 1)[1])
+    return []
 
 
 def mpich_device(bin_dir: str) -> str | None:
