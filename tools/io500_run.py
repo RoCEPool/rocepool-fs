@@ -343,6 +343,28 @@ class Snapshotter:
                 "hosts": hosts}
 
 
+def assign_rails(servers: list[dict], facts: list[dict], numa_nodes: int, forced: str | None = None) -> int:
+    """Hosts with several EFA devices (hpc6id.32xlarge: one per network
+    card): each server serves on one rail (ROCE_OFI_RAIL) -- the device on
+    its own NUMA node when servers are pinned to NUMA nodes ("numa", the
+    transport finds it from the device's PCI address), else the next rail
+    in turn among the host's servers of its kind. Clients spread their
+    connections over every rail on their own. Returns the rails per host
+    (the fewest any host has, or ROCE_OFI_RAILS when set -- also how the
+    multi-rail path is rehearsed on one device; 1 = nothing to do)."""
+    rails = min([int(f.get("efa_devices") or 1) for f in facts] or [1])  # EFA devices: EFA hosts (OFI) only
+    if forced and forced.isdigit() and int(forced) > 0:
+        rails = int(forced)
+    if rails <= 1:
+        return 1
+    for kind in ("mdt", "ost"):
+        for node in sorted({s["node"] for s in servers}):
+            mine = [s for s in servers if s["kind"] == kind and s["node"] == node]
+            for j, s in enumerate(mine):
+                s.setdefault("env", {})["ROCE_OFI_RAIL"] = "numa" if numa_nodes > 1 else str(j % rails)
+    return rails
+
+
 def node_facts(cluster: Cluster) -> list[dict]:
     """cores / RAM / NIC speed of every real host (tools/procstat.py --facts)."""
     out = []
@@ -724,6 +746,7 @@ def submission_bundle(work: str, ini: str, report: dict, servers: list, env: dic
                      "env": {k: v for k, v in (s.get("env") or {}).items() if k in keep_env}} for s in servers],
         "io500_build": build,
         "hardware": report.get("hardware"), "mpi_node_check": report.get("mpi_node_check"),
+        "rails_per_host": report.get("rails_per_host", 1),
     }
     with open(os.path.join(sub, "rocepool-system.json"), "w") as f:
         json.dump(system, f, indent=1)
@@ -1271,6 +1294,12 @@ def main() -> int:
                         s["numa_node"] = j % numa_nodes
             print(f"== NUMA: {numa_nodes} nodes per host; each MDT/OST pinned to one, ranks bound to NUMA", flush=True)
         report["numa_nodes_per_host"] = numa_nodes
+        rails = assign_rails(servers, facts, numa_nodes, env.get("ROCE_OFI_RAILS"))
+        report["rails_per_host"] = rails
+        if rails > 1:
+            print(f"== rails: {rails} EFA devices per host; clients spread their connections over them, each "
+                  f"server serves on one ({'its NUMA node' + chr(39) + 's' if numa_nodes > 1 else 'in turn'})",
+                  flush=True)
         # each server on a host pins its worker threads from its own core on
         # (every one counted from core 0: an MDT's and an OST's threads shared
         # the same cores) -- within its NUMA node's cores when it has one

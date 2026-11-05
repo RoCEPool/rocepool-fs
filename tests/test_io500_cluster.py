@@ -812,3 +812,40 @@ class MpichVersionEnvTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"LD_LIBRARY_PATH": d}):
             self.assertEqual(bench_ior.mpich_configure(b), own)
             self.assertEqual(bench_ior.mpich_device(b), bench_ior.MPICH_DEVICE)
+
+
+class AssignRailsTests(unittest.TestCase):
+    """io500_run.assign_rails: one rail per EFA device (hpc6id.32xlarge: 2)"""
+
+    def servers(self, nodes=2, per=2):
+        return [{"kind": k, "node": n} for k in ("mdt", "ost") for _ in range(per) for n in range(nodes)]
+
+    def test_one_device_changes_nothing(self):
+        from tools.io500_run import assign_rails
+        sv = self.servers()
+        self.assertEqual(assign_rails(sv, [{"efa_devices": 1}, {"efa_devices": 1}], 2), 1)
+        self.assertFalse(any("env" in s for s in sv))
+        self.assertEqual(assign_rails(sv, [], 1), 1)
+
+    def test_numa_hosts_serve_on_the_local_device(self):
+        from tools.io500_run import assign_rails
+        sv = self.servers()
+        self.assertEqual(assign_rails(sv, [{"efa_devices": 2}, {"efa_devices": 2}], 2), 2)
+        self.assertEqual({s["env"]["ROCE_OFI_RAIL"] for s in sv}, {"numa"})
+
+    def test_without_numa_the_servers_take_turns(self):
+        from tools.io500_run import assign_rails
+        sv = self.servers(nodes=1, per=2)
+        self.assertEqual(assign_rails(sv, [{"efa_devices": 2}], 1), 2)
+        self.assertEqual([(s["kind"], s["env"]["ROCE_OFI_RAIL"]) for s in sv],
+                         [("mdt", "0"), ("mdt", "1"), ("ost", "0"), ("ost", "1")])
+
+    def test_the_fewest_devices_win(self):
+        from tools.io500_run import assign_rails
+        self.assertEqual(assign_rails(self.servers(), [{"efa_devices": 2}, {"efa_devices": 1}], 2), 1)
+
+    def test_remote_servers_get_their_rail(self):
+        from tools.cluster import Node
+        cmd = Node(1, "10.0.0.2", peer="root@10.0.0.2").wrap(["true"], env={"ROCE_OFI_RAIL": "numa", "OTHER": "x"})
+        self.assertIn("ROCE_OFI_RAIL=numa", cmd[-1])
+        self.assertNotIn("OTHER=x", cmd[-1])

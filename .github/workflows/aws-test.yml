@@ -53,6 +53,12 @@ on:
       request_vcpus:
         description: "ask AWS to raise the on-demand standard vCPU quota (L-1216C47A) in the region to this; empty = don't"
         default: ""
+      request_eips:
+        description: "ask AWS to raise the Elastic IP quota (L-0263D0A3; types with several network cards need one per instance) to this; empty = don't"
+        default: ""
+      request_hpc_vcpus:
+        description: "ask AWS to raise the on-demand HPC vCPU quota (L-F7808C92: hpc6id, hpc7a, ...) in the region to this; empty = don't"
+        default: ""
 permissions:
   contents: write   # the reports go to a branch aws-results/<run id> (artifacts are not readable through every client)
 concurrency: aws-test
@@ -81,7 +87,8 @@ jobs:
                    "c6in.4xlarge": 0.907, "c6in.8xlarge": 1.814, "c7gn.16xlarge": 3.994, "c6gn.16xlarge": 2.765,
                    "m5dn.24xlarge": 6.528, "c5n.4xlarge": 0.864, "c5.4xlarge": 0.68, "m5.4xlarge": 0.768,
                    "m6i.4xlarge": 0.768, "c6i.4xlarge": 0.68, "r5.4xlarge": 1.008,
-                   "i3en.12xlarge": 5.424, "i3en.24xlarge": 10.848, "i4i.32xlarge": 10.982}
+                   "i3en.12xlarge": 5.424, "i3en.24xlarge": 10.848, "i4i.32xlarge": 10.982,
+                   "hpc6id.32xlarge": 5.70}  # hpc6id: us-east-2 (not offered in us-east-1)
           price = table.get(t)
           if price is None:
               try:
@@ -129,11 +136,40 @@ jobs:
           check "ec2 create-security-group (dry run)" aws ec2 create-security-group --group-name rp-probe --description probe --dry-run
           check "ec2 create-placement-group (dry run)" aws ec2 create-placement-group --group-name rp-probe --strategy cluster --dry-run
           check "service-quotas (vCPU quota)" aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A
+          check "ec2 allocate-address (dry run)" aws ec2 allocate-address --domain vpc --dry-run
+          check "ec2 describe-addresses" aws ec2 describe-addresses
           for it in "$t" c5n.18xlarge c6in.32xlarge c6in.4xlarge c5.4xlarge m5.large t3.micro; do
             check "ec2 run-instances $it (dry run)" aws ec2 run-instances --dry-run --image-id "$ami" --instance-type "$it" --count 1
           done
+          # the exact interfaces a run of this type would get (aws_cluster.network_interfaces:
+          # an EFA-only interface on every further network card), checked by a dry run
+          nics=$(python3 - "$t" "$sg" <<'PY'
+          import json, subprocess, sys
+          sys.path.insert(0, "tools")
+          from aws_cluster import network_interfaces
+          t = json.loads(subprocess.run(["aws", "ec2", "describe-instance-types", "--instance-types", sys.argv[1]],
+                                        capture_output=True, text=True).stdout or "{}").get("InstanceTypes", [{}])[0]
+          ni = t.get("NetworkInfo", {})
+          facts = {"network_cards": ni.get("MaximumNetworkCards", 1), "efa_max": (ni.get("EfaInfo") or {}).get("MaximumEfaInterfaces", 1)}
+          subnet = subprocess.run(["aws", "ec2", "describe-subnets", "--filters", "Name=default-for-az,Values=true",
+                                   "--query", "Subnets[0].SubnetId", "--output", "text"], capture_output=True, text=True).stdout.strip()
+          sg = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] not in ("", "none") else ""
+          nics = network_interfaces("efa", facts, subnet, sg)
+          for n in nics:
+              if not sg: n.pop("Groups")
+          print(json.dumps(nics))
+          PY
+          )
+          if [ "$(echo "$nics" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null)" -gt 1 ] 2>/dev/null; then
+            check "ec2 run-instances $t with $(echo "$nics" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))') EFA interfaces (dry run)" \
+              aws ec2 run-instances --dry-run --image-id "$ami" --instance-type "$t" --count 1 --network-interfaces "$nics"
+          fi
           q=$(aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --query Quota.Value --output text 2>/dev/null || echo "?")
           pending=$(aws service-quotas list-requested-service-quota-change-history-by-quota --service-code ec2 --quota-code L-1216C47A \
+                    --query 'RequestedQuotas[].[DesiredValue,Status,Created]' --output text 2>/dev/null | tr '\t\n' ' ;' | cut -c1-300)
+          hq=$(aws service-quotas get-service-quota --service-code ec2 --quota-code L-F7808C92 --query Quota.Value --output text 2>/dev/null \
+               || aws service-quotas get-aws-default-service-quota --service-code ec2 --quota-code L-F7808C92 --query Quota.Value --output text 2>/dev/null || echo "?")
+          hpending=$(aws service-quotas list-requested-service-quota-change-history-by-quota --service-code ec2 --quota-code L-F7808C92 \
                     --query 'RequestedQuotas[].[DesiredValue,Status,Created]' --output text 2>/dev/null | tr '\t\n' ' ;' | cut -c1-300)
           inst=$(aws ec2 describe-instances --query 'Reservations[].Instances[].[InstanceId,InstanceType,State.Name,Tags[?Key==`Name`]|[0].Value]' \
                  --output text 2>/dev/null | tr '\t\n' ' ;' | cut -c1-600)
@@ -141,6 +177,12 @@ jobs:
           echo "::notice title=allowed::${allowed#%0A}"
           [ -n "$denied" ] && echo "::warning title=denied::${denied#%0A}"
           echo "::notice title=vCPU quota (on-demand standard)::$q in $AWS_DEFAULT_REGION; requests: ${pending:-none}"
+          echo "::notice title=vCPU quota (on-demand HPC)::$hq in $AWS_DEFAULT_REGION; requests: ${hpending:-none}"
+          eq=$(aws service-quotas get-service-quota --service-code ec2 --quota-code L-0263D0A3 --query Quota.Value --output text 2>/dev/null || echo "?")
+          eused=$(aws ec2 describe-addresses --query 'length(Addresses)' --output text 2>/dev/null || echo "?")
+          epending=$(aws service-quotas list-requested-service-quota-change-history-by-quota --service-code ec2 --quota-code L-0263D0A3 \
+                    --query 'RequestedQuotas[].[DesiredValue,Status,Created]' --output text 2>/dev/null | tr '\t\n' ' ;' | cut -c1-300)
+          echo "::notice title=Elastic IPs::quota $eq, $eused allocated in $AWS_DEFAULT_REGION; requests: ${epending:-none}"
       - name: terminate the given instances
         if: ${{ inputs.terminate_ids != '' }}
         run: |
@@ -167,6 +209,22 @@ jobs:
                 --desired-value "${{ inputs.request_vcpus }}" --query 'RequestedQuota.[Id,Status,DesiredValue]' --output text 2>&1) || rc=$?
           if [ $rc -eq 0 ]; then echo "::notice title=quota request::$out"
           else echo "::error title=quota request failed::$(echo "$out" | tr '\n' ' ' | cut -c1-500)"; exit 1; fi
+      - name: request an Elastic IP quota increase
+        if: ${{ inputs.request_eips != '' }}
+        run: |
+          rc=0
+          out=$(aws service-quotas request-service-quota-increase --service-code ec2 --quota-code L-0263D0A3 \
+                --desired-value "${{ inputs.request_eips }}" --query 'RequestedQuota.[Id,Status,DesiredValue]' --output text 2>&1) || rc=$?
+          if [ $rc -eq 0 ]; then echo "::notice title=Elastic IP quota request::$out"
+          else echo "::error title=Elastic IP quota request failed::$(echo "$out" | tr '\n' ' ' | cut -c1-500)"; exit 1; fi
+      - name: request an HPC vCPU quota increase
+        if: ${{ inputs.request_hpc_vcpus != '' }}
+        run: |
+          rc=0
+          out=$(aws service-quotas request-service-quota-increase --service-code ec2 --quota-code L-F7808C92 \
+                --desired-value "${{ inputs.request_hpc_vcpus }}" --query 'RequestedQuota.[Id,Status,DesiredValue]' --output text 2>&1) || rc=$?
+          if [ $rc -eq 0 ]; then echo "::notice title=HPC quota request::$out"
+          else echo "::error title=HPC quota request failed::$(echo "$out" | tr '\n' ' ' | cut -c1-500)"; exit 1; fi
       - name: run on AWS
         if: ${{ !inputs.probe_only }}
         env:

@@ -131,7 +131,7 @@ class Node:
         # -- otherwise only node 0's processes get it)
         force = {n.strip() for n in (env or {}).get("ROCEPOOL_FORCE_ENV", "").split(",") if n.strip()}
         passthru = " ".join(f"{k}={shlex.quote(v)}" for k, v in (env or {}).items()
-                            if k.startswith("ROCEPOOL") or k in ("ROCE_TRANSPORT_LIB", "ROCE_MAX_FRAME_BYTES")
+                            if k.startswith("ROCEPOOL") or k in ("ROCE_TRANSPORT_LIB", "ROCE_MAX_FRAME_BYTES", "ROCE_OFI_RAIL", "ROCE_OFI_RAILS")
                             or k in force)
         cmd = (f"cd {shlex.quote(ROOT)} && {{ [ -f roce_env.sh ] && . ./roce_env.sh; true; }} && "
                f"exec env {passthru} PYTHONPATH={shlex.quote(ROOT)} {' '.join(shlex.quote(a) for a in argv)}")

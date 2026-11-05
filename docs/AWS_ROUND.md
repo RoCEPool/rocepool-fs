@@ -21,6 +21,29 @@ On hosts you set up yourself: `sudo ./run.sh --peers ...` recognises an
 EFA device and builds the ofi backend; `sudo ./run.sh --soft-roce --peers ...`
 creates rxe0 on every host that has no RDMA device.
 
+### Types with several network cards (`hpc6id.32xlarge`)
+
+`hpc6id.32xlarge` (64 cores, 1 TiB, 4 x 3.8 TB NVMe, 200 Gb/s EFA) reaches
+200 Gb/s only with an EFA interface on each of its 2 network cards (one
+card: up to 170 Gb/s). `aws_cluster.py` reads the card count from
+`describe-instance-types` and launches such types with the primary EFA on
+card 0 and an EFA-only interface (RDMA, no IP address) on every further
+card. AWS assigns no public IP at launch to an instance with several
+interfaces, so each gets an Elastic IP on its primary interface after
+launch, released at the end; the Elastic IP quota (L-0263D0A3, 5 by
+default) is checked before anything is created. HPC types count against
+their own vCPU quota (L-F7808C92, 0 until requested), also checked first.
+The aws-test workflow's probe reports both quotas and dry-runs the exact
+interface list; `request_hpc_vcpus` / `request_eips` ask for more.
+
+On the hosts the transport opens one fabric domain -- a *rail* -- per EFA
+device: clients spread their connections over the rails, and
+`io500_run.py` puts each server on one (`ROCE_OFI_RAIL`: the device on its
+NUMA node when servers are pinned to NUMA nodes, else in turn).
+`ROCE_OFI_RAILS=n` overrides the count (more rails than devices opens
+further independent domains on the same device -- how the paths are
+tested on one device, `tests/test_ofi_rails.py`).
+
 ## 1. The EFA backend (`roce/native/ofi_transport.c`)
 
 The whole `roce_transport.h` API -- request/response, the envelope bulk

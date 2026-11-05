@@ -146,6 +146,57 @@ class AwsClusterTests(unittest.TestCase):
         self.assertFalse(self.aws_calls("ec2", "create-key-pair"))
         self.assertFalse(self.aws_calls("ec2", "run-instances"))
 
+    def test_two_network_cards_get_an_efa_only_interface_each(self):
+        """hpc6id.32xlarge: 200 Gb/s only with an EFA on each of its 2 cards"""
+        r = self.run_tool("--mode", "efa", "--nodes", "2", "--type", "hpc6id.32xlarge", "--quick",
+                          env_extra={"FAKE_AWS_CARDS": "2", "FAKE_AWS_HPC_QUOTA": "640"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        run = self.aws_calls("ec2", "run-instances")[0]
+        nics = json.loads(run[run.index("--network-interfaces") + 1])
+        self.assertEqual([(n["NetworkCardIndex"], n["DeviceIndex"], n["InterfaceType"]) for n in nics],
+                         [(0, 0, "efa"), (1, 0, "efa-only")])
+        # AWS refuses a public IP at launch with several interfaces: an Elastic
+        # IP per instance on its primary interface, released at the end
+        self.assertTrue(all("AssociatePublicIpAddress" not in n for n in nics))
+        allocs = self.aws_calls("ec2", "allocate-address")
+        self.assertEqual(len(allocs), 2)
+        assoc = self.aws_calls("ec2", "associate-address")
+        self.assertEqual([c[c.index("--network-interface-id") + 1] for c in assoc], ["eni-0-0", "eni-1-0"])
+        released = [c[c.index("--allocation-id") + 1] for c in self.aws_calls("ec2", "release-address")]
+        self.assertEqual(sorted(released), sorted(c[c.index("--allocation-id") + 1] for c in assoc))
+        self.assertTrue(all(n["SubnetId"] == nics[0]["SubnetId"] and n["Groups"] == ["sg-1"] for n in nics))
+        self.assertIn("2 EFA interfaces per instance", r.stdout)
+        # the HPC quota was the one checked
+        q = self.aws_calls("service-quotas", "get-service-quota")
+        self.assertEqual(q[0][q[0].index("--quota-code") + 1], "L-F7808C92")
+
+    def test_too_few_elastic_ips_stops_before_creating_anything(self):
+        r = self.run_tool("--mode", "efa", "--nodes", "6", "--type", "hpc6id.32xlarge",
+                          env_extra={"FAKE_AWS_CARDS": "2", "FAKE_AWS_HPC_QUOTA": "5000", "FAKE_AWS_EIP_QUOTA": "5",
+                                     "FAKE_AWS_EIPS_USED": "1"})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("need 6 Elastic IPs; the quota is 5 with 1 allocated", r.stdout)
+        self.assertIn("--quota-code L-0263D0A3 --desired-value 7", r.stdout)
+        self.assertFalse(self.aws_calls("ec2", "run-instances"))
+        self.assertFalse(self.aws_calls("ec2", "allocate-address"))
+
+    def test_one_card_keeps_one_interface(self):
+        r = self.run_tool("--mode", "efa", "--nodes", "2", "--quick")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        run = self.aws_calls("ec2", "run-instances")[0]
+        nics = json.loads(run[run.index("--network-interfaces") + 1])
+        self.assertEqual(len(nics), 1)
+        self.assertTrue(nics[0]["AssociatePublicIpAddress"])
+        self.assertFalse(self.aws_calls("ec2", "allocate-address"))
+
+    def test_hpc_quota_too_low_stops_before_creating_anything(self):
+        r = self.run_tool("--mode", "efa", "--nodes", "6", "--type", "hpc6id.32xlarge",
+                          env_extra={"FAKE_AWS_CARDS": "2", "FAKE_AWS_HPC_QUOTA": "0"})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("vCPU quota for on-demand HPC instances is 0", r.stdout)
+        self.assertIn("--quota-code L-F7808C92 --desired-value 768", r.stdout)
+        self.assertFalse(self.aws_calls("ec2", "run-instances"))
+
     def test_az_without_capacity_moves_to_the_next(self):
         r = self.run_tool("--mode", "efa", "--nodes", "2", env_extra={"FAKE_AWS_NO_CAPACITY": "us-east-1a"})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
