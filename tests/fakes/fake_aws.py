@@ -66,10 +66,21 @@ elif cmd == ("ec2", "run-instances"):
 elif cmd == ("ec2", "describe-instances"):
     req = argv[argv.index("--instance-ids") + 1:]
     out({"Reservations": [{"Instances": [{"InstanceId": i, "PublicIpAddress": f"54.0.0.{k + 1}",
-                                          "PrivateIpAddress": f"172.31.0.{k + 1}"} for k, i in enumerate(req)]}]})
+                                          "PrivateIpAddress": f"172.31.0.{k + 1}",
+                                          "NetworkInterfaces": [
+                                              {"NetworkInterfaceId": f"eni-{k}-0", "Attachment": {"DeviceIndex": 0, "NetworkCardIndex": 0}},
+                                              {"NetworkInterfaceId": f"eni-{k}-1", "Attachment": {"DeviceIndex": 0, "NetworkCardIndex": 1}}]}
+                                         for k, i in enumerate(req)]}]})
+elif cmd == ("ec2", "describe-addresses"):
+    out({"Addresses": [{"AllocationId": f"eipalloc-old{k}"} for k in range(int(os.environ.get("FAKE_AWS_EIPS_USED", "0")))]})
+elif cmd == ("ec2", "allocate-address"):
+    with open(os.environ["FAKE_AWS_LOG"]) as f:
+        k = sum(1 for l in f if '"allocate-address"' in l)
+    out({"AllocationId": f"eipalloc-{k}", "PublicIp": f"3.0.0.{k}"})
 elif cmd == ("service-quotas", "get-service-quota"):
     code = argv[argv.index("--quota-code") + 1]
-    v = os.environ.get("FAKE_AWS_HPC_QUOTA", "0") if code == "L-F7808C92" else os.environ.get("FAKE_AWS_VCPU_QUOTA", "5000")
+    v = {"L-F7808C92": os.environ.get("FAKE_AWS_HPC_QUOTA", "0"),
+         "L-0263D0A3": os.environ.get("FAKE_AWS_EIP_QUOTA", "5")}.get(code, os.environ.get("FAKE_AWS_VCPU_QUOTA", "5000"))
     out({"Quota": {"Value": float(v)}})
 else:
     out({})

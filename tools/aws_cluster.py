@@ -83,8 +83,11 @@ def network_interfaces(mode: str, facts: dict, subnet: str, sg: str) -> list:
     in efa mode). efa mode on a type with several network cards and EFA
     interfaces (hpc6id.32xlarge: 2): an EFA-only interface (RDMA, no IP) on
     each further card, so the transport gets the whole bandwidth -- one rail
-    per card (ROCE_OFI_RAILS). EFA-only interfaces carry no IP address, so
-    the public IP of the primary is still assigned at launch."""
+    per card (ROCE_OFI_RAILS). AWS assigns no public IP at launch to an
+    instance with several interfaces ("associatePublicIPAddress cannot be
+    specified when launching with multiple network interfaces", found by
+    the probe's dry run): such instances get an Elastic IP on the primary
+    after launch (Run.attach_public_ips)."""
     nics = [{"NetworkCardIndex": 0, "DeviceIndex": 0, "SubnetId": subnet, "Groups": [sg],
              "AssociatePublicIpAddress": True, "DeleteOnTermination": True}]
     if mode != "efa":
@@ -94,6 +97,8 @@ def network_interfaces(mode: str, facts: dict, subnet: str, sg: str) -> list:
     for card in range(1, rails):
         nics.append({"NetworkCardIndex": card, "DeviceIndex": 0, "SubnetId": subnet, "Groups": [sg],
                      "InterfaceType": "efa-only", "DeleteOnTermination": True})
+    if len(nics) > 1:
+        del nics[0]["AssociatePublicIpAddress"]
     return nics
 
 
@@ -206,6 +211,52 @@ class Run:
                 f"(or pick a smaller --type / fewer --nodes)")
         log(f"vCPU quota {quota:.0f} >= {need} needed (instances already running count against it too)")
 
+    def check_eips(self, nodes: int) -> None:
+        """Instances with several interfaces need an Elastic IP each: the
+        region's Elastic IP quota (L-0263D0A3, 5 by default) less the
+        addresses already allocated must cover them -- before anything is
+        created."""
+        r = self.aws("service-quotas", "get-service-quota", "--service-code", "ec2", "--quota-code", "L-0263D0A3",
+                     check=False, parse=False)
+        try:
+            quota = float(json.loads(r.stdout)["Quota"]["Value"])
+        except (ValueError, KeyError, TypeError):
+            log("could not read the Elastic IP quota: continuing")
+            return
+        used = len(self.aws("ec2", "describe-addresses").get("Addresses", []))
+        if quota - used < nodes:
+            raise RuntimeError(
+                f"{nodes} instances with several network interfaces need {nodes} Elastic IPs; the quota is "
+                f"{quota:.0f} with {used} allocated. Ask for more: aws service-quotas request-service-quota-increase "
+                f"--service-code ec2 --quota-code L-0263D0A3 --desired-value {used + nodes} --region {self.aws.region}")
+        log(f"Elastic IPs: quota {quota:.0f}, {used} allocated, {nodes} needed")
+
+    def attach_public_ips(self) -> None:
+        """An Elastic IP on each instance's primary interface (card 0, device
+        0) -- recorded before it is associated, so down() releases it
+        whatever happens after."""
+        st = self.state
+        d = self.aws("ec2", "describe-instances", "--instance-ids", *st["instances"])
+        eni = {}
+        for res in d["Reservations"]:
+            for i in res["Instances"]:
+                for n in i.get("NetworkInterfaces", []):
+                    att = n.get("Attachment", {})
+                    if att.get("DeviceIndex", 0) == 0 and att.get("NetworkCardIndex", 0) == 0:
+                        eni[i["InstanceId"]] = n["NetworkInterfaceId"]
+        st.setdefault("eips", {})
+        for iid in st["instances"]:
+            if iid in st["eips"]:
+                continue
+            a = self.aws("ec2", "allocate-address", "--domain", "vpc", "--tag-specifications", json.dumps([{
+                "ResourceType": "elastic-ip", "Tags": [{"Key": "rocepool-run", "Value": self.run_id}]}]))
+            st["eips"][iid] = a["AllocationId"]
+            self.save()
+            if iid not in eni:
+                raise RuntimeError(f"{iid}: no primary network interface found to give a public IP")
+            self.aws("ec2", "associate-address", "--allocation-id", a["AllocationId"], "--network-interface-id", eni[iid])
+        log(f"Elastic IPs on {len(st['eips'])} instances")
+
     def my_ip(self) -> str:
         if self.args.ssh_cidr:
             return self.args.ssh_cidr
@@ -226,6 +277,7 @@ class Run:
         if rails > 1:
             log(f"{itype}: {facts['network_cards']} network cards -> {rails} EFA interfaces per instance "
                 f"(one transport rail each)")
+            self.check_eips(a.nodes)
         ami = self.aws("ssm", "get-parameters", "--names", UBUNTU_SSM.format(arch=facts["arch"]))
         st["ami"] = ami["Parameters"][0]["Value"]
         offers = self.aws("ec2", "describe-instance-type-offerings", "--location-type", "availability-zone",
@@ -314,6 +366,8 @@ class Run:
             self.save()
             log(f"launched {', '.join(st['instances'])}")
         self.aws("ec2", "wait", "instance-running", "--instance-ids", *st["instances"], parse=False)
+        if rails > 1:
+            self.attach_public_ips()
         d = self.aws("ec2", "describe-instances", "--instance-ids", *st["instances"])
         hosts = {}
         for res in d["Reservations"]:
@@ -540,6 +594,17 @@ class Run:
             log(f"terminating {', '.join(st['instances'])}")
             self.aws("ec2", "wait", "instance-terminated", "--instance-ids", *st["instances"], parse=False, check=False)
             st["instances"] = []
+            self.save()
+        for iid, alloc in list((st.get("eips") or {}).items()):
+            # terminating disassociates it; an allocated, unassociated address costs money
+            for _ in range(10):
+                r = self.aws("ec2", "release-address", "--allocation-id", alloc, check=False, parse=False)
+                if r.returncode == 0 or "InvalidAllocationID.NotFound" in (r.stderr or ""):
+                    del st["eips"][iid]
+                    break
+                time.sleep(self.args.poll)
+            else:
+                log(f"could not release Elastic IP {alloc} ({iid}): release it by hand")
             self.save()
         if st.get("pg"):
             self.aws("ec2", "delete-placement-group", "--group-name", st["pg"], check=False)
