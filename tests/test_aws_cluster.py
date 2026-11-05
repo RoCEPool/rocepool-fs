@@ -146,6 +146,37 @@ class AwsClusterTests(unittest.TestCase):
         self.assertFalse(self.aws_calls("ec2", "create-key-pair"))
         self.assertFalse(self.aws_calls("ec2", "run-instances"))
 
+    def test_two_network_cards_get_an_efa_only_interface_each(self):
+        """hpc6id.32xlarge: 200 Gb/s only with an EFA on each of its 2 cards"""
+        r = self.run_tool("--mode", "efa", "--nodes", "2", "--type", "hpc6id.32xlarge", "--quick",
+                          env_extra={"FAKE_AWS_CARDS": "2", "FAKE_AWS_HPC_QUOTA": "640"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        run = self.aws_calls("ec2", "run-instances")[0]
+        nics = json.loads(run[run.index("--network-interfaces") + 1])
+        self.assertEqual([(n["NetworkCardIndex"], n["DeviceIndex"], n["InterfaceType"]) for n in nics],
+                         [(0, 0, "efa"), (1, 0, "efa-only")])
+        self.assertTrue(nics[0]["AssociatePublicIpAddress"])
+        self.assertNotIn("AssociatePublicIpAddress", nics[1])
+        self.assertTrue(all(n["SubnetId"] == nics[0]["SubnetId"] and n["Groups"] == ["sg-1"] for n in nics))
+        self.assertIn("2 EFA interfaces per instance", r.stdout)
+        # the HPC quota was the one checked
+        q = self.aws_calls("service-quotas", "get-service-quota")
+        self.assertEqual(q[0][q[0].index("--quota-code") + 1], "L-F7808C92")
+
+    def test_one_card_keeps_one_interface(self):
+        r = self.run_tool("--mode", "efa", "--nodes", "2", "--quick")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        run = self.aws_calls("ec2", "run-instances")[0]
+        self.assertEqual(len(json.loads(run[run.index("--network-interfaces") + 1])), 1)
+
+    def test_hpc_quota_too_low_stops_before_creating_anything(self):
+        r = self.run_tool("--mode", "efa", "--nodes", "6", "--type", "hpc6id.32xlarge",
+                          env_extra={"FAKE_AWS_CARDS": "2", "FAKE_AWS_HPC_QUOTA": "0"})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("vCPU quota for on-demand HPC instances is 0", r.stdout)
+        self.assertIn("--quota-code L-F7808C92 --desired-value 768", r.stdout)
+        self.assertFalse(self.aws_calls("ec2", "run-instances"))
+
     def test_az_without_capacity_moves_to_the_next(self):
         r = self.run_tool("--mode", "efa", "--nodes", "2", env_extra={"FAKE_AWS_NO_CAPACITY": "us-east-1a"})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)

@@ -67,6 +67,36 @@ def log(msg: str) -> None:
     print(f"[aws {time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
+def quota_for(itype: str) -> tuple:
+    """(Service Quotas code, what it covers) of the on-demand vCPU quota an
+    instance type counts against; (None, None) for families not checked"""
+    fam = itype.split(".")[0]
+    if fam.startswith("hpc"):
+        return "L-F7808C92", "on-demand HPC instances"
+    if fam and fam[0] in "acdhimrtz":
+        return "L-1216C47A", "on-demand standard instances"
+    return None, None
+
+
+def network_interfaces(mode: str, facts: dict, subnet: str, sg: str) -> list:
+    """The instance's interfaces. Card 0: the primary (public IP, SSH; an EFA
+    in efa mode). efa mode on a type with several network cards and EFA
+    interfaces (hpc6id.32xlarge: 2): an EFA-only interface (RDMA, no IP) on
+    each further card, so the transport gets the whole bandwidth -- one rail
+    per card (ROCE_OFI_RAILS). EFA-only interfaces carry no IP address, so
+    the public IP of the primary is still assigned at launch."""
+    nics = [{"NetworkCardIndex": 0, "DeviceIndex": 0, "SubnetId": subnet, "Groups": [sg],
+             "AssociatePublicIpAddress": True, "DeleteOnTermination": True}]
+    if mode != "efa":
+        return nics
+    nics[0]["InterfaceType"] = "efa"
+    rails = max(1, min(int(facts.get("network_cards") or 1), int(facts.get("efa_max") or 1)))
+    for card in range(1, rails):
+        nics.append({"NetworkCardIndex": card, "DeviceIndex": 0, "SubnetId": subnet, "Groups": [sg],
+                     "InterfaceType": "efa-only", "DeleteOnTermination": True})
+    return nics
+
+
 class Aws:
     def __init__(self, binary: str, region: str | None):
         self.bin = binary
@@ -145,17 +175,23 @@ class Run:
                 "vcpus": t.get("VCpuInfo", {}).get("DefaultVCpus"),
                 "mem_mib": t.get("MemoryInfo", {}).get("SizeInMiB"),
                 "network": t.get("NetworkInfo", {}).get("NetworkPerformance"),
-                "nvme": t.get("InstanceStorageInfo", {}).get("TotalSizeInGB", 0)}
+                "nvme": t.get("InstanceStorageInfo", {}).get("TotalSizeInGB", 0),
+                # network cards, and how many EFA interfaces the type takes:
+                # hpc6id.32xlarge has 2 cards and reaches 200 Gb/s only with
+                # an interface on each (one card: up to 170 Gb/s)
+                "network_cards": t.get("NetworkInfo", {}).get("MaximumNetworkCards", 1),
+                "efa_max": (t.get("NetworkInfo", {}).get("EfaInfo") or {}).get("MaximumEfaInterfaces", 1)}
 
     def check_quota(self, itype: str, facts: dict, nodes: int) -> None:
-        """The account's vCPU quota for on-demand standard instances (A, C, D,
-        H, I, M, R, T, Z families; new accounts often have 32-64) must cover
-        the run -- checked before anything is created."""
-        fam = itype.split(".")[0]
-        if not fam or fam[0] not in "acdhimrtz" or fam.startswith("hpc"):
+        """The account's vCPU quota for the type's family must cover the run
+        -- checked before anything is created: on-demand standard instances
+        (A, C, D, H, I, M, R, T, Z; new accounts often have 32-64) or HPC
+        instances (hpc6id, hpc7a, ...: a quota of its own, 0 until asked)."""
+        code, what = quota_for(itype)
+        if not code:
             return
         need = (facts.get("vcpus") or 0) * nodes
-        r = self.aws("service-quotas", "get-service-quota", "--service-code", "ec2", "--quota-code", "L-1216C47A",
+        r = self.aws("service-quotas", "get-service-quota", "--service-code", "ec2", "--quota-code", code,
                      check=False, parse=False)
         try:
             quota = float(json.loads(r.stdout)["Quota"]["Value"])
@@ -164,9 +200,9 @@ class Run:
             return
         if quota < need:
             raise RuntimeError(
-                f"vCPU quota for on-demand standard instances is {quota:.0f}, this run needs {need} "
+                f"vCPU quota for {what} is {quota:.0f}, this run needs {need} "
                 f"({nodes} x {facts.get('vcpus')}). Ask for more: aws service-quotas request-service-quota-increase "
-                f"--service-code ec2 --quota-code L-1216C47A --desired-value {need} --region {self.aws.region} "
+                f"--service-code ec2 --quota-code {code} --desired-value {need} --region {self.aws.region} "
                 f"(or pick a smaller --type / fewer --nodes)")
         log(f"vCPU quota {quota:.0f} >= {need} needed (instances already running count against it too)")
 
@@ -186,6 +222,10 @@ class Run:
             raise RuntimeError(f"{itype} has no EFA: pick an EFA type (c6in.32xlarge, i4i.32xlarge, hpc7a.96xlarge, ...) "
                                "or --mode rxe")
         self.check_quota(itype, facts, a.nodes)
+        rails = len(network_interfaces(a.mode, facts, "", ""))
+        if rails > 1:
+            log(f"{itype}: {facts['network_cards']} network cards -> {rails} EFA interfaces per instance "
+                f"(one transport rail each)")
         ami = self.aws("ssm", "get-parameters", "--names", UBUNTU_SSM.format(arch=facts["arch"]))
         st["ami"] = ami["Parameters"][0]["Value"]
         offers = self.aws("ec2", "describe-instance-type-offerings", "--location-type", "availability-zone",
@@ -244,15 +284,12 @@ class Run:
             tries = [(z, True) for z in cand] + ([(z, False) for z in cand] if a.mode == "rxe" else [])
             r, why = None, []
             for zone, pg in tries:
-                nic = {"DeviceIndex": 0, "SubnetId": by_az[zone], "Groups": [st["sg"]], "AssociatePublicIpAddress": True,
-                       "DeleteOnTermination": True}
-                if a.mode == "efa":
-                    nic["InterfaceType"] = "efa"
+                nics = network_interfaces(a.mode, facts, by_az[zone], st["sg"])
                 placement = {"AvailabilityZone": zone, **({"GroupName": st["pg"]} if pg else {})}
                 try:
                     r = self.aws("ec2", "run-instances", "--image-id", st["ami"], "--instance-type", itype,
                                  "--count", str(a.nodes), "--key-name", st["key"],
-                                 "--network-interfaces", json.dumps([nic]),
+                                 "--network-interfaces", json.dumps(nics),
                                  "--placement", json.dumps(placement),
                                  "--instance-initiated-shutdown-behavior", "terminate",
                                  "--block-device-mappings", json.dumps([{"DeviceName": "/dev/sda1", "Ebs": {

@@ -2,7 +2,9 @@
 """A fake `aws` CLI for tests/test_aws_cluster.py: canned JSON per call,
 every call appended to $FAKE_AWS_LOG (one JSON argv per line).
 $FAKE_AWS_NO_EFA=1: the instance type has no EFA.
-$FAKE_AWS_NO_CAPACITY=az[,az...]: run-instances fails there with InsufficientInstanceCapacity."""
+$FAKE_AWS_NO_CAPACITY=az[,az...]: run-instances fails there with InsufficientInstanceCapacity.
+$FAKE_AWS_CARDS=n: the type has n network cards (and n EFA interfaces).
+$FAKE_AWS_VCPU_QUOTA / $FAKE_AWS_HPC_QUOTA: the standard / HPC vCPU quotas."""
 import json
 import os
 import sys
@@ -34,7 +36,9 @@ elif cmd == ("sts", "get-caller-identity"):
 elif cmd == ("ec2", "describe-instance-types"):
     out({"InstanceTypes": [{"ProcessorInfo": {"SupportedArchitectures": ["x86_64"]},
                             "NetworkInfo": {"EfaSupported": os.environ.get("FAKE_AWS_NO_EFA") != "1",
-                                            "NetworkPerformance": "200 Gigabit"},
+                                            "NetworkPerformance": "200 Gigabit",
+                                            "MaximumNetworkCards": int(os.environ.get("FAKE_AWS_CARDS", "1")),
+                                            "EfaInfo": {"MaximumEfaInterfaces": int(os.environ.get("FAKE_AWS_CARDS", "1"))}},
                             "VCpuInfo": {"DefaultVCpus": 128}, "MemoryInfo": {"SizeInMiB": 262144},
                             **({"InstanceStorageInfo": {"TotalSizeInGB": int(os.environ["FAKE_AWS_NVME_GB"])}}
                                if os.environ.get("FAKE_AWS_NVME_GB") else {})}]})
@@ -64,6 +68,8 @@ elif cmd == ("ec2", "describe-instances"):
     out({"Reservations": [{"Instances": [{"InstanceId": i, "PublicIpAddress": f"54.0.0.{k + 1}",
                                           "PrivateIpAddress": f"172.31.0.{k + 1}"} for k, i in enumerate(req)]}]})
 elif cmd == ("service-quotas", "get-service-quota"):
-    out({"Quota": {"Value": float(os.environ.get("FAKE_AWS_VCPU_QUOTA", "5000"))}})
+    code = argv[argv.index("--quota-code") + 1]
+    v = os.environ.get("FAKE_AWS_HPC_QUOTA", "0") if code == "L-F7808C92" else os.environ.get("FAKE_AWS_VCPU_QUOTA", "5000")
+    out({"Quota": {"Value": float(v)}})
 else:
     out({})
