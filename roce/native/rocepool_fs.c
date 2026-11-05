@@ -285,6 +285,24 @@ int rpfs_commit(void) {
     return err;
 }
 
+/* A barrier on EVERY MDT, whether or not this process has changes pending
+ * there: MDT_OP_COMMIT is replied to once everything that MDT appended so far
+ * -- every client's -- is durable. For sync()/syncfs(): mdtest -Y ends each
+ * phase, inside its timing, with system("sync") -- a separate process, with
+ * nothing pending of its own -- and that must make the ranks' creates and
+ * unlinks durable within the measured time (IO500 rule 6), not the pinger
+ * up to 0.5 s later. */
+int rpfs_commit_all(void) {
+    if (!cfg.mdt_async) return 0;
+    pthread_once(&g_mt_once, mt_init);
+    int err = 0;
+    for (int i = 0; i < cfg.nmdt; i++) {
+        int rc = mt_barrier(i, 0);
+        if (rc && !err) err = rc;
+    }
+    return err;
+}
+
 void rpfs_commit_stats(unsigned long long *pending, unsigned long long *replayed, unsigned long long *lost) {
     pthread_once(&g_mt_once, mt_init);
     unsigned long long n = 0;
