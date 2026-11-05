@@ -40,7 +40,8 @@
  *    32 bits (EFA's do).
  *
  * Environment: ROCE_OFI_PROVIDER (default "efa" when an EFA device exists,
- * else "tcp"), ROCE_OFI_SERVER_EPS, ROCE_OFI_CLIENT_EPS, ROCE_POLL_SPIN_US,
+ * else "tcp"), ROCE_OFI_RAILS / ROCE_OFI_RAIL (several devices: see
+ * dom_get), ROCE_OFI_SERVER_EPS, ROCE_OFI_CLIENT_EPS, ROCE_POLL_SPIN_US,
  * ROCE_BUFPOOL_MAX, ROCE_PIN_THREADS, ROCE_SERVER_DRAIN_MS.
  */
 #include "roce_transport.h"
@@ -145,6 +146,7 @@ struct ofi_ep;
 
 struct ofi_dom {
     char prov[32], name[128];
+    int rail;                     /* index among the rails (ROCE_OFI_RAILS) */
     struct fi_info *info;
     struct fid_fabric *fabric;
     struct fid_domain *domain;
@@ -207,8 +209,52 @@ static int local_ip_for(const char *host, char *out, size_t n) {
     return rc;
 }
 
-/* the domain for local address `src_ip` (NULL: the provider's first) */
-static struct ofi_dom *dom_get(const char *src_ip) {
+/* Rails: one fabric domain per network device. A host with several EFA
+ * devices (hpc6id.32xlarge: one per network card, 200 Gb/s only with both)
+ * gets one rail per device: clients spread their connections over the rails
+ * (next_rail), each server serves on one (ROCE_OFI_RAIL, default 0) and
+ * tools/io500_run.py spreads the servers of a host over them.
+ * ROCE_OFI_RAILS=n overrides the count; more rails than devices opens
+ * further, independent domains on the same devices (their own AVs and
+ * memory keys -- how the multi-rail paths are tested on one device). */
+static int g_rails;            /* 0: not known yet */
+static int rails_of(int ndev) {
+    int r = (int)env_u32("ROCE_OFI_RAILS", (uint32_t)(ndev > 0 ? ndev : 1));
+    return r > MAX_DOMS ? MAX_DOMS : r;
+}
+int roce_transport_rails(void) { return g_rails > 0 ? g_rails : 1; }
+int roce_transport_domains_open(void) { return g_ndoms; }
+static int next_rail(void) {  /* round robin; dom_get takes it modulo the rail count */
+    static atomic_uint rr;
+    return (int)(atomic_fetch_add(&rr, 1) & 0xffff);
+}
+/* ROCE_OFI_RAIL: a rail index, or "numa": the device on this server's NUMA
+ * node (ROCEPOOL_NUMA_NODE, the node io500_run pins it to) -- its DMA stays
+ * local -- else rail 0 */
+#define RAIL_NUMA (-1)
+static int server_rail(void) {
+    const char *e = getenv("ROCE_OFI_RAIL");
+    if (e && !strcmp(e, "numa")) return RAIL_NUMA;
+    return (int)env_u32("ROCE_OFI_RAIL", 0);
+}
+/* the NUMA node of a device's PCI function (-1: unknown) */
+static int dev_numa(const struct fi_info *i) {
+    if (!i->nic || !i->nic->bus_attr || i->nic->bus_attr->bus_type != FI_BUS_PCI) return -1;
+    const struct fi_pci_attr *p = &i->nic->bus_attr->attr.pci;
+    char path[128];
+    snprintf(path, sizeof(path), "/sys/bus/pci/devices/%04x:%02x:%02x.%x/numa_node", p->domain_id, p->bus_id,
+             p->device_id, p->function_id);
+    FILE *f = fopen(path, "r");
+    int n = -1;
+    if (f) {
+        if (fscanf(f, "%d", &n) != 1) n = -1;
+        fclose(f);
+    }
+    return n;
+}
+
+/* the domain of `rail` for local address `src_ip` (NULL: the provider's) */
+static struct ofi_dom *dom_get(const char *src_ip, int rail) {
     const char *prov = ofi_provider();
     /* EFA hands same-host peers to libfabric's shm provider, whose large
      * messages and RMA reads stalled with our MR mode on c5n (2026-10-23:
@@ -238,10 +284,32 @@ static struct ofi_dom *dom_get(const char *src_ip) {
                   node ? ", source " : "", node ? node : "", fi_strerror(-rc), prov);
         return NULL;
     }
-    struct fi_info *info = list;
+    /* the devices, in the provider's order, each once (a device can be
+     * offered under several fabrics, e.g. efa and efa-direct) */
+    struct fi_info *dev[MAX_DOMS];
+    int ndev = 0;
+    for (struct fi_info *i = list; i && ndev < MAX_DOMS; i = i->next) {
+        int seen = 0;
+        for (int j = 0; j < ndev; j++)
+            if (!strcmp(dev[j]->domain_attr->name, i->domain_attr->name)) seen = 1;
+        if (!seen) dev[ndev++] = i;
+    }
+    pthread_mutex_lock(&g_doms_lk);
+    if (!g_rails) g_rails = rails_of(ndev);
+    pthread_mutex_unlock(&g_doms_lk);
+    if (rail == RAIL_NUMA) {
+        const char *nn = getenv("ROCEPOOL_NUMA_NODE");
+        int want = nn && *nn ? atoi(nn) : -2;
+        rail = 0;
+        for (int j = 0; j < ndev; j++)
+            if (dev_numa(dev[j]) == want) { rail = j; break; }
+    }
+    rail = rail % roce_transport_rails();
+    struct fi_info *info = dev[rail % ndev];
     pthread_mutex_lock(&g_doms_lk);
     for (int i = 0; i < g_ndoms; i++)
-        if (!strcmp(g_doms[i]->prov, prov) && !strcmp(g_doms[i]->name, info->domain_attr->name)) {
+        if (!strcmp(g_doms[i]->prov, prov) && !strcmp(g_doms[i]->name, info->domain_attr->name) &&
+            g_doms[i]->rail == rail) {
             struct ofi_dom *d = g_doms[i];
             pthread_mutex_unlock(&g_doms_lk);
             fi_freeinfo(list);
@@ -253,6 +321,7 @@ static struct ofi_dom *dom_get(const char *src_ip) {
     if (!d) { set_error("out of memory"); goto out; }
     snprintf(d->prov, sizeof(d->prov), "%s", prov);
     snprintf(d->name, sizeof(d->name), "%s", info->domain_attr->name);
+    d->rail = rail;
     d->virt = (info->domain_attr->mr_mode & FI_MR_VIRT_ADDR) != 0;
     d->info = fi_dupinfo(info);
     pthread_mutex_init(&d->lk, NULL);
@@ -1121,7 +1190,7 @@ static roce_conn_t *client_connect(const char *peer, int timeout_ms, size_t max_
     c->sock = -1;
     c->max_frame = max_frame;
     c->dedicated = dedicated;
-    c->d = dom_get(local_ip_for(host, src, sizeof(src)) == 0 ? src : NULL);
+    c->d = dom_get(local_ip_for(host, src, sizeof(src)) == 0 ? src : NULL, next_rail());
     if (!c->d) goto fail;
     struct addrinfo hints = {.ai_family = AF_INET, .ai_socktype = SOCK_STREAM}, *ai = NULL;
     int gr = getaddrinfo(host, port, &hints, &ai);
@@ -2267,8 +2336,11 @@ roce_server_t *roce_server_start(const char *bind_address, roce_request_handler 
     if (split_hostport(bind_address, host, sizeof(host), port, sizeof(port))) goto fail;
     char src[64];
     const char *src_ip = strcmp(host, "0.0.0.0") ? host : (local_ip_for("8.8.8.8", src, sizeof(src)) ? NULL : src);
-    s->d = dom_get(src_ip);
+    s->d = dom_get(src_ip, server_rail());
     if (!s->d) goto fail;
+    if (roce_transport_rails() > 1)
+        fprintf(stderr, "ofi_transport: %s serves on rail %d of %d (%s)\n", bind_address, s->d->rail,
+                roce_transport_rails(), s->d->name);
     struct fi_av_attr av_attr = {.type = FI_AV_TABLE, .count = env_u32("ROCE_OFI_AV_SIZE", 16384)};
     int rc = fi_av_open(s->d->domain, &av_attr, &s->av, NULL);
     if (rc) { set_fi_error("fi_av_open", rc); goto fail; }

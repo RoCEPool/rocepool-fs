@@ -136,6 +136,17 @@ def _fuse_stats(recs: list[dict], timeout: float = 3.0) -> None:
             time.sleep(0.01)
 
 
+def efa_devices() -> list[str]:
+    """the host's EFA devices (/sys/class/infiniband, driver efa): one per
+    network card with an EFA interface -- a transport rail each"""
+    base = "/sys/class/infiniband"
+    try:
+        return sorted(d for d in os.listdir(base)
+                      if os.path.basename(os.path.realpath(os.path.join(base, d, "device", "driver"))) == "efa")
+    except OSError:
+        return []
+
+
 def efa_max_qp() -> int | None:
     """Queue pairs an EFA device has (ibv_devinfo -v: max_qp), the smallest
     of the host's EFA devices -- shared by every process on the host: each
@@ -194,6 +205,7 @@ def facts(ip: str | None) -> dict:
     except Exception:  # noqa: BLE001
         pass
     out["efa_max_qp"] = efa_max_qp()
+    out["efa_devices"] = len(efa_devices())
     if ip:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         for _, name in socket.if_nameindex():

@@ -160,6 +160,11 @@ typedef struct { uint64_t raddr; uint32_t rkey; uint32_t len; roce_mem_t *mem; v
  * (reliable-datagram fabrics: ofi_transport.c on EFA). Callers that read a
  * seqlock check it accordingly (rocepool_client.c). */
 int roce_transport_reads_ordered(void);
+/* how many rails (fabric domains: one per network device) this process
+ * spreads its connections over; 1 for the RC transport */
+int roce_transport_rails(void);
+/* fabric domains this process has opened (one per rail it used) */
+int roce_transport_domains_open(void);
 int roce_client_rdma_read(roce_conn_t *conn, const roce_read_t *reads, int n, int timeout_ms);
 /* server side: the key a client needs to RDMA READ `mem` (registered on
  * the server's RDMA device on first use; -1 until a connection exists) */

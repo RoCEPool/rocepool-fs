@@ -1181,6 +1181,8 @@ static int client_request(struct roce_conn *conn, const void *head, size_t head_
 
 /* RC executes a chain of READs in order. ROCE_READS_UNORDERED=1 makes
  * callers treat it as unordered (tests drive the EFA validation paths). */
+int roce_transport_rails(void) { return 1; }
+int roce_transport_domains_open(void) { return 1; }
 int roce_transport_reads_ordered(void) {
     static int v = -1;
     if (v < 0) { const char *e = getenv("ROCE_READS_UNORDERED"); v = !(e && !strcmp(e, "1")); }
