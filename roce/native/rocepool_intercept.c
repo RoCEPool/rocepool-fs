@@ -64,7 +64,7 @@ REAL(read); REAL(write); REAL(pread); REAL(pread64); REAL(pwrite); REAL(pwrite64
 REAL(lseek); REAL(lseek64); REAL(fstat); REAL(fstat64); REAL(stat); REAL(stat64); REAL(lstat); REAL(lstat64);
 REAL(fstatat); REAL(fstatat64); REAL(unlink); REAL(unlinkat); REAL(mkdir); REAL(mkdirat); REAL(rmdir);
 REAL(access); REAL(faccessat); REAL(opendir); REAL(fdopendir); REAL(readdir); REAL(readdir64); REAL(closedir);
-REAL(dirfd); REAL(rewinddir); REAL(telldir); REAL(seekdir); REAL(fsync); REAL(fdatasync); REAL(ftruncate); REAL(ftruncate64); REAL(truncate);
+REAL(dirfd); REAL(rewinddir); REAL(telldir); REAL(seekdir); REAL(fsync); REAL(fdatasync); REAL(sync); REAL(syncfs); REAL(ftruncate); REAL(ftruncate64); REAL(truncate);
 REAL(truncate64); REAL(dup); REAL(dup2); REAL(dup3); REAL(fcntl); REAL(realpath); REAL(statfs); REAL(statvfs); REAL(statfs64); REAL(statvfs64);
 REAL(chmod); REAL(fchmod); REAL(chown); REAL(rename); REAL(renameat); REAL(utimes); REAL(futimens); REAL(utimensat);
 REAL(fchdir); REAL(chdir); REAL(fopen); REAL(fopen64); REAL(fdopen);
@@ -123,7 +123,7 @@ static void load_libc(void) {
     LOAD(lseek); LOAD(lseek64); LOAD(fstat); LOAD(fstat64); LOAD(stat); LOAD(stat64); LOAD(lstat); LOAD(lstat64);
     LOAD(fstatat); LOAD(fstatat64); LOAD(unlink); LOAD(unlinkat); LOAD(mkdir); LOAD(mkdirat); LOAD(rmdir);
     LOAD(access); LOAD(faccessat); LOAD(opendir); LOAD(fdopendir); LOAD(readdir); LOAD(readdir64); LOAD(closedir);
-    LOAD(dirfd); LOAD(rewinddir); LOAD(telldir); LOAD(seekdir); LOAD(fsync); LOAD(fdatasync); LOAD(ftruncate); LOAD(ftruncate64); LOAD(truncate);
+    LOAD(dirfd); LOAD(rewinddir); LOAD(telldir); LOAD(seekdir); LOAD(fsync); LOAD(fdatasync); LOAD(sync); LOAD(syncfs); LOAD(ftruncate); LOAD(ftruncate64); LOAD(truncate);
     LOAD(truncate64); LOAD(dup); LOAD(dup2); LOAD(dup3); LOAD(fcntl); LOAD(realpath); LOAD(statfs); LOAD(statvfs); LOAD(statfs64); LOAD(statvfs64);
     LOAD(chmod); LOAD(fchmod); LOAD(chown); LOAD(rename); LOAD(renameat); LOAD(utimes); LOAD(futimens); LOAD(utimensat);
     LOAD(fchdir); LOAD(chdir); LOAD(fopen); LOAD(fopen64); LOAD(fdopen);
@@ -687,6 +687,32 @@ int fdatasync(int fd) {
     if (!f) return real_fdatasync(fd);
     int rc = flush_file(f);
     if (!rc) rc = rpfs_commit();
+    return seterr(rc);
+}
+
+/* sync(2): what the kernel holds, then (ROCEPOOL_MDT_ASYNC) every MDT's
+ * changes so far -- every process's, not only this one's (rpfs_commit_all).
+ * The `sync` command that mdtest -Y runs at the end of each phase is such a
+ * process: preloaded, with nothing of its own pending. */
+static int mdt_async_env(void) {
+    const char *ma = getenv("ROCEPOOL_MDT_ASYNC");
+    return ma && !strcmp(ma, "1");
+}
+void sync(void) {
+    ENSURE();
+    real_sync();
+    if (mdt_async_env() && ready()) rpfs_commit_all();
+}
+int syncfs(int fd) {
+    ENSURE();
+    ofile_t *f = fd_get(fd);
+    if (!f) {
+        int rc = real_syncfs(fd);
+        if (!rc && mdt_async_env() && ready()) rpfs_commit_all();
+        return rc;
+    }
+    int rc = flush_file(f);
+    if (!rc) rc = rpfs_commit_all();
     return seterr(rc);
 }
 

@@ -134,6 +134,7 @@ int rpfs_init(void);
 /* every MDT change this process was replied to is durable when it returns
  * (ROCEPOOL_MDT_ASYNC: a barrier on each MDT it has changes pending on) */
 int rpfs_commit(void);
+int rpfs_commit_all(void);  /* a barrier on every MDT: everyone's changes so far durable (sync) */
 /* changes kept (not committed yet), replayed after an MDT restart, lost */
 void rpfs_commit_stats(unsigned long long *pending, unsigned long long *replayed, unsigned long long *lost);
 void die(const char *fmt, ...);

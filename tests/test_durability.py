@@ -429,6 +429,38 @@ print(sorted(os.listdir(P + "/d")))
         self.crash_and_restart()
         self.assertEqual(self.listing("d"), want)
 
+    def test_sync_command_commits_every_process_changes(self):
+        """mdtest -Y ends each phase, inside its timing, with system("sync"):
+        another process, with nothing pending of its own. Its sync() must
+        make the ranks' creates and unlinks durable before it returns (IO500
+        rule 6), so that a client killed right after (no exit barrier, no
+        replay) and an MDT crash lose nothing."""
+        c = self.client("""
+os.makedirs(P + "/d")
+for i in range(4): open(P + "/d/old%d" % i, "w").close()
+os.fsync(os.open(P + "/d", os.O_RDONLY))
+step("ready")
+for i in range(20): open(P + "/d/f%02d" % i, "w").close()
+for i in range(2): os.unlink(P + "/d/old%d" % i)
+step("changed")
+""")
+        self.assertEqual(c.stdout.readline().strip(), "ready")
+        # every commit from here takes 3 s: without a barrier the changes
+        # stay uncommitted well past the kill below
+        self.srv.kill()
+        self.srv.env["ROCEPOOL_TEST_LOG_DELAY_MS"] = "3000"
+        self.srv.start()
+        c.stdin.write("\n"); c.stdin.flush()
+        self.assertEqual(c.stdout.readline().strip(), "changed")
+        t0 = time.monotonic()
+        r = subprocess.run(["sync"], capture_output=True, text=True, env=self.env(), timeout=120)
+        took = time.monotonic() - t0
+        self.assertEqual(r.returncode, 0, r.stderr)
+        c.kill(); c.wait()  # SIGKILL: no exit barrier, nothing left to replay
+        self.assertGreater(took, 1.0, "sync returned before the slow commit: it did not wait for the MDTs")
+        self.crash_and_restart()
+        self.assertEqual(self.listing("d"), sorted([f"f{i:02d}" for i in range(20)] + ["old2", "old3"]))
+
     def test_two_clients_changes_replay_in_their_order(self):
         a = self.client("""
 os.makedirs(P + "/d")
