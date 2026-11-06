@@ -73,6 +73,10 @@ def quota_for(itype: str) -> tuple:
     fam = itype.split(".")[0]
     if fam.startswith("hpc"):
         return "L-F7808C92", "on-demand HPC instances"
+    if fam.startswith(("g", "vt")):  # g4dn, g5, g6, g6e, g7e, gr6, vt1: GPU / video
+        return "L-DB2E81BA", "on-demand G and VT instances"
+    if fam.startswith("p"):  # p4d, p5, ...
+        return "L-417A185B", "on-demand P instances"
     if fam and fam[0] in "acdhimrtz":
         return "L-1216C47A", "on-demand standard instances"
     return None, None

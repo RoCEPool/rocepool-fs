@@ -4,7 +4,7 @@ every call appended to $FAKE_AWS_LOG (one JSON argv per line).
 $FAKE_AWS_NO_EFA=1: the instance type has no EFA.
 $FAKE_AWS_NO_CAPACITY=az[,az...]: run-instances fails there with InsufficientInstanceCapacity.
 $FAKE_AWS_CARDS=n: the type has n network cards (and n EFA interfaces).
-$FAKE_AWS_VCPU_QUOTA / $FAKE_AWS_HPC_QUOTA: the standard / HPC vCPU quotas."""
+$FAKE_AWS_VCPU_QUOTA / $FAKE_AWS_HPC_QUOTA / $FAKE_AWS_G_QUOTA: the standard / HPC / G-and-VT vCPU quotas."""
 import json
 import os
 import sys
@@ -80,6 +80,7 @@ elif cmd == ("ec2", "allocate-address"):
 elif cmd == ("service-quotas", "get-service-quota"):
     code = argv[argv.index("--quota-code") + 1]
     v = {"L-F7808C92": os.environ.get("FAKE_AWS_HPC_QUOTA", "0"),
+         "L-DB2E81BA": os.environ.get("FAKE_AWS_G_QUOTA", "0"),
          "L-0263D0A3": os.environ.get("FAKE_AWS_EIP_QUOTA", "5")}.get(code, os.environ.get("FAKE_AWS_VCPU_QUOTA", "5000"))
     out({"Quota": {"Value": float(v)}})
 else:
