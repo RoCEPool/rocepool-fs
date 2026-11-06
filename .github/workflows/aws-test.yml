@@ -308,6 +308,9 @@ jobs:
           d="aws_runs/$RUN_ID"
           rm -rf private
           [ -d "$d" ] || exit 0
+          # not reports: the shipped tree (it holds the bundle) and the run's SSH key; the
+          # sealed file must also stay under the results branch's 20 MB per file
+          rm -f "$d/rocepool.tar.gz" "$d/ssh_key"
           stem="$(mktemp -d)/reports"
           if [ -f "${PRIVATE_KEY_DIR:-/nonexistent}/reply.pub.pem" ] \
              && python3 tools/aws_private_bundle.py seal --src "$d" --to "$PRIVATE_KEY_DIR/reply.pub.pem" --out "$stem"; then
