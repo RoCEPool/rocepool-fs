@@ -197,6 +197,25 @@ class AwsClusterTests(unittest.TestCase):
         self.assertIn("--quota-code L-F7808C92 --desired-value 768", r.stdout)
         self.assertFalse(self.aws_calls("ec2", "run-instances"))
 
+    def test_g_quota_too_low_stops_before_creating_anything(self):
+        r = self.run_tool("--mode", "efa", "--nodes", "2", "--type", "g6e.8xlarge",
+                          env_extra={"FAKE_AWS_G_QUOTA": "0"})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("vCPU quota for on-demand G and VT instances is 0", r.stdout)
+        self.assertIn("--quota-code L-DB2E81BA --desired-value 256", r.stdout)
+        self.assertFalse(self.aws_calls("ec2", "run-instances"))
+
+    def test_quota_codes_per_family(self):
+        sys.path.insert(0, os.path.join(ROOT, "tools"))
+        try:
+            import aws_cluster
+        finally:
+            sys.path.pop(0)
+        for itype, code in (("c6in.32xlarge", "L-1216C47A"), ("hpc6id.32xlarge", "L-F7808C92"),
+                            ("g6e.8xlarge", "L-DB2E81BA"), ("g4dn.xlarge", "L-DB2E81BA"),
+                            ("vt1.3xlarge", "L-DB2E81BA"), ("p5.48xlarge", "L-417A185B")):
+            self.assertEqual(aws_cluster.quota_for(itype)[0], code, itype)
+
     def test_az_without_capacity_moves_to_the_next(self):
         r = self.run_tool("--mode", "efa", "--nodes", "2", env_extra={"FAKE_AWS_NO_CAPACITY": "us-east-1a"})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
