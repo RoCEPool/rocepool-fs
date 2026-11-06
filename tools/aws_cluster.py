@@ -3,6 +3,7 @@ official IO500 on it, bring the reports home, give the machines back.
 
     python3 tools/aws_cluster.py run --mode efa --nodes 10            # EFA (libfabric backend)
     python3 tools/aws_cluster.py run --mode rxe --nodes 3 --quick     # Soft-RoCE, the verbs backend as is
+    python3 tools/aws_cluster.py run --mode gpu --nodes 1 --type g6e.2xlarge --command ...   # one GPU host
     python3 tools/aws_cluster.py down --run-id rp-20261003-1201       # clean up a kept / interrupted run
     python3 tools/aws_cluster.py list                                 # runs this tool still has resources for
 
@@ -57,7 +58,11 @@ import urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNS = os.path.join(ROOT, "aws_runs")
 UBUNTU_SSM = "/aws/service/canonical/ubuntu/server/24.04/stable/current/{arch}/hvm/ebs-gp3/ami-id"
-DEFAULT_TYPE = {"efa": "c6in.32xlarge", "rxe": "c6in.16xlarge"}
+# gpu mode: AWS's Deep Learning Base AMI -- NVIDIA driver, Docker and the NVIDIA
+# container toolkit already in it -- newest Ubuntu first
+DLAMI_SSM = ["/aws/service/deeplearning/ami/{arch}/base-oss-nvidia-driver-gpu-ubuntu-24.04/latest/ami-id",
+             "/aws/service/deeplearning/ami/{arch}/base-oss-nvidia-driver-gpu-ubuntu-22.04/latest/ami-id"]
+DEFAULT_TYPE = {"efa": "c6in.32xlarge", "rxe": "c6in.16xlarge", "gpu": "g6e.2xlarge"}
 EFA_INSTALLER = "https://efa-installer.amazonaws.com/aws-efa-installer-latest.tar.gz"
 # what goes to the head node: the tree minus caches, results, VCS
 EXCLUDE = {".git", ".bench_cache", "aws_runs", "__pycache__", "stress_reports", "mnt"}
@@ -282,8 +287,17 @@ class Run:
             log(f"{itype}: {facts['network_cards']} network cards -> {rails} EFA interfaces per instance "
                 f"(one transport rail each)")
             self.check_eips(a.nodes)
-        ami = self.aws("ssm", "get-parameters", "--names", UBUNTU_SSM.format(arch=facts["arch"]))
-        st["ami"] = ami["Parameters"][0]["Value"]
+        if a.mode == "gpu":
+            names = [n.format(arch=facts["arch"]) for n in DLAMI_SSM]
+            got = {p["Name"]: p["Value"] for p in self.aws("ssm", "get-parameters", "--names", *names).get("Parameters", [])}
+            name = next((n for n in names if n in got), None)
+            if not name:
+                raise RuntimeError(f"no Deep Learning Base AMI in {self.aws.region} ({', '.join(names)})")
+            st["ami"], st["ami_name"] = got[name], name
+            log(f"AMI: {name.split('/')[-3]} ({st['ami']})")
+        else:
+            ami = self.aws("ssm", "get-parameters", "--names", UBUNTU_SSM.format(arch=facts["arch"]))
+            st["ami"] = ami["Parameters"][0]["Value"]
         offers = self.aws("ec2", "describe-instance-type-offerings", "--location-type", "availability-zone",
                           "--filters", f"Name=instance-type,Values={itype}")
         zones = sorted(o["Location"] for o in offers.get("InstanceTypeOfferings", []))
@@ -337,7 +351,7 @@ class Run:
             # an AZ out of capacity for the type: try the next one that offers it
             # (all instances in one AZ: the cluster placement group needs that);
             # rxe needs no placement group, so as a last resort it goes without one
-            tries = [(z, True) for z in cand] + ([(z, False) for z in cand] if a.mode == "rxe" else [])
+            tries = [(z, True) for z in cand] + ([(z, False) for z in cand] if a.mode in ("rxe", "gpu") else [])
             r, why = None, []
             for zone, pg in tries:
                 nics = network_interfaces(a.mode, facts, by_az[zone], st["sg"])
@@ -417,6 +431,18 @@ class Run:
                 "sudo rdma link show | grep -q rxe0 || sudo rdma link add rxe0 type rxe netdev $dev",
                 "ls /sys/class/infiniband/ | grep -q rxe0",
             ]
+        elif mode == "gpu":
+            # the AMI has the driver, Docker and the NVIDIA container toolkit; no
+            # RDMA set up here. The AMI may already have the instance store at
+            # /opt/dlami/nvme: it is used as /nvmedata, never formatted again.
+            lines += [
+                "nvidia-smi -L",
+                "sudo docker info --format '{{json .Runtimes}}' | grep -q nvidia || "
+                "(sudo nvidia-ctk runtime configure --runtime=docker >/dev/null && sudo systemctl restart docker)",
+                "sudo docker info --format '{{json .Runtimes}}' | grep -q nvidia",
+                "if mountpoint -q /opt/dlami/nvme && ! mountpoint -q /nvmedata; then "
+                "sudo mkdir -p /nvmedata && sudo mount --bind /opt/dlami/nvme /nvmedata; fi",
+            ]
         else:
             lines += [
                 "cd /tmp && curl -sSfO " + EFA_INSTALLER,
@@ -433,7 +459,7 @@ class Run:
             lines += [
                 "sudo apt-get install -y -q mdadm xfsprogs >/dev/null",
                 "devs=$(for d in /dev/nvme*n1; do m=$(cat /sys/block/$(basename $d)/device/model 2>/dev/null); "
-                "case \"$m\" in *'Instance Storage'*) echo $d;; esac; done)",
+                "case \"$m\" in *'Instance Storage'*) findmnt -rn -S $d >/dev/null || echo $d;; esac; done)",
                 "n=$(echo $devs | wc -w)",
                 "if [ $n -gt 0 ] && ! mountpoint -q /nvmedata; then "
                 "if [ $n -gt 1 ]; then sudo mdadm --create /dev/md0 --run --level=0 --raid-devices=$n $devs >/dev/null "
@@ -638,7 +664,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="create, set up, run, fetch, tear down")
-    r.add_argument("--mode", choices=("efa", "rxe"), default="efa")
+    r.add_argument("--mode", choices=("efa", "rxe", "gpu"), default="efa")
     r.add_argument("--nodes", type=int, default=10)
     r.add_argument("--type", help=f"instance type (default {DEFAULT_TYPE['efa']} for efa, {DEFAULT_TYPE['rxe']} for rxe)")
     r.add_argument("--quick", action="store_true", help="30 s IO500 instead of the 300 s valid run")

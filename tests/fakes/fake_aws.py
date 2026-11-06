@@ -43,7 +43,15 @@ elif cmd == ("ec2", "describe-instance-types"):
                             **({"InstanceStorageInfo": {"TotalSizeInGB": int(os.environ["FAKE_AWS_NVME_GB"])}}
                                if os.environ.get("FAKE_AWS_NVME_GB") else {})}]})
 elif cmd == ("ssm", "get-parameters"):
-    out({"Parameters": [{"Value": "ami-0123456789abcdef0"}]})
+    # each requested name answers, except those $FAKE_AWS_SSM_MISSING lists (comma-separated substrings)
+    names = []
+    for a_ in sys.argv[sys.argv.index("--names") + 1:]:
+        if a_.startswith("--"):
+            break
+        names.append(a_)
+    gone = [x for x in os.environ.get("FAKE_AWS_SSM_MISSING", "").split(",") if x]
+    out({"Parameters": [{"Name": n, "Value": f"ami-{abs(hash(n)) % 10**12:012d}" if "deeplearning" in n
+                         else "ami-0123456789abcdef0"} for n in names if not any(g in n for g in gone)]})
 elif cmd == ("ec2", "describe-instance-type-offerings"):
     out({"InstanceTypeOfferings": [{"Location": "us-east-1b"}, {"Location": "us-east-1a"}, {"Location": "us-east-1d"}]})
 elif cmd == ("ec2", "describe-vpcs"):
