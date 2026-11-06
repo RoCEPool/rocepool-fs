@@ -135,6 +135,31 @@ class AwsClusterTests(unittest.TestCase):
         start = next(c for c in self.calls(self.ssh_log) if "run.sh" in c[-1])[-1]
         self.assertNotIn("--quick", start)  # the valid 300 s run
 
+    def test_gpu_mode_one_host_on_the_deep_learning_ami_without_rdma(self):
+        r = self.run_tool("--mode", "gpu", "--nodes", "1", "--type", "g6e.2xlarge", "--command", "true",
+                          env_extra={"FAKE_AWS_NVME_GB": "450", "FAKE_AWS_NO_EFA": "1", "FAKE_AWS_G_QUOTA": "128",
+                                     "FAKE_AWS_SSM_MISSING": "ubuntu-24.04"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("AMI: base-oss-nvidia-driver-gpu-ubuntu-22.04", r.stdout, "24.04 missing: the 22.04 one")
+        run = self.aws_calls("ec2", "run-instances")[0]
+        self.assertNotEqual(run[run.index("--image-id") + 1], "ami-0123456789abcdef0", "not the plain Ubuntu AMI")
+        self.assertNotIn("InterfaceType", run[run.index("--network-interfaces") + 1])
+        setup = [c for c in self.calls(self.ssh_log) if "ROCEPOOL_SETUP" in c[-1]][0][-1]
+        self.assertIn("nvidia-smi -L", setup)
+        self.assertIn("grep -q nvidia", setup, "Docker must have the NVIDIA runtime")
+        self.assertIn("mount --bind /opt/dlami/nvme /nvmedata", setup, "the AMI's NVMe mount is reused")
+        self.assertIn("findmnt -rn -S $d", setup, "a mounted instance-store device is never formatted")
+        self.assertNotIn("efa_installer", setup)
+        self.assertNotIn("rdma_rxe", setup)
+
+    def test_gpu_mode_without_a_deep_learning_ami_stops_before_creating_instances(self):
+        r = self.run_tool("--mode", "gpu", "--nodes", "1", "--type", "g6e.2xlarge",
+                          env_extra={"FAKE_AWS_NO_EFA": "1", "FAKE_AWS_G_QUOTA": "128",
+                                     "FAKE_AWS_SSM_MISSING": "deeplearning"})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("no Deep Learning Base AMI", r.stdout + r.stderr)
+        self.assertFalse(self.aws_calls("ec2", "run-instances"))
+
     def test_local_nvme_is_assembled_and_mounted(self):
         r = self.run_tool("--mode", "efa", "--nodes", "2", "--quick", env_extra={"FAKE_AWS_NVME_GB": "30000"})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
