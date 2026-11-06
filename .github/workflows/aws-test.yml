@@ -4,6 +4,12 @@ name: aws-test
 # Manual only (Actions > aws-test > Run workflow). Credentials: repository
 # secrets AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (an IAM user with EC2
 # access, read access to SSM parameters and service quotas).
+# private_run: instead of run.sh, a private bundle (tools/aws_private_bundle.py)
+# runs as private/entry.sh. No key is stored: the run makes a key pair and
+# publishes the public half (branch aws-private-key/<run id>); the owner
+# pushes the bundle sealed for it (branch aws-private/<run id>); its output is
+# kept off this log and its reports leave sealed for the owner's key. Both
+# branches are deleted at the end.
 on:
   workflow_dispatch:
     inputs:
@@ -62,6 +68,10 @@ on:
       request_g_vcpus:
         description: "ask AWS to raise the on-demand G and VT vCPU quota (L-DB2E81BA: g5, g6, g6e, g7e, ...) in the region to this; empty = don't"
         default: ""
+      private_run:
+        description: "run a private bundle (tools/aws_private_bundle.py) instead of run.sh: it arrives encrypted for this run's key, its output stays off the log, its reports leave encrypted"
+        default: false
+        type: boolean
 permissions:
   contents: write   # the reports go to a branch aws-results/<run id> (artifacts are not readable through every client)
 concurrency: aws-test
@@ -242,17 +252,46 @@ jobs:
                 --desired-value "${{ inputs.request_g_vcpus }}" --query 'RequestedQuota.[Id,Status,DesiredValue]' --output text 2>&1) || rc=$?
           if [ $rc -eq 0 ]; then echo "::notice title=G quota request::$out"
           else echo "::error title=G quota request failed::$(echo "$out" | tr '\n' ' ' | cut -c1-500)"; exit 1; fi
+      - name: private bundle (this run's key out, the sealed bundle in)
+        if: ${{ inputs.private_run && !inputs.probe_only }}
+        run: |
+          set -euo pipefail
+          kd="$RUNNER_TEMP/private-key"
+          python3 tools/aws_private_bundle.py keygen --dir "$kd" >/dev/null
+          repo="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}"
+          hs=$(mktemp -d); cp "$kd/public.pem" "$hs/runner.pub.pem"
+          (cd "$hs" && git init -q && git checkout -q -b "aws-private-key/$RUN_ID" && git add -A \
+            && git -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
+                   commit -qm "aws-test: public key of run $RUN_ID" \
+            && git push -q "$repo" "aws-private-key/$RUN_ID")
+          echo "::notice title=private bundle::seal it for branch aws-private-key/$RUN_ID and push it as aws-private/$RUN_ID (45 min)"
+          deadline=$((SECONDS + 2700))
+          until git ls-remote --exit-code "$repo" "refs/heads/aws-private/$RUN_ID" >/dev/null 2>&1; do
+            if [ $SECONDS -ge $deadline ]; then echo "::error title=private bundle::none arrived in 45 min"; exit 1; fi
+            sleep 15
+          done
+          bd=$(mktemp -d); git clone -q --depth 1 --branch "aws-private/$RUN_ID" "$repo" "$bd"
+          python3 tools/aws_private_bundle.py open --dir "$kd" --bundle "$bd" --into . >/dev/null
+          cp "$bd/reply.pub.pem" "$kd/reply.pub.pem"
+          rm -rf "$bd" "$hs"
+          echo "PRIVATE_KEY_DIR=$kd" >> "$GITHUB_ENV"
+          echo "::notice title=private bundle::opened ($(du -sh private | cut -f1))"
       - name: run on AWS
         if: ${{ !inputs.probe_only }}
         env:
           CMD: ${{ inputs.command }}
+          PRIVATE: ${{ inputs.private_run && '1' || '' }}
         run: |
           set -o pipefail
           rc=0
+          extra=()
+          if [ -n "$PRIVATE" ]; then   # the bundle's entry point; its output and files come back sealed
+            CMD="bash private/entry.sh"; extra=(--quiet-command --fetch private_out.tgz)
+          fi
           python3 -u tools/aws_cluster.py run --run-id "$RUN_ID" --region "${{ inputs.region }}" \
             --mode "${{ inputs.mode }}" --type "${{ inputs.type }}" --nodes "${{ inputs.nodes }}" \
             --max-hours "${{ inputs.max_hours }}" --disk-gib "${{ inputs.disk_gib }}" --disk-mbps "${{ inputs.disk_mbps }}" --disk-iops "${{ inputs.disk_iops }}" ${{ inputs.quick && '--quick' || '' }} \
-            ${CMD:+--command "$CMD"} 2>&1 | tee aws_run.log || rc=$?
+            ${CMD:+--command "$CMD"} "${extra[@]}" 2>&1 | tee aws_run.log || rc=$?
           # the progress lines and the outcome, as annotations (readable without the raw log)
           echo "::notice title=aws::$(grep -E '^\[aws ' aws_run.log | tail -25 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
           if [ $rc -ne 0 ]; then
@@ -263,6 +302,27 @@ jobs:
         if: always()
         run: |
           if [ -f "aws_runs/$RUN_ID/state.json" ]; then python3 tools/aws_cluster.py down --run-id "$RUN_ID" --region "${{ inputs.region }}"; fi
+      - name: private bundle -- seal the reports for its owner (nothing in plain text leaves)
+        if: ${{ always() && inputs.private_run && !inputs.probe_only }}
+        run: |
+          d="aws_runs/$RUN_ID"
+          rm -rf private
+          [ -d "$d" ] || exit 0
+          stem="$(mktemp -d)/reports"
+          if [ -f "${PRIVATE_KEY_DIR:-/nonexistent}/reply.pub.pem" ] \
+             && python3 tools/aws_private_bundle.py seal --src "$d" --to "$PRIVATE_KEY_DIR/reply.pub.pem" --out "$stem"; then
+            rm -rf "$d"; mkdir -p "$d"; mv "$stem.tar.enc" "$stem.key.enc" "$d/"
+            echo "::notice title=private bundle::reports sealed ($(du -sh "$d" | cut -f1))"
+          else
+            rm -rf "$d"; echo "::warning title=private bundle::reports could not be sealed: deleted, not published"
+          fi
+      - name: private bundle -- remove the hand-over branches
+        if: ${{ always() && inputs.private_run && !inputs.probe_only }}
+        run: |
+          repo="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}"
+          for b in "aws-private/$RUN_ID" "aws-private-key/$RUN_ID"; do
+            git ls-remote --exit-code "$repo" "refs/heads/$b" >/dev/null 2>&1 && git push -q "$repo" --delete "$b" || true
+          done
       - name: "reports to branch aws-results/<run id> (no SSH key, no file over 20 MB)"
         if: ${{ always() && !inputs.probe_only }}
         run: |
@@ -285,4 +345,5 @@ jobs:
             !aws_runs/${{ env.RUN_ID }}/ssh_key
             !aws_runs/${{ env.RUN_ID }}/**/*.pem
             !aws_runs/${{ env.RUN_ID }}/**/id_*
+            !aws_runs/${{ env.RUN_ID }}/rocepool.tar.gz
           if-no-files-found: warn
