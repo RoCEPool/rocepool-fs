@@ -1,0 +1,12 @@
+[aws 11:31:41] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 11:31:42] 2 x c5n.9xlarge: 36 vCPU, 96 GiB, 50 Gigabit, NVMe 0 GB, EFA yes
+[aws 11:31:42] vCPU quota 300 >= 72 needed (instances already running count against it too)
+[aws 11:31:54] launched i-0fcdf1d4b39045bcd, i-05394af5d3ca85d33
+[aws 11:32:11] running: 52.14.165.92 (172.31.13.87), 3.147.54.206 (172.31.7.135)
+[aws 11:34:24] 52.14.165.92: ready (efa)
+[aws 11:34:39] 3.147.54.206: ready (efa)
+[aws 11:34:50] command started on 52.14.165.92 (2 hosts); following its progress
+[aws 11:47:45] reports in aws_runs/gh-42210772312/: aws_run.out, private_out.tgz, host0_kernel.txt, host1_kernel.txt
+[aws 11:47:45] run.sh exit code 1
+[aws 11:47:46] terminating i-0fcdf1d4b39045bcd, i-05394af5d3ca85d33
+[aws 11:48:20] all resources released
