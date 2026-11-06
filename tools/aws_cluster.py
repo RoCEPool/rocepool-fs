@@ -523,6 +523,8 @@ class Run:
                                "cat aws_run.rc 2>/dev/null || echo running", check=False, timeout=120)
             lines = r.stdout.split()
             n = int(lines[0]) if lines and lines[0].isdigit() else 0
+            if n > seen and a.quiet_command:      # a private command: its output stays on the cluster
+                seen = n
             if n > seen:
                 new = self.ssh(head, f"sed -n '{seen + 1},{n}p' /root/rocepool/aws_run.out", check=False, timeout=120)
                 for l in new.stdout.splitlines():
@@ -546,10 +548,14 @@ class Run:
         r = self.ssh(head, "cd /root/rocepool && ls onsite_writes_*.json onsite_io500_ranks.json onsite_io500_eps*.json "
                            "onsite_rates.json 2>/dev/null", check=False, timeout=60)
         files += [f for f in r.stdout.split() if f.startswith("onsite_") and f.endswith(".json")]
+        # what the run asked for by name (--fetch), relative to the tree on the head
+        for f in getattr(self.args, "fetch", None) or []:
+            if f and not f.startswith("/") and ".." not in f.split("/") and f not in files:
+                files.append(f)
         got = []
         for f in files:
             try:
-                self.scp(f"root@{head}:/root/rocepool/{f}", os.path.join(self.dir, f))
+                self.scp(f"root@{head}:/root/rocepool/{f}", os.path.join(self.dir, os.path.basename(f)))
                 got.append(f)
             except RuntimeError:
                 pass
@@ -640,6 +646,10 @@ def main() -> int:
     r.add_argument("--keep", action="store_true", help="leave the cluster up afterwards (`down` releases it)")
     r.add_argument("--command", help="run this shell command on the head (in the tree; HEAD_IP, PEER_IPS set) instead of "
                                      "run.sh -- for diagnosis; its output comes back as aws_run.out")
+    r.add_argument("--quiet-command", action="store_true",
+                   help="do not echo the --command's output here (a private bundle's run: it comes back encrypted)")
+    r.add_argument("--fetch", action="append", default=[],
+                   help="also bring back this file from the tree on the head (relative path; repeatable)")
     r.add_argument("--max-hours", type=float, default=6.0, help="instances power off (terminate) after this")
     r.add_argument("--disk-gib", type=int, default=200)
     # the OSTs' capacity tier lives on the system disk when the type has no

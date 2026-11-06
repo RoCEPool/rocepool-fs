@@ -105,6 +105,22 @@ class AwsClusterTests(unittest.TestCase):
         self.assertIn("rocepool/run.sh", names)
         self.assertFalse([n for n in names if "/.bench_cache" in n or "/aws_runs" in n])
 
+    def test_a_private_command_keeps_its_output_on_the_cluster_and_fetches_what_it_names(self):
+        r = self.run_tool("--mode", "efa", "--nodes", "2", "--command", "bash private/entry.sh", "--quiet-command",
+                          "--fetch", "private_out.tgz", "--fetch", "../etc/passwd", "--fetch", "/etc/shadow",
+                          env_extra={"FAKE_SCP_EXTRA": "private_out.tgz"}, run_id="rp-private")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("  | ", r.stdout, "the command's output is not echoed")
+        self.assertIn("command started", r.stdout)
+        run_dir = os.path.join(ROOT, "aws_runs", "rp-private")
+        self.assertTrue(os.path.exists(os.path.join(run_dir, "private_out.tgz")), "fetched by name")
+        scps = [c for c in self.calls(self.ssh_log) if c[0] == "scp"]
+        self.assertFalse(any("passwd" in " ".join(c) or "shadow" in " ".join(c) for c in scps),
+                         "nothing outside the tree is fetched")
+        # the negative twin: without --quiet-command the output is echoed as before
+        r2 = self.run_tool("--mode", "efa", "--nodes", "2", "--command", "true", run_id="rp-loud")
+        self.assertIn("  | [PASS] io500", r2.stdout)
+
     def test_rxe_mode_sets_up_soft_roce_without_efa(self):
         r = self.run_tool("--mode", "rxe", "--nodes", "2")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
