@@ -14,7 +14,8 @@ if prog.startswith("fake_scp") or prog == "scp":
     src, dst = args[-2], args[-1]
     if "@" in src and ":" in src:  # fetching from the host
         name = os.path.basename(src.split(":", 1)[1])
-        if name in ("onsite_report.json", "onsite_io500_valid.json", "run.log"):
+        extra = [x for x in os.environ.get("FAKE_SCP_EXTRA", "").split(",") if x]   # more files the host has
+        if name in ("onsite_report.json", "onsite_io500_valid.json", "run.log", *extra):
             with open(dst, "w") as f:
                 if name == "onsite_io500_valid.json":
                     json.dump({"score": {"score": 123.4, "bw_gib_s": 56.7, "md_kiops": 268.5}}, f)

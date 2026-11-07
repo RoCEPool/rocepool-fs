@@ -105,6 +105,22 @@ class AwsClusterTests(unittest.TestCase):
         self.assertIn("rocepool/run.sh", names)
         self.assertFalse([n for n in names if "/.bench_cache" in n or "/aws_runs" in n])
 
+    def test_a_private_command_keeps_its_output_on_the_cluster_and_fetches_what_it_names(self):
+        r = self.run_tool("--mode", "efa", "--nodes", "2", "--command", "bash private/entry.sh", "--quiet-command",
+                          "--fetch", "private_out.tgz", "--fetch", "../etc/passwd", "--fetch", "/etc/shadow",
+                          env_extra={"FAKE_SCP_EXTRA": "private_out.tgz"}, run_id="rp-private")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("  | ", r.stdout, "the command's output is not echoed")
+        self.assertIn("command started", r.stdout)
+        run_dir = os.path.join(ROOT, "aws_runs", "rp-private")
+        self.assertTrue(os.path.exists(os.path.join(run_dir, "private_out.tgz")), "fetched by name")
+        scps = [c for c in self.calls(self.ssh_log) if c[0] == "scp"]
+        self.assertFalse(any("passwd" in " ".join(c) or "shadow" in " ".join(c) for c in scps),
+                         "nothing outside the tree is fetched")
+        # the negative twin: without --quiet-command the output is echoed as before
+        r2 = self.run_tool("--mode", "efa", "--nodes", "2", "--command", "true", run_id="rp-loud")
+        self.assertIn("  | [PASS] io500", r2.stdout)
+
     def test_rxe_mode_sets_up_soft_roce_without_efa(self):
         r = self.run_tool("--mode", "rxe", "--nodes", "2")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
@@ -118,6 +134,35 @@ class AwsClusterTests(unittest.TestCase):
         self.assertNotIn("efa_installer", setup)
         start = next(c for c in self.calls(self.ssh_log) if "run.sh" in c[-1])[-1]
         self.assertNotIn("--quick", start)  # the valid 300 s run
+
+    def test_gpu_mode_one_host_on_the_deep_learning_ami_without_rdma(self):
+        r = self.run_tool("--mode", "gpu", "--nodes", "1", "--type", "g6e.2xlarge", "--command", "true",
+                          env_extra={"FAKE_AWS_NVME_GB": "450", "FAKE_AWS_NO_EFA": "1", "FAKE_AWS_G_QUOTA": "128",
+                                     "FAKE_AWS_SSM_MISSING": "ubuntu-24.04"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("AMI: base-oss-nvidia-driver-gpu-ubuntu-22.04", r.stdout, "24.04 missing: the 22.04 one")
+        ssm = [c for c in self.aws_calls("ssm", "get-parameters") if any("deeplearning" in x for x in c)][0]
+        self.assertIn("/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-22.04/latest/ami-id", ssm,
+                      "AWS's Deep Learning parameters say x86_64, not Canonical's amd64")
+        self.assertFalse(any("/amd64/" in x for x in ssm))
+        run = self.aws_calls("ec2", "run-instances")[0]
+        self.assertNotEqual(run[run.index("--image-id") + 1], "ami-0123456789abcdef0", "not the plain Ubuntu AMI")
+        self.assertNotIn("InterfaceType", run[run.index("--network-interfaces") + 1])
+        setup = [c for c in self.calls(self.ssh_log) if "ROCEPOOL_SETUP" in c[-1]][0][-1]
+        self.assertIn("nvidia-smi -L", setup)
+        self.assertIn("grep -q nvidia", setup, "Docker must have the NVIDIA runtime")
+        self.assertIn("mount --bind /opt/dlami/nvme /nvmedata", setup, "the AMI's NVMe mount is reused")
+        self.assertIn("findmnt -rn -S $d", setup, "a mounted instance-store device is never formatted")
+        self.assertNotIn("efa_installer", setup)
+        self.assertNotIn("rdma_rxe", setup)
+
+    def test_gpu_mode_without_a_deep_learning_ami_stops_before_creating_instances(self):
+        r = self.run_tool("--mode", "gpu", "--nodes", "1", "--type", "g6e.2xlarge",
+                          env_extra={"FAKE_AWS_NO_EFA": "1", "FAKE_AWS_G_QUOTA": "128",
+                                     "FAKE_AWS_SSM_MISSING": "deeplearning"})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("no Deep Learning Base AMI", r.stdout + r.stderr)
+        self.assertFalse(self.aws_calls("ec2", "run-instances"))
 
     def test_local_nvme_is_assembled_and_mounted(self):
         r = self.run_tool("--mode", "efa", "--nodes", "2", "--quick", env_extra={"FAKE_AWS_NVME_GB": "30000"})
@@ -196,6 +241,25 @@ class AwsClusterTests(unittest.TestCase):
         self.assertIn("vCPU quota for on-demand HPC instances is 0", r.stdout)
         self.assertIn("--quota-code L-F7808C92 --desired-value 768", r.stdout)
         self.assertFalse(self.aws_calls("ec2", "run-instances"))
+
+    def test_g_quota_too_low_stops_before_creating_anything(self):
+        r = self.run_tool("--mode", "efa", "--nodes", "2", "--type", "g6e.8xlarge",
+                          env_extra={"FAKE_AWS_G_QUOTA": "0"})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("vCPU quota for on-demand G and VT instances is 0", r.stdout)
+        self.assertIn("--quota-code L-DB2E81BA --desired-value 256", r.stdout)
+        self.assertFalse(self.aws_calls("ec2", "run-instances"))
+
+    def test_quota_codes_per_family(self):
+        sys.path.insert(0, os.path.join(ROOT, "tools"))
+        try:
+            import aws_cluster
+        finally:
+            sys.path.pop(0)
+        for itype, code in (("c6in.32xlarge", "L-1216C47A"), ("hpc6id.32xlarge", "L-F7808C92"),
+                            ("g6e.8xlarge", "L-DB2E81BA"), ("g4dn.xlarge", "L-DB2E81BA"),
+                            ("vt1.3xlarge", "L-DB2E81BA"), ("p5.48xlarge", "L-417A185B")):
+            self.assertEqual(aws_cluster.quota_for(itype)[0], code, itype)
 
     def test_az_without_capacity_moves_to_the_next(self):
         r = self.run_tool("--mode", "efa", "--nodes", "2", env_extra={"FAKE_AWS_NO_CAPACITY": "us-east-1a"})

@@ -4,7 +4,7 @@ every call appended to $FAKE_AWS_LOG (one JSON argv per line).
 $FAKE_AWS_NO_EFA=1: the instance type has no EFA.
 $FAKE_AWS_NO_CAPACITY=az[,az...]: run-instances fails there with InsufficientInstanceCapacity.
 $FAKE_AWS_CARDS=n: the type has n network cards (and n EFA interfaces).
-$FAKE_AWS_VCPU_QUOTA / $FAKE_AWS_HPC_QUOTA: the standard / HPC vCPU quotas."""
+$FAKE_AWS_VCPU_QUOTA / $FAKE_AWS_HPC_QUOTA / $FAKE_AWS_G_QUOTA: the standard / HPC / G-and-VT vCPU quotas."""
 import json
 import os
 import sys
@@ -43,7 +43,15 @@ elif cmd == ("ec2", "describe-instance-types"):
                             **({"InstanceStorageInfo": {"TotalSizeInGB": int(os.environ["FAKE_AWS_NVME_GB"])}}
                                if os.environ.get("FAKE_AWS_NVME_GB") else {})}]})
 elif cmd == ("ssm", "get-parameters"):
-    out({"Parameters": [{"Value": "ami-0123456789abcdef0"}]})
+    # each requested name answers, except those $FAKE_AWS_SSM_MISSING lists (comma-separated substrings)
+    names = []
+    for a_ in sys.argv[sys.argv.index("--names") + 1:]:
+        if a_.startswith("--"):
+            break
+        names.append(a_)
+    gone = [x for x in os.environ.get("FAKE_AWS_SSM_MISSING", "").split(",") if x]
+    out({"Parameters": [{"Name": n, "Value": f"ami-{abs(hash(n)) % 10**12:012d}" if "deeplearning" in n
+                         else "ami-0123456789abcdef0"} for n in names if not any(g in n for g in gone)]})
 elif cmd == ("ec2", "describe-instance-type-offerings"):
     out({"InstanceTypeOfferings": [{"Location": "us-east-1b"}, {"Location": "us-east-1a"}, {"Location": "us-east-1d"}]})
 elif cmd == ("ec2", "describe-vpcs"):
@@ -80,6 +88,7 @@ elif cmd == ("ec2", "allocate-address"):
 elif cmd == ("service-quotas", "get-service-quota"):
     code = argv[argv.index("--quota-code") + 1]
     v = {"L-F7808C92": os.environ.get("FAKE_AWS_HPC_QUOTA", "0"),
+         "L-DB2E81BA": os.environ.get("FAKE_AWS_G_QUOTA", "0"),
          "L-0263D0A3": os.environ.get("FAKE_AWS_EIP_QUOTA", "5")}.get(code, os.environ.get("FAKE_AWS_VCPU_QUOTA", "5000"))
     out({"Quota": {"Value": float(v)}})
 else:
