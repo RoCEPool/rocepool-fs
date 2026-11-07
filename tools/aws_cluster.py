@@ -288,7 +288,8 @@ class Run:
                 f"(one transport rail each)")
             self.check_eips(a.nodes)
         if a.mode == "gpu":
-            names = [n.format(arch=facts["arch"]) for n in DLAMI_SSM]
+            # Canonical's parameters say amd64, AWS's Deep Learning ones x86_64
+            names = [n.format(arch={"amd64": "x86_64"}.get(facts["arch"], facts["arch"])) for n in DLAMI_SSM]
             got = {p["Name"]: p["Value"] for p in self.aws("ssm", "get-parameters", "--names", *names).get("Parameters", [])}
             name = next((n for n in names if n in got), None)
             if not name:

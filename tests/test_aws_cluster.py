@@ -141,6 +141,10 @@ class AwsClusterTests(unittest.TestCase):
                                      "FAKE_AWS_SSM_MISSING": "ubuntu-24.04"})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("AMI: base-oss-nvidia-driver-gpu-ubuntu-22.04", r.stdout, "24.04 missing: the 22.04 one")
+        ssm = [c for c in self.aws_calls("ssm", "get-parameters") if any("deeplearning" in x for x in c)][0]
+        self.assertIn("/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-22.04/latest/ami-id", ssm,
+                      "AWS's Deep Learning parameters say x86_64, not Canonical's amd64")
+        self.assertFalse(any("/amd64/" in x for x in ssm))
         run = self.aws_calls("ec2", "run-instances")[0]
         self.assertNotEqual(run[run.index("--image-id") + 1], "ami-0123456789abcdef0", "not the plain Ubuntu AMI")
         self.assertNotIn("InterfaceType", run[run.index("--network-interfaces") + 1])
