@@ -1,0 +1,5 @@
+[aws 00:11:52] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 00:11:53] 1 x g6e.2xlarge: 8 vCPU, 64 GiB, Up to 20 Gigabit, NVMe 450 GB, EFA no
+[aws 00:11:54] vCPU quota 8 >= 8 needed (instances already running count against it too)
+[aws 00:11:54] FAILED: no Deep Learning Base AMI in us-east-2 (/aws/service/deeplearning/ami/amd64/base-oss-nvidia-driver-gpu-ubuntu-24.04/latest/ami-id, /aws/service/deeplearning/ami/amd64/base-oss-nvidia-driver-gpu-ubuntu-22.04/latest/ami-id)
+[aws 00:11:54] all resources released
