@@ -2,7 +2,9 @@
 """A fake `aws` CLI for tests/test_aws_cluster.py: canned JSON per call,
 every call appended to $FAKE_AWS_LOG (one JSON argv per line).
 $FAKE_AWS_NO_EFA=1: the instance type has no EFA.
-$FAKE_AWS_NO_CAPACITY=az[,az...]: run-instances fails there with InsufficientInstanceCapacity.
+$FAKE_AWS_NO_CAPACITY=az[,az...]: run-instances fails there with InsufficientInstanceCapacity
+  (an entry type@az: only for that instance type).
+$FAKE_AWS_VCPUS=type=n[,type=n]: vCPUs of those types (default 128).
 $FAKE_AWS_CARDS=n: the type has n network cards (and n EFA interfaces).
 $FAKE_AWS_VCPU_QUOTA / $FAKE_AWS_HPC_QUOTA / $FAKE_AWS_G_QUOTA: the standard / HPC / G-and-VT vCPU quotas."""
 import json
@@ -22,7 +24,12 @@ cmd = tuple(argv[:2])
 n = 3
 if "--count" in argv:
     n = int(argv[argv.index("--count") + 1])
-ids = [f"i-{k:04d}" for k in range(n)]
+# instance ids differ per run-instances call (a run may launch several groups)
+_launches = 0
+if cmd == ("ec2", "run-instances"):
+    with open(os.environ["FAKE_AWS_LOG"]) as f:
+        _launches = sum(1 for l in f if '"run-instances"' in l) - 1
+ids = [f"i-{k:04d}" if _launches == 0 else f"i-{_launches}{k:03d}" for k in range(n)]
 
 
 def out(o):
@@ -34,12 +41,14 @@ if cmd == ("configure", "get"):
 elif cmd == ("sts", "get-caller-identity"):
     out({"Account": "123456789012", "Arn": "arn:aws:iam::123456789012:user/test"})
 elif cmd == ("ec2", "describe-instance-types"):
+    _t = argv[argv.index("--instance-types") + 1] if "--instance-types" in argv else ""
+    _v = dict(x.split("=") for x in os.environ.get("FAKE_AWS_VCPUS", "").split(",") if "=" in x)
     out({"InstanceTypes": [{"ProcessorInfo": {"SupportedArchitectures": ["x86_64"]},
                             "NetworkInfo": {"EfaSupported": os.environ.get("FAKE_AWS_NO_EFA") != "1",
                                             "NetworkPerformance": "200 Gigabit",
                                             "MaximumNetworkCards": int(os.environ.get("FAKE_AWS_CARDS", "1")),
                                             "EfaInfo": {"MaximumEfaInterfaces": int(os.environ.get("FAKE_AWS_CARDS", "1"))}},
-                            "VCpuInfo": {"DefaultVCpus": 128}, "MemoryInfo": {"SizeInMiB": 262144},
+                            "VCpuInfo": {"DefaultVCpus": int(_v.get(_t, 128))}, "MemoryInfo": {"SizeInMiB": 262144},
                             **({"InstanceStorageInfo": {"TotalSizeInGB": int(os.environ["FAKE_AWS_NVME_GB"])}}
                                if os.environ.get("FAKE_AWS_NVME_GB") else {})}]})
 elif cmd == ("ssm", "get-parameters"):
@@ -66,7 +75,9 @@ elif cmd == ("ec2", "create-security-group"):
     out({"GroupId": "sg-1"})
 elif cmd == ("ec2", "run-instances"):
     az = json.loads(argv[argv.index("--placement") + 1])["AvailabilityZone"]
-    if az in os.environ.get("FAKE_AWS_NO_CAPACITY", "").split(","):
+    _type = argv[argv.index("--instance-type") + 1]
+    _no = os.environ.get("FAKE_AWS_NO_CAPACITY", "").split(",")
+    if az in _no or f"{_type}@{az}" in _no:
         sys.stderr.write("An error occurred (InsufficientInstanceCapacity) when calling the RunInstances operation: "
                          f"We currently do not have sufficient capacity in the Availability Zone you requested ({az}).\n")
         sys.exit(254)
