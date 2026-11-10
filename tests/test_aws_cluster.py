@@ -311,5 +311,83 @@ class AwsClusterTests(unittest.TestCase):
         self.assertEqual(term[term.index("--instance-ids") + 1:term.index("--instance-ids") + 3], ["i-0000", "i-0001"])
 
 
+    # ---- GPU hosts joined to an EFA cluster (--gpu-type / --gpu-nodes) -------------
+    GPU = ("--mode", "efa", "--nodes", "2", "--type", "c6in.32xlarge", "--gpu-type", "g6e.12xlarge",
+           "--gpu-nodes", "1", "--command", "true")
+    GPU_ENV = {"FAKE_AWS_G_QUOTA": "128", "FAKE_AWS_VCPUS": "g6e.12xlarge=48"}
+
+    def launches(self):
+        out = []
+        for c in self.aws_calls("ec2", "run-instances"):
+            out.append({"type": c[c.index("--instance-type") + 1], "image": c[c.index("--image-id") + 1],
+                        "placement": json.loads(c[c.index("--placement") + 1]),
+                        "nics": json.loads(c[c.index("--network-interfaces") + 1]),
+                        "count": int(c[c.index("--count") + 1])})
+        return out
+
+    def test_gpu_hosts_join_the_efa_cluster_in_its_zone_and_placement_group(self):
+        r = self.run_tool(*self.GPU, env_extra=self.GPU_ENV)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        gpu, storage = self.launches()
+        self.assertEqual((gpu["type"], gpu["count"], storage["type"], storage["count"]),
+                         ("g6e.12xlarge", 1, "c6in.32xlarge", 2), "the GPU group first: its capacity is scarcer")
+        self.assertNotEqual(gpu["image"], "ami-0123456789abcdef0", "GPU hosts on the Deep Learning AMI")
+        self.assertEqual(storage["image"], "ami-0123456789abcdef0")
+        self.assertEqual(gpu["placement"], storage["placement"], "same AZ, same cluster placement group")
+        self.assertIn("GroupName", gpu["placement"])
+        self.assertEqual(gpu["nics"][0].get("InterfaceType"), "efa", "GPU hosts reach the pool over EFA")
+        setups = [c[-1] for c in self.calls(self.ssh_log) if "ROCEPOOL_SETUP" in c[-1]]
+        g = [x for x in setups if "nvidia-smi -L" in x]
+        self.assertEqual(len(g), 1)
+        self.assertIn("fi_info -p efa", g[0], "EFA checked on the GPU host")
+        self.assertEqual(sum("efa_installer.sh -y >/tmp/efa_install.log 2>&1 || (tail" in x and "nvidia-smi" not in x
+                             for x in setups), 2, "storage hosts set up as before")
+        cmd = [c[-1] for c in self.calls(self.ssh_log) if "GPU_IPS=" in c[-1]]
+        self.assertTrue(cmd and "GPU_IPS=172.31.0.1" in cmd[0], cmd)
+        self.assertIn("HEAD_IP=172.31.0.2 PEER_IPS=172.31.0.3 ", cmd[0], "head and peers are the storage hosts only")
+        keyed = [c for c in self.calls(self.ssh_log) if "grep -qF" in c[-1] and "ssh-keygen" not in c[-1]]
+        self.assertEqual(len(keyed), 3, "the head's key on both storage hosts and the GPU host")
+        term = self.aws_calls("ec2", "terminate-instances")
+        self.assertEqual(sorted(term[-1][term[-1].index("--instance-ids") + 1:][:3]),
+                         ["i-0000", "i-1000", "i-1001"], "everything released at the end")
+        self.assertIn("gpu0_kernel.txt", r.stdout, "the GPU host's kernel log is fetched")
+
+    def test_a_zone_without_gpu_capacity_is_skipped_for_both_groups(self):
+        r = self.run_tool(*self.GPU, env_extra={**self.GPU_ENV, "FAKE_AWS_NO_CAPACITY": "g6e.12xlarge@us-east-1a"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        zones = [(l["type"], l["placement"]["AvailabilityZone"]) for l in self.launches()]
+        self.assertEqual(zones, [("g6e.12xlarge", "us-east-1a"), ("g6e.12xlarge", "us-east-1d"),
+                                 ("c6in.32xlarge", "us-east-1d")])
+
+    def test_storage_that_does_not_fit_rolls_back_the_gpu_group_and_moves_on(self):
+        r = self.run_tool(*self.GPU, env_extra={**self.GPU_ENV, "FAKE_AWS_NO_CAPACITY": "c6in.32xlarge@us-east-1a"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        zones = [(l["type"], l["placement"]["AvailabilityZone"]) for l in self.launches()]
+        self.assertEqual(zones, [("g6e.12xlarge", "us-east-1a"), ("c6in.32xlarge", "us-east-1a"),
+                                 ("g6e.12xlarge", "us-east-1d"), ("c6in.32xlarge", "us-east-1d")])
+        first = self.aws_calls("ec2", "terminate-instances")[0]
+        self.assertEqual(first[first.index("--instance-ids") + 1:][:1], ["i-0000"],
+                         "the GPU host launched in us-east-1a is released before trying us-east-1d")
+        self.assertIn("releasing i-0000", r.stdout)
+
+    def test_no_zone_for_both_fails_clearly_and_releases_everything(self):
+        r = self.run_tool(*self.GPU, env_extra={**self.GPU_ENV,
+                                                "FAKE_AWS_NO_CAPACITY": "c6in.32xlarge@us-east-1a,c6in.32xlarge@us-east-1d"})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("no capacity for 1 x g6e.12xlarge + 2 x c6in.32xlarge", r.stdout)
+        launched = {c[c.index("--instance-ids") + 1] for c in self.aws_calls("ec2", "terminate-instances")}
+        self.assertTrue({"i-0000", "i-2000"} <= launched, "both GPU hosts it launched are released")
+
+    def test_gpu_hosts_need_efa_mode_and_their_own_quota_before_anything_is_created(self):
+        r = self.run_tool("--mode", "rxe", "--nodes", "2", "--gpu-type", "g6e.12xlarge", "--gpu-nodes", "1",
+                          env_extra=self.GPU_ENV)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("use --mode efa", r.stdout)
+        self.assertEqual(self.aws_calls("ec2", "run-instances"), [])
+        r = self.run_tool(*self.GPU, env_extra={**self.GPU_ENV, "FAKE_AWS_G_QUOTA": "32"}, run_id="rp-test2")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("vCPU quota for on-demand G and VT instances is 32, this run needs 48", r.stdout)
+        self.assertEqual(self.aws_calls("ec2", "run-instances"), [])
+
 if __name__ == "__main__":
     unittest.main()

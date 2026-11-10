@@ -272,6 +272,38 @@ class Run:
         with urllib.request.urlopen("https://checkip.amazonaws.com", timeout=10) as r:
             return r.read().decode().strip() + "/32"
 
+    def dlami(self, facts: dict) -> tuple:
+        """(AMI id, SSM name) of the Deep Learning Base AMI for the type's arch."""
+        # Canonical's parameters say amd64, AWS's Deep Learning ones x86_64
+        names = [n.format(arch={"amd64": "x86_64"}.get(facts["arch"], facts["arch"])) for n in DLAMI_SSM]
+        got = {p["Name"]: p["Value"] for p in self.aws("ssm", "get-parameters", "--names", *names).get("Parameters", [])}
+        name = next((n for n in names if n in got), None)
+        if not name:
+            raise RuntimeError(f"no Deep Learning Base AMI in {self.aws.region} ({', '.join(names)})")
+        log(f"AMI: {name.split('/')[-3]} ({got[name]})")
+        return got[name], name
+
+    def launch(self, itype: str, count: int, ami: str, nics: list, placement: dict, user_data: str, role: str):
+        """run-instances for one group; None when the zone has no capacity for it."""
+        a, name = self.args, self.run_id
+        try:
+            return self.aws("ec2", "run-instances", "--image-id", ami, "--instance-type", itype,
+                            "--count", str(count), "--key-name", self.state["key"],
+                            "--network-interfaces", json.dumps(nics),
+                            "--placement", json.dumps(placement),
+                            "--instance-initiated-shutdown-behavior", "terminate",
+                            "--block-device-mappings", json.dumps([{"DeviceName": "/dev/sda1", "Ebs": {
+                                "VolumeSize": a.disk_gib, "VolumeType": "gp3", "DeleteOnTermination": True,
+                                "Throughput": a.disk_mbps, "Iops": a.disk_iops}}]),
+                            "--tag-specifications", json.dumps([{"ResourceType": "instance", "Tags": [
+                                {"Key": "Name", "Value": name}, {"Key": "rocepool-run", "Value": name},
+                                {"Key": "rocepool-role", "Value": role}]}]),
+                            "--user-data", user_data)
+        except RuntimeError as e:
+            if not any(k in str(e) for k in ("InsufficientInstanceCapacity", "Unsupported", "InsufficientCapacity")):
+                raise
+            return None
+
     def create(self) -> None:
         a, st, itype = self.args, self.state, self.args.type or DEFAULT_TYPE[self.args.mode]
         facts = self.instance_facts(itype)
@@ -288,20 +320,37 @@ class Run:
                 f"(one transport rail each)")
             self.check_eips(a.nodes)
         if a.mode == "gpu":
-            # Canonical's parameters say amd64, AWS's Deep Learning ones x86_64
-            names = [n.format(arch={"amd64": "x86_64"}.get(facts["arch"], facts["arch"])) for n in DLAMI_SSM]
-            got = {p["Name"]: p["Value"] for p in self.aws("ssm", "get-parameters", "--names", *names).get("Parameters", [])}
-            name = next((n for n in names if n in got), None)
-            if not name:
-                raise RuntimeError(f"no Deep Learning Base AMI in {self.aws.region} ({', '.join(names)})")
-            st["ami"], st["ami_name"] = got[name], name
-            log(f"AMI: {name.split('/')[-3]} ({st['ami']})")
+            st["ami"], st["ami_name"] = self.dlami(facts)
         else:
             ami = self.aws("ssm", "get-parameters", "--names", UBUNTU_SSM.format(arch=facts["arch"]))
             st["ami"] = ami["Parameters"][0]["Value"]
+        gpu = None
+        if a.gpu_nodes:
+            # GPU hosts joined to the EFA cluster (the storage hosts): same AZ,
+            # same placement group, the Deep Learning AMI, an EFA interface
+            if a.mode != "efa":
+                raise RuntimeError("--gpu-nodes joins GPU hosts to an EFA cluster: use --mode efa")
+            if not a.gpu_type:
+                raise RuntimeError("--gpu-nodes needs --gpu-type")
+            gfacts = self.instance_facts(a.gpu_type)
+            log(f"{a.gpu_nodes} x {a.gpu_type} (GPU hosts): {gfacts['vcpus']} vCPU, "
+                f"{gfacts['mem_mib'] // 1024 if gfacts['mem_mib'] else '?'} GiB, {gfacts['network']}, "
+                f"NVMe {gfacts['nvme']} GB, EFA {'yes' if gfacts['efa'] else 'no'}")
+            if not gfacts["efa"]:
+                raise RuntimeError(f"{a.gpu_type} has no EFA: GPU hosts of an EFA cluster need one "
+                                   "(g6e.8xlarge and larger, p4d, p5, ...)")
+            self.check_quota(a.gpu_type, gfacts, a.gpu_nodes)
+            gami, gname = self.dlami(gfacts)
+            gpu = {"type": a.gpu_type, "nodes": a.gpu_nodes, "facts": gfacts, "ami": gami, "ami_name": gname}
+            st["gpu"] = gpu
         offers = self.aws("ec2", "describe-instance-type-offerings", "--location-type", "availability-zone",
                           "--filters", f"Name=instance-type,Values={itype}")
         zones = sorted(o["Location"] for o in offers.get("InstanceTypeOfferings", []))
+        if gpu:
+            g_offers = self.aws("ec2", "describe-instance-type-offerings", "--location-type", "availability-zone",
+                                "--filters", f"Name=instance-type,Values={gpu['type']}")
+            g_zones = {o["Location"] for o in g_offers.get("InstanceTypeOfferings", [])}
+            zones = [z for z in zones if z in g_zones]
         if a.az:
             zones = [z for z in zones if z == a.az]
         if not zones:
@@ -351,38 +400,45 @@ class Run:
                          f"shutdown -h +{shutdown_min} 'rocepool safety limit'\n")
             # an AZ out of capacity for the type: try the next one that offers it
             # (all instances in one AZ: the cluster placement group needs that);
-            # rxe needs no placement group, so as a last resort it goes without one
+            # rxe needs no placement group, so as a last resort it goes without one.
+            # With GPU hosts: the GPU group first (its capacity is the scarcer),
+            # then the storage hosts in the same zone and placement group; a
+            # zone that cannot take both is rolled back before the next is tried.
+            groups = ([("gpu", gpu["type"], gpu["nodes"], gpu["ami"], gpu["facts"])] if gpu else []) + \
+                [("storage", itype, a.nodes, st["ami"], facts)]
             tries = [(z, True) for z in cand] + ([(z, False) for z in cand] if a.mode in ("rxe", "gpu") else [])
-            r, why = None, []
+            why, done = [], False
             for zone, pg in tries:
-                nics = network_interfaces(a.mode, facts, by_az[zone], st["sg"])
                 placement = {"AvailabilityZone": zone, **({"GroupName": st["pg"]} if pg else {})}
-                try:
-                    r = self.aws("ec2", "run-instances", "--image-id", st["ami"], "--instance-type", itype,
-                                 "--count", str(a.nodes), "--key-name", st["key"],
-                                 "--network-interfaces", json.dumps(nics),
-                                 "--placement", json.dumps(placement),
-                                 "--instance-initiated-shutdown-behavior", "terminate",
-                                 "--block-device-mappings", json.dumps([{"DeviceName": "/dev/sda1", "Ebs": {
-                                     "VolumeSize": a.disk_gib, "VolumeType": "gp3", "DeleteOnTermination": True,
-                                     "Throughput": a.disk_mbps, "Iops": a.disk_iops}}]),
-                                 "--tag-specifications", json.dumps([{"ResourceType": "instance", "Tags": [
-                                     {"Key": "Name", "Value": name}, {"Key": "rocepool-run", "Value": name}]}]),
-                                 "--user-data", user_data)
-                except RuntimeError as e:
-                    if not any(k in str(e) for k in ("InsufficientInstanceCapacity", "Unsupported",
-                                                      "InsufficientCapacity")):
-                        raise
-                    why.append(f"{zone}{'' if pg else ' (no placement group)'}")
-                    log(f"no {itype} capacity in {zone}{'' if pg else ' without a placement group'}: trying the next")
-                    continue
-                st.update(az=zone, subnet=by_az[zone], placement_group_used=pg)
-                break
-            if r is None:
-                raise RuntimeError(f"no capacity for {a.nodes} x {itype} in {self.aws.region} (tried {', '.join(why)}): "
+                got = {}
+                for role, t, count, ami, f in groups:
+                    nics = network_interfaces(a.mode, f, by_az[zone], st["sg"])
+                    r = self.launch(t, count, ami, nics, placement, user_data, role)
+                    if r is None:
+                        why.append(f"{t} in {zone}{'' if pg else ' (no placement group)'}")
+                        log(f"no {t} capacity in {zone}{'' if pg else ' without a placement group'}: trying the next")
+                        break
+                    got[role] = [i["InstanceId"] for i in r["Instances"]]
+                    # recorded at once: whatever happens next, down() releases them
+                    st.setdefault("instances", [])
+                    st["instances"] = st["instances"] + got[role]
+                    self.save()
+                else:
+                    st.update(az=zone, subnet=by_az[zone], placement_group_used=pg,
+                              roles={iid: role for role, ids in got.items() for iid in ids})
+                    done = True
+                    break
+                rollback = [iid for ids in got.values() for iid in ids]
+                if rollback:
+                    log(f"releasing {', '.join(rollback)}: the rest does not fit in {zone}")
+                    self.aws("ec2", "terminate-instances", "--instance-ids", *rollback, check=False)
+                    self.aws("ec2", "wait", "instance-terminated", "--instance-ids", *rollback, parse=False, check=False)
+                    st["instances"] = [i for i in st["instances"] if i not in rollback]
+                    self.save()
+            if not done:
+                what = " + ".join(f"{count} x {t}" for _, t, count, _, _ in groups)
+                raise RuntimeError(f"no capacity for {what} in {self.aws.region} (tried {', '.join(why)}): "
                                    "try later, another --type or --region")
-            st["instances"] = [i["InstanceId"] for i in r["Instances"]]
-            self.save()
             log(f"launched {', '.join(st['instances'])}")
         self.aws("ec2", "wait", "instance-running", "--instance-ids", *st["instances"], parse=False)
         if rails > 1:
@@ -392,9 +448,12 @@ class Run:
         for res in d["Reservations"]:
             for i in res["Instances"]:
                 hosts[i["InstanceId"]] = {"public": i.get("PublicIpAddress"), "private": i.get("PrivateIpAddress")}
-        st["hosts"] = [hosts[i] for i in st["instances"]]
+        roles = st.get("roles") or {}
+        st["hosts"] = [hosts[i] for i in st["instances"] if roles.get(i, "storage") == "storage"]
+        st["gpu_hosts"] = [hosts[i] for i in st["instances"] if roles.get(i) == "gpu"]
         self.save()
-        log("running: " + ", ".join(f"{h['public']} ({h['private']})" for h in st["hosts"]))
+        log("running: " + ", ".join(f"{h['public']} ({h['private']})" for h in st["hosts"]) +
+            ("; GPU: " + ", ".join(f"{h['public']} ({h['private']})" for h in st["gpu_hosts"]) if st["gpu_hosts"] else ""))
 
     # ---- 5: hosts --------------------------------------------------------
     def wait_ssh(self, ip: str) -> None:
@@ -408,8 +467,9 @@ class Run:
                 raise RuntimeError(f"{ip}: no SSH after 10 min: {(r.stdout + r.stderr)[-300:]}")
             time.sleep(self.args.poll)
 
-    def setup_script(self) -> str:
-        mode = self.state["mode"]
+    def setup_script(self, mode: str | None = None, facts: dict | None = None, efa: bool = False) -> str:
+        mode = mode or self.state["mode"]
+        facts = self.state.get("facts") if facts is None else facts
         lines = [
             "set -euo pipefail",
             "export DEBIAN_FRONTEND=noninteractive",
@@ -444,6 +504,16 @@ class Run:
                 "if mountpoint -q /opt/dlami/nvme && ! mountpoint -q /nvmedata; then "
                 "sudo mkdir -p /nvmedata && sudo mount --bind /opt/dlami/nvme /nvmedata; fi",
             ]
+            if efa:
+                # a GPU host of an EFA cluster: the Deep Learning AMI ships the EFA
+                # software; installed here only when it does not
+                lines += [
+                    "if ! /opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM 2>/dev/null | grep -q 'provider: efa'; then "
+                    "cd /tmp && curl -sSfO " + EFA_INSTALLER + " && tar xzf aws-efa-installer-latest.tar.gz && "
+                    "cd aws-efa-installer && (sudo ./efa_installer.sh -y >/tmp/efa_install.log 2>&1 || "
+                    "(tail -40 /tmp/efa_install.log; exit 1)); fi",
+                    "/opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM | grep -q 'provider: efa'",
+                ]
         else:
             lines += [
                 "cd /tmp && curl -sSfO " + EFA_INSTALLER,
@@ -452,7 +522,7 @@ class Run:
                 "ls -d /sys/class/infiniband/efa* >/dev/null 2>&1 || sudo modprobe efa",
                 "/opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM | grep -q 'provider: efa'",
             ]
-        if (self.state.get("facts") or {}).get("nvme"):
+        if (facts or {}).get("nvme"):
             # instance-store NVMe (i3en, i4i, ...) comes blank: one RAID 0 of
             # all of them, XFS, at /nvmedata -- tools/nvme_preflight.py then
             # puts the OSTs' tier there (an NVMe-backed file system). Only the
@@ -475,16 +545,23 @@ class Run:
         st = self.state
         script = self.setup_script()
 
-        def one(h):
+        jobs = [(h, script, st["mode"]) for h in st["hosts"]]
+        if st.get("gpu_hosts"):
+            g = st["gpu"]
+            gscript = self.setup_script("gpu", g["facts"], efa=True)
+            jobs += [(h, gscript, f"gpu {g['type']}, EFA") for h in st["gpu_hosts"]]
+
+        def one(job):
+            h, text, what = job
             self.wait_ssh(h["public"])
-            r = self.ssh(h["public"], "bash -s <<'ROCEPOOL_SETUP'\n" + script + "\nROCEPOOL_SETUP", user="ubuntu",
+            r = self.ssh(h["public"], "bash -s <<'ROCEPOOL_SETUP'\n" + text + "\nROCEPOOL_SETUP", user="ubuntu",
                          timeout=2400, check=False)
             if "SETUP_OK" not in r.stdout:
                 raise RuntimeError(f"{h['public']}: setup failed: {(r.stdout + r.stderr)[-1500:]}")
-            return h["public"]
-        with cf.ThreadPoolExecutor(len(st["hosts"])) as ex:
-            for ip in ex.map(one, st["hosts"]):
-                log(f"{ip}: ready ({st['mode']})")
+            return h["public"], what
+        with cf.ThreadPoolExecutor(len(jobs)) as ex:
+            for ip, what in ex.map(one, jobs):
+                log(f"{ip}: ready ({what})")
         # host-to-host root SSH (the head drives the peers): a key made on the
         # head node, its public half appended on every host
         head = st["hosts"][0]["public"]
@@ -492,8 +569,9 @@ class Run:
                            "-f /root/.ssh/id_ed25519; cat /root/.ssh/id_ed25519.pub")
         pub = r.stdout.strip().splitlines()[-1]
         add = f"grep -qF {shlex.quote(pub)} /root/.ssh/authorized_keys || echo {shlex.quote(pub)} >> /root/.ssh/authorized_keys"
-        with cf.ThreadPoolExecutor(len(st["hosts"])) as ex:
-            list(ex.map(lambda h: self.ssh(h["public"], add), st["hosts"]))
+        every = st["hosts"] + (st.get("gpu_hosts") or [])
+        with cf.ThreadPoolExecutor(len(every)) as ex:
+            list(ex.map(lambda h: self.ssh(h["public"], add), every))
         st["setup"] = True
         self.save()
 
@@ -528,7 +606,9 @@ class Run:
             ([] if a.self_test else ["--skip-tests"]) + ["--ip", st["hosts"][0]["private"]]
         if a.command:  # a diagnostic command instead of run.sh: HEAD_IP / PEER_IPS tell it the hosts
             ips = " ".join(h["private"] for h in st["hosts"][1:])
-            cmd = (f"cd /root/rocepool && export HEAD_IP={st['hosts'][0]['private']} PEER_IPS={shlex.quote(ips)}; "
+            gips = " ".join(h["private"] for h in st.get("gpu_hosts") or [])
+            cmd = (f"cd /root/rocepool && export HEAD_IP={st['hosts'][0]['private']} PEER_IPS={shlex.quote(ips)} "
+                   f"GPU_IPS={shlex.quote(gips)}; "
                    f"( {a.command} ) > aws_run.out 2>&1; echo $? > aws_run.rc")
         else:
             # the NIC speed as AWS states it ("50 Gigabit"): ENA reports no
@@ -587,14 +667,16 @@ class Run:
             except RuntimeError:
                 pass
         # every host's kernel log tail (OOM kills, NIC errors) and memory
-        for i, h in enumerate(self.state.get("hosts", [])):
+        tagged = [(f"host{i}", h) for i, h in enumerate(self.state.get("hosts", []))] + \
+            [(f"gpu{i}", h) for i, h in enumerate(self.state.get("gpu_hosts") or [])]
+        for label, h in tagged:
             try:
                 r = self.ssh(h["public"], "dmesg -T 2>/dev/null | tail -200; echo; free -m; echo; "
                                           "ps -eo pid,rss,vsz,stat,etime,comm --sort=-rss | head -15",
                              check=False, timeout=120)
-                with open(os.path.join(self.dir, f"host{i}_kernel.txt"), "w") as f:
+                with open(os.path.join(self.dir, f"{label}_kernel.txt"), "w") as f:
                     f.write(r.stdout)
-                got.append(f"host{i}_kernel.txt")
+                got.append(f"{label}_kernel.txt")
             except (RuntimeError, OSError, subprocess.SubprocessError):
                 pass
         # the servers' and clients' logs of the last IO500 (the head's, and the
@@ -677,6 +759,10 @@ def main() -> int:
                    help="do not echo the --command's output here (a private bundle's run: it comes back encrypted)")
     r.add_argument("--fetch", action="append", default=[],
                    help="also bring back this file from the tree on the head (relative path; repeatable)")
+    r.add_argument("--gpu-type", help="with --gpu-nodes: GPU hosts joined to the EFA cluster (e.g. g6e.12xlarge)")
+    r.add_argument("--gpu-nodes", type=int, default=0,
+                   help="that many GPU hosts in the same AZ and placement group as the --nodes storage hosts "
+                        "(--mode efa); the command sees their addresses in GPU_IPS")
     r.add_argument("--max-hours", type=float, default=6.0, help="instances power off (terminate) after this")
     r.add_argument("--disk-gib", type=int, default=200)
     # the OSTs' capacity tier lives on the system disk when the type has no
