@@ -9,18 +9,27 @@
   "version": "v1.2.0-dev2-171-g90012081f5",
   "partitions_per_node": 1,
   "threads_per_node": 2,
-  "region_mib_per_node": 2880
+  "region_mib_per_node": 2752
  },
  "runs": {
   "rocepool": {
    "data": {
     "chunks": 8,
+    "chunks_per_path": 1,
     "bytes": 1100695743,
-    "bytes_per_node": {
-     "NODE1": 549260759,
-     "NODE2": 551434984
-    },
-    "seconds": 79.6
+    "seconds": 108.2,
+    "per_node": {
+     "NODE1": {
+      "generate_s": 106.5,
+      "write_s": 1.6,
+      "bytes": 549260759
+     },
+     "NODE2": {
+      "generate_s": 104.7,
+      "write_s": 1.8,
+      "bytes": 551434984
+     }
+    }
    },
    "plan": {
     "plan": "bamboo/perftest/configs/tests/tpch-sf1-2D2F.jmx",
@@ -37,7 +46,7 @@
     "steps": [
      {
       "ok": true,
-      "ms": 96,
+      "ms": 120,
       "rows": 0,
       "first": "",
       "error": "",
@@ -48,7 +57,7 @@
      },
      {
       "ok": true,
-      "ms": 56,
+      "ms": 103,
       "rows": 0,
       "first": "",
       "error": "",
@@ -59,7 +68,7 @@
      },
      {
       "ok": true,
-      "ms": 69,
+      "ms": 101,
       "rows": 0,
       "first": "",
       "error": "",
@@ -70,7 +79,7 @@
      },
      {
       "ok": true,
-      "ms": 57,
+      "ms": 100,
       "rows": 0,
       "first": "",
       "error": "",
@@ -81,7 +90,7 @@
      },
      {
       "ok": true,
-      "ms": 80,
+      "ms": 94,
       "rows": 0,
       "first": "",
       "error": "",
@@ -92,7 +101,7 @@
      },
      {
       "ok": true,
-      "ms": 119,
+      "ms": 78,
       "rows": 0,
       "first": "",
       "error": "",
@@ -103,7 +112,7 @@
      },
      {
       "ok": true,
-      "ms": 51,
+      "ms": 62,
       "rows": 0,
       "first": "",
       "error": "",
@@ -114,7 +123,7 @@
      },
      {
       "ok": true,
-      "ms": 85,
+      "ms": 83,
       "rows": 0,
       "first": "",
       "error": "",
@@ -125,7 +134,7 @@
      },
      {
       "ok": true,
-      "ms": 152,
+      "ms": 133,
       "rows": 0,
       "first": "",
       "error": "",
@@ -136,7 +145,7 @@
      },
      {
       "ok": true,
-      "ms": 91,
+      "ms": 73,
       "rows": 0,
       "first": "",
       "error": "",
@@ -147,7 +156,7 @@
      },
      {
       "ok": true,
-      "ms": 176,
+      "ms": 93,
       "rows": 0,
       "first": "",
       "error": "",
@@ -169,7 +178,7 @@
      },
      {
       "ok": true,
-      "ms": 47,
+      "ms": 48,
       "rows": 0,
       "first": "",
       "error": "",
@@ -180,7 +189,7 @@
      },
      {
       "ok": true,
-      "ms": 95,
+      "ms": 84,
       "rows": 0,
       "first": "",
       "error": "",
@@ -191,7 +200,7 @@
      },
      {
       "ok": true,
-      "ms": 56,
+      "ms": 49,
       "rows": 0,
       "first": "",
       "error": "",
@@ -202,7 +211,7 @@
      },
      {
       "ok": true,
-      "ms": 156,
+      "ms": 51,
       "rows": 0,
       "first": "",
       "error": "",
@@ -213,7 +222,7 @@
      },
      {
       "ok": true,
-      "ms": 64,
+      "ms": 133,
       "rows": 0,
       "first": "",
       "error": "",
@@ -224,7 +233,7 @@
      },
      {
       "ok": true,
-      "ms": 132,
+      "ms": 52,
       "rows": 0,
       "first": "",
       "error": "",
@@ -235,7 +244,7 @@
      },
      {
       "ok": true,
-      "ms": 87,
+      "ms": 83,
       "rows": 0,
       "first": "",
       "error": "",
@@ -246,7 +255,7 @@
      },
      {
       "ok": true,
-      "ms": 95,
+      "ms": 47,
       "rows": 0,
       "first": "",
       "error": "",
@@ -257,7 +266,7 @@
      },
      {
       "ok": true,
-      "ms": 99,
+      "ms": 140,
       "rows": 0,
       "first": "",
       "error": "",
@@ -268,7 +277,7 @@
      },
      {
       "ok": true,
-      "ms": 135,
+      "ms": 107,
       "rows": 0,
       "first": "",
       "error": "",
@@ -279,7 +288,7 @@
      },
      {
       "ok": true,
-      "ms": 43,
+      "ms": 84,
       "rows": 0,
       "first": "",
       "error": "",
@@ -290,7 +299,7 @@
      },
      {
       "ok": true,
-      "ms": 67,
+      "ms": 139,
       "rows": 0,
       "first": "",
       "error": "",
@@ -301,7 +310,7 @@
      },
      {
       "ok": true,
-      "ms": 63,
+      "ms": 78,
       "rows": 0,
       "first": "",
       "error": "",
@@ -312,7 +321,7 @@
      },
      {
       "ok": true,
-      "ms": 47,
+      "ms": 63,
       "rows": 0,
       "first": "",
       "error": "",
@@ -323,7 +332,7 @@
      },
      {
       "ok": true,
-      "ms": 26798,
+      "ms": 31846,
       "rows": 0,
       "first": "",
       "error": "",
@@ -334,7 +343,7 @@
      },
      {
       "ok": true,
-      "ms": 434,
+      "ms": 634,
       "rows": 0,
       "first": "",
       "error": "",
@@ -345,7 +354,7 @@
      },
      {
       "ok": true,
-      "ms": 493,
+      "ms": 619,
       "rows": 0,
       "first": "",
       "error": "",
@@ -356,7 +365,7 @@
      },
      {
       "ok": true,
-      "ms": 521,
+      "ms": 565,
       "rows": 0,
       "first": "",
       "error": "",
@@ -367,7 +376,7 @@
      },
      {
       "ok": true,
-      "ms": 501,
+      "ms": 639,
       "rows": 0,
       "first": "",
       "error": "",
@@ -378,7 +387,7 @@
      },
      {
       "ok": true,
-      "ms": 487,
+      "ms": 633,
       "rows": 0,
       "first": "",
       "error": "",
@@ -389,7 +398,7 @@
      },
      {
       "ok": true,
-      "ms": 3299,
+      "ms": 4016,
       "rows": 0,
       "first": "",
       "error": "",
@@ -400,7 +409,7 @@
      },
      {
       "ok": true,
-      "ms": 162,
+      "ms": 187,
       "rows": 0,
       "first": "",
       "error": "",
@@ -411,7 +420,7 @@
      },
      {
       "ok": true,
-      "ms": 188,
+      "ms": 152,
       "rows": 0,
       "first": "",
       "error": "",
@@ -422,7 +431,7 @@
      },
      {
       "ok": true,
-      "ms": 144,
+      "ms": 179,
       "rows": 0,
       "first": "",
       "error": "",
@@ -433,7 +442,7 @@
      },
      {
       "ok": true,
-      "ms": 1095,
+      "ms": 1457,
       "rows": 0,
       "first": "",
       "error": "",
@@ -444,7 +453,7 @@
      },
      {
       "ok": true,
-      "ms": 126,
+      "ms": 188,
       "rows": 0,
       "first": "",
       "error": "",
@@ -455,7 +464,7 @@
      },
      {
       "ok": true,
-      "ms": 84,
+      "ms": 123,
       "rows": 0,
       "first": "",
       "error": "",
@@ -466,7 +475,7 @@
      },
      {
       "ok": true,
-      "ms": 373,
+      "ms": 500,
       "rows": 0,
       "first": "",
       "error": "",
@@ -477,7 +486,7 @@
      },
      {
       "ok": true,
-      "ms": 57,
+      "ms": 95,
       "rows": 0,
       "first": "",
       "error": "",
@@ -488,7 +497,7 @@
      },
      {
       "ok": true,
-      "ms": 478,
+      "ms": 484,
       "rows": 0,
       "first": "",
       "error": "",
@@ -499,7 +508,7 @@
      },
      {
       "ok": true,
-      "ms": 60,
+      "ms": 72,
       "rows": 0,
       "first": "",
       "error": "",
@@ -510,7 +519,7 @@
      },
      {
       "ok": true,
-      "ms": 83,
+      "ms": 81,
       "rows": 0,
       "first": "",
       "error": "",
@@ -521,7 +530,7 @@
      },
      {
       "ok": true,
-      "ms": 262,
+      "ms": 260,
       "rows": 0,
       "first": "",
       "error": "",
@@ -532,7 +541,7 @@
      },
      {
       "ok": true,
-      "ms": 62,
+      "ms": 50,
       "rows": 0,
       "first": "",
       "error": "",
@@ -543,7 +552,7 @@
      },
      {
       "ok": true,
-      "ms": 80,
+      "ms": 99,
       "rows": 0,
       "first": "",
       "error": "",
@@ -554,7 +563,7 @@
      },
      {
       "ok": true,
-      "ms": 43,
+      "ms": 75,
       "rows": 0,
       "first": "",
       "error": "",
@@ -565,7 +574,7 @@
      },
      {
       "ok": true,
-      "ms": 43,
+      "ms": 47,
       "rows": 0,
       "first": "",
       "error": "",
@@ -576,7 +585,7 @@
      },
      {
       "ok": true,
-      "ms": 44,
+      "ms": 43,
       "rows": 0,
       "first": "",
       "error": "",
@@ -587,7 +596,7 @@
      },
      {
       "ok": true,
-      "ms": 108,
+      "ms": 79,
       "rows": 0,
       "first": "",
       "error": "",
@@ -598,7 +607,7 @@
      },
      {
       "ok": true,
-      "ms": 42,
+      "ms": 44,
       "rows": 0,
       "first": "",
       "error": "",
@@ -609,7 +618,7 @@
      },
      {
       "ok": true,
-      "ms": 2570,
+      "ms": 790,
       "rows": 1,
       "first": "6001215",
       "error": "",
@@ -628,7 +637,7 @@
      },
      {
       "ok": true,
-      "ms": 369,
+      "ms": 438,
       "rows": 1,
       "first": "1500000",
       "error": "",
@@ -647,7 +656,7 @@
      },
      {
       "ok": true,
-      "ms": 345,
+      "ms": 428,
       "rows": 1,
       "first": "800000",
       "error": "",
@@ -666,7 +675,7 @@
      },
      {
       "ok": true,
-      "ms": 324,
+      "ms": 453,
       "rows": 1,
       "first": "200000",
       "error": "",
@@ -685,7 +694,7 @@
      },
      {
       "ok": true,
-      "ms": 319,
+      "ms": 375,
       "rows": 1,
       "first": "150000",
       "error": "",
@@ -704,7 +713,7 @@
      },
      {
       "ok": true,
-      "ms": 312,
+      "ms": 353,
       "rows": 1,
       "first": "10000",
       "error": "",
@@ -723,370 +732,1204 @@
      },
      {
       "ok": true,
-      "ms": 2717,
+      "ms": 3819,
       "rows": 4,
-      "first": "A",
       "error": "",
       "digest": "56f31e3be7b38c41cd69e746e965866ac46ffbe0296723e2816a6ff7fdca431b",
+      "answer": [
+       [
+        "A",
+        "F",
+        "37734107.00",
+        "56586554400.73",
+        "53758257382.21",
+        "55909065592.19",
+        "25.52",
+        "38273.13",
+        "0.05",
+        "1478493"
+       ],
+       [
+        "N",
+        "F",
+        "991417.00",
+        "1487504710.38",
+        "1413082173.74",
+        "1469649232.14",
+        "25.52",
+        "38284.47",
+        "0.05",
+        "38854"
+       ],
+       [
+        "N",
+        "O",
+        "74429437.00",
+        "111631834353.84",
+        "106051847034.07",
+        "110297937149.42",
+        "25.50",
+        "38249.32",
+        "0.05",
+        "2918531"
+       ],
+       [
+        "R",
+        "F",
+        "37719753.00",
+        "56568041380.90",
+        "53741292921.05",
+        "55889619477.81",
+        "25.51",
+        "38250.85",
+        "0.05",
+        "1478870"
+       ]
+      ],
+      "first": "A",
       "name": "q1",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select\n  l_returnflag,\n  l_linestatus,\n  sum(l_quantity) as sum_qty,\n  sum(l_extendedprice) as sum_base_price,\n  sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,\n  sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,\n  avg(l_quantity) as avg_qty,\n  avg(l_extendedprice) as avg_price,\n  avg(l_discount) as avg_disc,\n  count(*) as count_order\nfrom\n  lineitem\nwhere\n  l_shipdate <= date '1998-12-01' - interval '90' day\ngroup by\n  l_returnflag,\n  l_linestatus\norder by\n  l_returnflag,\n  l_linestatus;"
      },
      {
       "ok": true,
-      "ms": 2921,
+      "ms": 3787,
       "rows": 4,
-      "first": "A",
       "error": "",
       "digest": "56f31e3be7b38c41cd69e746e965866ac46ffbe0296723e2816a6ff7fdca431b",
+      "answer": [
+       [
+        "A",
+        "F",
+        "37734107.00",
+        "56586554400.73",
+        "53758257382.21",
+        "55909065592.19",
+        "25.52",
+        "38273.13",
+        "0.05",
+        "1478493"
+       ],
+       [
+        "N",
+        "F",
+        "991417.00",
+        "1487504710.38",
+        "1413082173.74",
+        "1469649232.14",
+        "25.52",
+        "38284.47",
+        "0.05",
+        "38854"
+       ],
+       [
+        "N",
+        "O",
+        "74429437.00",
+        "111631834353.84",
+        "106051847034.07",
+        "110297937149.42",
+        "25.50",
+        "38249.32",
+        "0.05",
+        "2918531"
+       ],
+       [
+        "R",
+        "F",
+        "37719753.00",
+        "56568041380.90",
+        "53741292921.05",
+        "55889619477.81",
+        "25.51",
+        "38250.85",
+        "0.05",
+        "1478870"
+       ]
+      ],
+      "first": "A",
       "name": "q1",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select\n  l_returnflag,\n  l_linestatus,\n  sum(l_quantity) as sum_qty,\n  sum(l_extendedprice) as sum_base_price,\n  sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,\n  sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,\n  avg(l_quantity) as avg_qty,\n  avg(l_extendedprice) as avg_price,\n  avg(l_discount) as avg_disc,\n  count(*) as count_order\nfrom\n  lineitem\nwhere\n  l_shipdate <= date '1998-12-01' - interval '90' day\ngroup by\n  l_returnflag,\n  l_linestatus\norder by\n  l_returnflag,\n  l_linestatus;"
      },
      {
       "ok": true,
-      "ms": 2741,
+      "ms": 3633,
       "rows": 4,
-      "first": "A",
       "error": "",
       "digest": "56f31e3be7b38c41cd69e746e965866ac46ffbe0296723e2816a6ff7fdca431b",
+      "answer": [
+       [
+        "A",
+        "F",
+        "37734107.00",
+        "56586554400.73",
+        "53758257382.21",
+        "55909065592.19",
+        "25.52",
+        "38273.13",
+        "0.05",
+        "1478493"
+       ],
+       [
+        "N",
+        "F",
+        "991417.00",
+        "1487504710.38",
+        "1413082173.74",
+        "1469649232.14",
+        "25.52",
+        "38284.47",
+        "0.05",
+        "38854"
+       ],
+       [
+        "N",
+        "O",
+        "74429437.00",
+        "111631834353.84",
+        "106051847034.07",
+        "110297937149.42",
+        "25.50",
+        "38249.32",
+        "0.05",
+        "2918531"
+       ],
+       [
+        "R",
+        "F",
+        "37719753.00",
+        "56568041380.90",
+        "53741292921.05",
+        "55889619477.81",
+        "25.51",
+        "38250.85",
+        "0.05",
+        "1478870"
+       ]
+      ],
+      "first": "A",
       "name": "q1",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select\n  l_returnflag,\n  l_linestatus,\n  sum(l_quantity) as sum_qty,\n  sum(l_extendedprice) as sum_base_price,\n  sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,\n  sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,\n  avg(l_quantity) as avg_qty,\n  avg(l_extendedprice) as avg_price,\n  avg(l_discount) as avg_disc,\n  count(*) as count_order\nfrom\n  lineitem\nwhere\n  l_shipdate <= date '1998-12-01' - interval '90' day\ngroup by\n  l_returnflag,\n  l_linestatus\norder by\n  l_returnflag,\n  l_linestatus;"
      },
      {
       "ok": true,
-      "ms": 2117,
+      "ms": 2372,
       "rows": 10,
-      "first": "2456423",
       "error": "",
       "digest": "087c7bf3d0c40f62caacdf93354cd20601875a58eb060b6961b74d22a75ec2b1",
+      "answer": [
+       [
+        "2456423",
+        "406181.00",
+        "1995-03-05",
+        "0"
+       ],
+       [
+        "3459808",
+        "405838.70",
+        "1995-03-04",
+        "0"
+       ],
+       [
+        "492164",
+        "390324.06",
+        "1995-02-19",
+        "0"
+       ],
+       [
+        "1188320",
+        "384537.93",
+        "1995-03-09",
+        "0"
+       ],
+       [
+        "2435712",
+        "378673.06",
+        "1995-02-26",
+        "0"
+       ]
+      ],
+      "first": "2456423",
       "name": "q3",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  l_orderkey,\n  sum(l_extendedprice*(1-l_discount)) as revenue,\n  o_orderdate,\n  o_shippriority\nfrom \n  customer, \n  orders, \n  lineitem\nwhere \n  c_mktsegment = 'BUILDING'\n  and c_custkey = o_custkey\n  and l_orderkey = o_orderkey\n  and o_orderdate < '1995-03-15'\n  and l_shipdate > '1995-03-15'\ngroup by \n  l_orderkey, \n  o_orderdate, \n  o_shippriority\norder by \n  revenue desc, \n  o_orderdate\nlimit 10;",
+      "answer_rows": 10
      },
      {
       "ok": true,
-      "ms": 2033,
+      "ms": 2299,
       "rows": 10,
-      "first": "2456423",
       "error": "",
       "digest": "087c7bf3d0c40f62caacdf93354cd20601875a58eb060b6961b74d22a75ec2b1",
+      "answer": [
+       [
+        "2456423",
+        "406181.00",
+        "1995-03-05",
+        "0"
+       ],
+       [
+        "3459808",
+        "405838.70",
+        "1995-03-04",
+        "0"
+       ],
+       [
+        "492164",
+        "390324.06",
+        "1995-02-19",
+        "0"
+       ],
+       [
+        "1188320",
+        "384537.93",
+        "1995-03-09",
+        "0"
+       ],
+       [
+        "2435712",
+        "378673.06",
+        "1995-02-26",
+        "0"
+       ]
+      ],
+      "first": "2456423",
       "name": "q3",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  l_orderkey,\n  sum(l_extendedprice*(1-l_discount)) as revenue,\n  o_orderdate,\n  o_shippriority\nfrom \n  customer, \n  orders, \n  lineitem\nwhere \n  c_mktsegment = 'BUILDING'\n  and c_custkey = o_custkey\n  and l_orderkey = o_orderkey\n  and o_orderdate < '1995-03-15'\n  and l_shipdate > '1995-03-15'\ngroup by \n  l_orderkey, \n  o_orderdate, \n  o_shippriority\norder by \n  revenue desc, \n  o_orderdate\nlimit 10;",
+      "answer_rows": 10
      },
      {
       "ok": true,
-      "ms": 1970,
+      "ms": 2226,
       "rows": 10,
-      "first": "2456423",
       "error": "",
       "digest": "087c7bf3d0c40f62caacdf93354cd20601875a58eb060b6961b74d22a75ec2b1",
+      "answer": [
+       [
+        "2456423",
+        "406181.00",
+        "1995-03-05",
+        "0"
+       ],
+       [
+        "3459808",
+        "405838.70",
+        "1995-03-04",
+        "0"
+       ],
+       [
+        "492164",
+        "390324.06",
+        "1995-02-19",
+        "0"
+       ],
+       [
+        "1188320",
+        "384537.93",
+        "1995-03-09",
+        "0"
+       ],
+       [
+        "2435712",
+        "378673.06",
+        "1995-02-26",
+        "0"
+       ]
+      ],
+      "first": "2456423",
       "name": "q3",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  l_orderkey,\n  sum(l_extendedprice*(1-l_discount)) as revenue,\n  o_orderdate,\n  o_shippriority\nfrom \n  customer, \n  orders, \n  lineitem\nwhere \n  c_mktsegment = 'BUILDING'\n  and c_custkey = o_custkey\n  and l_orderkey = o_orderkey\n  and o_orderdate < '1995-03-15'\n  and l_shipdate > '1995-03-15'\ngroup by \n  l_orderkey, \n  o_orderdate, \n  o_shippriority\norder by \n  revenue desc, \n  o_orderdate\nlimit 10;",
+      "answer_rows": 10
      },
      {
       "ok": true,
-      "ms": 1306,
+      "ms": 1546,
       "rows": 5,
-      "first": "1-URGENT",
       "error": "",
       "digest": "967d47370f84f34fc2245a70dd84b1279b351c9832826fe2a75252e47a85ad36",
+      "answer": [
+       [
+        "1-URGENT",
+        "10594"
+       ],
+       [
+        "2-HIGH",
+        "10476"
+       ],
+       [
+        "3-MEDIUM",
+        "10410"
+       ],
+       [
+        "4-NOT SPECIFIED",
+        "10556"
+       ],
+       [
+        "5-LOW",
+        "10487"
+       ]
+      ],
+      "first": "1-URGENT",
       "name": "q4",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  o_orderpriority, \n  count(*) as order_count\nfrom \n  orders\nwhere \n  o_orderdate >= date '1993-07-01'\n  and o_orderdate < date '1993-07-01' + interval '3' month\n  and exists (\n    select \n      *\n    from \n      lineitem\n    where \n      l_orderkey = o_orderkey\n      and l_commitdate < l_receiptdate )\ngroup by \n  o_orderpriority\norder by \n  o_orderpriority;"
      },
      {
       "ok": true,
-      "ms": 1370,
+      "ms": 1586,
       "rows": 5,
-      "first": "1-URGENT",
       "error": "",
       "digest": "967d47370f84f34fc2245a70dd84b1279b351c9832826fe2a75252e47a85ad36",
+      "answer": [
+       [
+        "1-URGENT",
+        "10594"
+       ],
+       [
+        "2-HIGH",
+        "10476"
+       ],
+       [
+        "3-MEDIUM",
+        "10410"
+       ],
+       [
+        "4-NOT SPECIFIED",
+        "10556"
+       ],
+       [
+        "5-LOW",
+        "10487"
+       ]
+      ],
+      "first": "1-URGENT",
       "name": "q4",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  o_orderpriority, \n  count(*) as order_count\nfrom \n  orders\nwhere \n  o_orderdate >= date '1993-07-01'\n  and o_orderdate < date '1993-07-01' + interval '3' month\n  and exists (\n    select \n      *\n    from \n      lineitem\n    where \n      l_orderkey = o_orderkey\n      and l_commitdate < l_receiptdate )\ngroup by \n  o_orderpriority\norder by \n  o_orderpriority;"
      },
      {
       "ok": true,
-      "ms": 1320,
+      "ms": 1618,
       "rows": 5,
-      "first": "1-URGENT",
       "error": "",
       "digest": "967d47370f84f34fc2245a70dd84b1279b351c9832826fe2a75252e47a85ad36",
+      "answer": [
+       [
+        "1-URGENT",
+        "10594"
+       ],
+       [
+        "2-HIGH",
+        "10476"
+       ],
+       [
+        "3-MEDIUM",
+        "10410"
+       ],
+       [
+        "4-NOT SPECIFIED",
+        "10556"
+       ],
+       [
+        "5-LOW",
+        "10487"
+       ]
+      ],
+      "first": "1-URGENT",
       "name": "q4",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  o_orderpriority, \n  count(*) as order_count\nfrom \n  orders\nwhere \n  o_orderdate >= date '1993-07-01'\n  and o_orderdate < date '1993-07-01' + interval '3' month\n  and exists (\n    select \n      *\n    from \n      lineitem\n    where \n      l_orderkey = o_orderkey\n      and l_commitdate < l_receiptdate )\ngroup by \n  o_orderpriority\norder by \n  o_orderpriority;"
      },
      {
       "ok": true,
-      "ms": 993,
+      "ms": 1216,
       "rows": 1,
-      "first": "123141101.83",
       "error": "",
       "digest": "4ea8102ed6cfbab237fa88cf3341093749180861c2f02725d1013fb8afb793e9",
+      "answer": [
+       [
+        "123141101.83"
+       ]
+      ],
+      "first": "123141101.83",
       "name": "q6",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  sum(l_extendedprice*l_discount) as revenue\nfrom \n  lineitem\nwhere \n  l_shipdate >= date '1994-01-01'\n  and l_shipdate < date '1994-01-01' + interval '1' year\n  and l_discount between 0.06 - 0.01 and 0.06 + 0.01\n  and l_quantity < 24;"
      },
      {
       "ok": true,
-      "ms": 990,
+      "ms": 1193,
       "rows": 1,
-      "first": "123141101.83",
       "error": "",
       "digest": "4ea8102ed6cfbab237fa88cf3341093749180861c2f02725d1013fb8afb793e9",
+      "answer": [
+       [
+        "123141101.83"
+       ]
+      ],
+      "first": "123141101.83",
       "name": "q6",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  sum(l_extendedprice*l_discount) as revenue\nfrom \n  lineitem\nwhere \n  l_shipdate >= date '1994-01-01'\n  and l_shipdate < date '1994-01-01' + interval '1' year\n  and l_discount between 0.06 - 0.01 and 0.06 + 0.01\n  and l_quantity < 24;"
      },
      {
       "ok": true,
-      "ms": 1015,
+      "ms": 1178,
       "rows": 1,
-      "first": "123141101.83",
       "error": "",
       "digest": "4ea8102ed6cfbab237fa88cf3341093749180861c2f02725d1013fb8afb793e9",
+      "answer": [
+       [
+        "123141101.83"
+       ]
+      ],
+      "first": "123141101.83",
       "name": "q6",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  sum(l_extendedprice*l_discount) as revenue\nfrom \n  lineitem\nwhere \n  l_shipdate >= date '1994-01-01'\n  and l_shipdate < date '1994-01-01' + interval '1' year\n  and l_discount between 0.06 - 0.01 and 0.06 + 0.01\n  and l_quantity < 24;"
      },
      {
       "ok": true,
-      "ms": 8368,
+      "ms": 8853,
       "rows": 4,
-      "first": "FRANCE",
       "error": "",
       "digest": "29729bcaba1f00eadaaa182b3f8ed2ec004d6e74ebd285a61cc82a3e493babd8",
+      "answer": [
+       [
+        "FRANCE",
+        "GERMANY",
+        "1995",
+        "54639732.86"
+       ],
+       [
+        "FRANCE",
+        "GERMANY",
+        "1996",
+        "54633083.54"
+       ],
+       [
+        "GERMANY",
+        "FRANCE",
+        "1995",
+        "52531746.66"
+       ],
+       [
+        "GERMANY",
+        "FRANCE",
+        "1996",
+        "52520549.07"
+       ]
+      ],
+      "first": "FRANCE",
       "name": "q7",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  supp_nation, \n  cust_nation, \n  l_year, \n  sum(volume) as revenue\nfrom \n  ( \n    select \n      n1.n_name as supp_nation,\n      n2.n_name as cust_nation,\n      extract(year from l_shipdate) as l_year,\n      l_extendedprice * (1 - l_discount) as volume\n    from \n      supplier, \n      lineitem, \n      orders, \n      customer, \n      nation n1, \n      nation n2\n    where \n      s_suppkey = l_suppkey\n      and o_orderkey = l_orderkey\n      and c_custkey = o_custkey\n      and s_nationkey = n1.n_nationkey\n      and c_nationkey = n2.n_nationkey\n      and ( \n           (n1.n_name = 'FRANCE'  and n2.n_name = 'GERMANY')\n        or (n1.n_name = 'GERMANY' and n2.n_name = 'FRANCE')\n      )\n      and l_shipdate >= '1995-01-01'\n      and l_shipdate <= '1996-12-31'\n   ) as shipping\ngroup by \n  supp_nation, \n  cust_nation, \n  l_year\norder by \n  supp_nation, \n  cust_nation, \n  l_year;"
      },
      {
       "ok": true,
-      "ms": 8082,
+      "ms": 9005,
       "rows": 4,
-      "first": "FRANCE",
       "error": "",
       "digest": "29729bcaba1f00eadaaa182b3f8ed2ec004d6e74ebd285a61cc82a3e493babd8",
+      "answer": [
+       [
+        "FRANCE",
+        "GERMANY",
+        "1995",
+        "54639732.86"
+       ],
+       [
+        "FRANCE",
+        "GERMANY",
+        "1996",
+        "54633083.54"
+       ],
+       [
+        "GERMANY",
+        "FRANCE",
+        "1995",
+        "52531746.66"
+       ],
+       [
+        "GERMANY",
+        "FRANCE",
+        "1996",
+        "52520549.07"
+       ]
+      ],
+      "first": "FRANCE",
       "name": "q7",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  supp_nation, \n  cust_nation, \n  l_year, \n  sum(volume) as revenue\nfrom \n  ( \n    select \n      n1.n_name as supp_nation,\n      n2.n_name as cust_nation,\n      extract(year from l_shipdate) as l_year,\n      l_extendedprice * (1 - l_discount) as volume\n    from \n      supplier, \n      lineitem, \n      orders, \n      customer, \n      nation n1, \n      nation n2\n    where \n      s_suppkey = l_suppkey\n      and o_orderkey = l_orderkey\n      and c_custkey = o_custkey\n      and s_nationkey = n1.n_nationkey\n      and c_nationkey = n2.n_nationkey\n      and ( \n           (n1.n_name = 'FRANCE'  and n2.n_name = 'GERMANY')\n        or (n1.n_name = 'GERMANY' and n2.n_name = 'FRANCE')\n      )\n      and l_shipdate >= '1995-01-01'\n      and l_shipdate <= '1996-12-31'\n   ) as shipping\ngroup by \n  supp_nation, \n  cust_nation, \n  l_year\norder by \n  supp_nation, \n  cust_nation, \n  l_year;"
      },
      {
       "ok": true,
-      "ms": 8406,
+      "ms": 9119,
       "rows": 4,
-      "first": "FRANCE",
       "error": "",
       "digest": "29729bcaba1f00eadaaa182b3f8ed2ec004d6e74ebd285a61cc82a3e493babd8",
+      "answer": [
+       [
+        "FRANCE",
+        "GERMANY",
+        "1995",
+        "54639732.86"
+       ],
+       [
+        "FRANCE",
+        "GERMANY",
+        "1996",
+        "54633083.54"
+       ],
+       [
+        "GERMANY",
+        "FRANCE",
+        "1995",
+        "52531746.66"
+       ],
+       [
+        "GERMANY",
+        "FRANCE",
+        "1996",
+        "52520549.07"
+       ]
+      ],
+      "first": "FRANCE",
       "name": "q7",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  supp_nation, \n  cust_nation, \n  l_year, \n  sum(volume) as revenue\nfrom \n  ( \n    select \n      n1.n_name as supp_nation,\n      n2.n_name as cust_nation,\n      extract(year from l_shipdate) as l_year,\n      l_extendedprice * (1 - l_discount) as volume\n    from \n      supplier, \n      lineitem, \n      orders, \n      customer, \n      nation n1, \n      nation n2\n    where \n      s_suppkey = l_suppkey\n      and o_orderkey = l_orderkey\n      and c_custkey = o_custkey\n      and s_nationkey = n1.n_nationkey\n      and c_nationkey = n2.n_nationkey\n      and ( \n           (n1.n_name = 'FRANCE'  and n2.n_name = 'GERMANY')\n        or (n1.n_name = 'GERMANY' and n2.n_name = 'FRANCE')\n      )\n      and l_shipdate >= '1995-01-01'\n      and l_shipdate <= '1996-12-31'\n   ) as shipping\ngroup by \n  supp_nation, \n  cust_nation, \n  l_year\norder by \n  supp_nation, \n  cust_nation, \n  l_year;"
      },
      {
       "ok": true,
-      "ms": 8728,
+      "ms": 9665,
       "rows": 2,
-      "first": "1995",
       "error": "",
       "digest": "cc9619527d561da2f25c7bfd9b0224055572e76c1d2f3d114719e310416756b7",
+      "answer": [
+       [
+        "1995",
+        "0.03"
+       ],
+       [
+        "1996",
+        "0.04"
+       ]
+      ],
+      "first": "1995",
       "name": "q8",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  o_year,\n  sum(case when nation = 'BRAZIL' then volume else 0 end) / sum(volume) as mkt_share\nfrom ( \n  select \n    extract(year from o_orderdate) as o_year,\n    l_extendedprice * (1-l_discount) as volume,\n    n2.n_name as nation\n  from \n    part, \n    supplier, \n    lineitem, \n    orders, \n    customer, \n    nation n1, \n    nation n2, \n    region\n  where \n    p_partkey = l_partkey\n    and s_suppkey = l_suppkey\n    and l_orderkey = o_orderkey\n    and o_custkey = c_custkey\n    and c_nationkey = n1.n_nationkey\n    and n1.n_regionkey = r_regionkey\n    and r_name = 'AMERICA'\n    and s_nationkey = n2.n_nationkey\n    and o_orderdate between date '1995-01-01' and date '1996-12-31'\n    and p_type = 'ECONOMY ANODIZED STEEL' \n  ) as all_nations\ngroup by \n  o_year\norder by \n  o_year;"
      },
      {
       "ok": true,
-      "ms": 8634,
+      "ms": 9456,
       "rows": 2,
-      "first": "1995",
       "error": "",
       "digest": "cc9619527d561da2f25c7bfd9b0224055572e76c1d2f3d114719e310416756b7",
+      "answer": [
+       [
+        "1995",
+        "0.03"
+       ],
+       [
+        "1996",
+        "0.04"
+       ]
+      ],
+      "first": "1995",
       "name": "q8",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  o_year,\n  sum(case when nation = 'BRAZIL' then volume else 0 end) / sum(volume) as mkt_share\nfrom ( \n  select \n    extract(year from o_orderdate) as o_year,\n    l_extendedprice * (1-l_discount) as volume,\n    n2.n_name as nation\n  from \n    part, \n    supplier, \n    lineitem, \n    orders, \n    customer, \n    nation n1, \n    nation n2, \n    region\n  where \n    p_partkey = l_partkey\n    and s_suppkey = l_suppkey\n    and l_orderkey = o_orderkey\n    and o_custkey = c_custkey\n    and c_nationkey = n1.n_nationkey\n    and n1.n_regionkey = r_regionkey\n    and r_name = 'AMERICA'\n    and s_nationkey = n2.n_nationkey\n    and o_orderdate between date '1995-01-01' and date '1996-12-31'\n    and p_type = 'ECONOMY ANODIZED STEEL' \n  ) as all_nations\ngroup by \n  o_year\norder by \n  o_year;"
      },
      {
       "ok": true,
-      "ms": 8443,
+      "ms": 9340,
       "rows": 2,
-      "first": "1995",
       "error": "",
       "digest": "cc9619527d561da2f25c7bfd9b0224055572e76c1d2f3d114719e310416756b7",
+      "answer": [
+       [
+        "1995",
+        "0.03"
+       ],
+       [
+        "1996",
+        "0.04"
+       ]
+      ],
+      "first": "1995",
       "name": "q8",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  o_year,\n  sum(case when nation = 'BRAZIL' then volume else 0 end) / sum(volume) as mkt_share\nfrom ( \n  select \n    extract(year from o_orderdate) as o_year,\n    l_extendedprice * (1-l_discount) as volume,\n    n2.n_name as nation\n  from \n    part, \n    supplier, \n    lineitem, \n    orders, \n    customer, \n    nation n1, \n    nation n2, \n    region\n  where \n    p_partkey = l_partkey\n    and s_suppkey = l_suppkey\n    and l_orderkey = o_orderkey\n    and o_custkey = c_custkey\n    and c_nationkey = n1.n_nationkey\n    and n1.n_regionkey = r_regionkey\n    and r_name = 'AMERICA'\n    and s_nationkey = n2.n_nationkey\n    and o_orderdate between date '1995-01-01' and date '1996-12-31'\n    and p_type = 'ECONOMY ANODIZED STEEL' \n  ) as all_nations\ngroup by \n  o_year\norder by \n  o_year;"
      },
      {
       "ok": true,
-      "ms": 8667,
+      "ms": 9750,
       "rows": 175,
-      "first": "ALGERIA",
       "error": "",
       "digest": "858e34589c5e54d279acefb55ba2dc8ac4e4df9135941aeb908378bc9ca608dd",
+      "answer": [
+       [
+        "ALGERIA",
+        "1998",
+        "27136900.41"
+       ],
+       [
+        "ALGERIA",
+        "1997",
+        "48611833.70"
+       ],
+       [
+        "ALGERIA",
+        "1996",
+        "48285482.91"
+       ],
+       [
+        "ALGERIA",
+        "1995",
+        "44402273.96"
+       ],
+       [
+        "ALGERIA",
+        "1994",
+        "48694008.22"
+       ]
+      ],
+      "first": "ALGERIA",
       "name": "q9",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  nation, \n  o_year, \n  sum(amount) as sum_profit\nfrom ( \n  select \n    n_name as nation,\n    extract(year from o_orderdate) as o_year,\n    l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount\n  from \n    part, \n    supplier, \n    lineitem, \n    partsupp, \n    orders, \n    nation\n  where \n    s_suppkey = l_suppkey\n    and ps_suppkey = l_suppkey\n    and ps_partkey = l_partkey\n    and p_partkey = l_partkey\n    and o_orderkey = l_orderkey\n    and s_nationkey = n_nationkey\n    and p_name like '%green%' \n  ) as profit\ngroup by \n  nation, \n  o_year\norder by \n  nation, \n  o_year desc;",
+      "answer_rows": 175
      },
      {
       "ok": true,
-      "ms": 8537,
+      "ms": 10168,
       "rows": 175,
-      "first": "ALGERIA",
       "error": "",
       "digest": "858e34589c5e54d279acefb55ba2dc8ac4e4df9135941aeb908378bc9ca608dd",
+      "answer": [
+       [
+        "ALGERIA",
+        "1998",
+        "27136900.41"
+       ],
+       [
+        "ALGERIA",
+        "1997",
+        "48611833.70"
+       ],
+       [
+        "ALGERIA",
+        "1996",
+        "48285482.91"
+       ],
+       [
+        "ALGERIA",
+        "1995",
+        "44402273.96"
+       ],
+       [
+        "ALGERIA",
+        "1994",
+        "48694008.22"
+       ]
+      ],
+      "first": "ALGERIA",
       "name": "q9",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  nation, \n  o_year, \n  sum(amount) as sum_profit\nfrom ( \n  select \n    n_name as nation,\n    extract(year from o_orderdate) as o_year,\n    l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount\n  from \n    part, \n    supplier, \n    lineitem, \n    partsupp, \n    orders, \n    nation\n  where \n    s_suppkey = l_suppkey\n    and ps_suppkey = l_suppkey\n    and ps_partkey = l_partkey\n    and p_partkey = l_partkey\n    and o_orderkey = l_orderkey\n    and s_nationkey = n_nationkey\n    and p_name like '%green%' \n  ) as profit\ngroup by \n  nation, \n  o_year\norder by \n  nation, \n  o_year desc;",
+      "answer_rows": 175
      },
      {
       "ok": true,
-      "ms": 8476,
+      "ms": 9861,
       "rows": 175,
-      "first": "ALGERIA",
       "error": "",
       "digest": "858e34589c5e54d279acefb55ba2dc8ac4e4df9135941aeb908378bc9ca608dd",
+      "answer": [
+       [
+        "ALGERIA",
+        "1998",
+        "27136900.41"
+       ],
+       [
+        "ALGERIA",
+        "1997",
+        "48611833.70"
+       ],
+       [
+        "ALGERIA",
+        "1996",
+        "48285482.91"
+       ],
+       [
+        "ALGERIA",
+        "1995",
+        "44402273.96"
+       ],
+       [
+        "ALGERIA",
+        "1994",
+        "48694008.22"
+       ]
+      ],
+      "first": "ALGERIA",
       "name": "q9",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  nation, \n  o_year, \n  sum(amount) as sum_profit\nfrom ( \n  select \n    n_name as nation,\n    extract(year from o_orderdate) as o_year,\n    l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount\n  from \n    part, \n    supplier, \n    lineitem, \n    partsupp, \n    orders, \n    nation\n  where \n    s_suppkey = l_suppkey\n    and ps_suppkey = l_suppkey\n    and ps_partkey = l_partkey\n    and p_partkey = l_partkey\n    and o_orderkey = l_orderkey\n    and s_nationkey = n_nationkey\n    and p_name like '%green%' \n  ) as profit\ngroup by \n  nation, \n  o_year\norder by \n  nation, \n  o_year desc;",
+      "answer_rows": 175
      },
      {
       "ok": true,
-      "ms": 3743,
+      "ms": 4309,
       "rows": 20,
-      "first": "57040",
       "error": "",
       "digest": "bc574ed4a08e6807bd4f893566e6541a585c511b0d11c8ce5f3e4231776866ff",
+      "answer": [
+       [
+        "57040",
+        "Customer#000057040",
+        "734235.24",
+        "632.87",
+        "JAPAN",
+        "Eioyzjf4pp",
+        "22-895-641-3466",
+        "sits. slyly regular requests sleep alongside of the regular inst"
+       ],
+       [
+        "143347",
+        "Customer#000143347",
+        "721002.68",
+        "2557.47",
+        "EGYPT",
+        "1aReFYv,Kw4",
+        "14-742-935-3718",
+        "ggle carefully enticing requests. final deposits use bold, bold pinto beans. ironic, idle re"
+       ],
+       [
+        "60838",
+        "Customer#000060838",
+        "679127.31",
+        "2454.77",
+        "BRAZIL",
+        "64EaJ5vMAHWJlBOxJklpNc2RJiWE",
+        "12-913-494-9813",
+        " need to boost against the slyly regular account"
+       ],
+       [
+        "101998",
+        "Customer#000101998",
+        "637029.57",
+        "3790.89",
+        "UNITED KINGDOM",
+        "01c9CILnNtfOQYmZj",
+        "33-593-865-6378",
+        "ress foxes wake slyly after the bold excuses. ironic platelets are furiously carefully bold theodolites"
+       ],
+       [
+        "125341",
+        "Customer#000125341",
+        "633508.08",
+        "4983.51",
+        "GERMANY",
+        "S29ODD6bceU8QSuuEJznkNaK",
+        "17-582-695-5962",
+        "arefully even depths. blithely even excuses sleep furiously. foxes use except the dependencies. ca"
+       ]
+      ],
+      "first": "57040",
       "name": "q10",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  c_custkey, \n  c_name, \n  sum(l_extendedprice * (1 - l_discount)) as revenue,\n  c_acctbal, \n  n_name, \n  c_address, \n  c_phone, \n  c_comment\nfrom \n  customer, \n  orders, \n  lineitem, \n  nation\nwhere \n  c_custkey = o_custkey\n  and l_orderkey = o_orderkey\n  and o_orderdate >= date '1993-10-01'\n  and o_orderdate < date '1993-10-01' + interval '3' month\n  and l_returnflag = 'R'\n  and c_nationkey = n_nationkey\ngroup by \n  c_custkey, \n  c_name, \n  c_acctbal, \n  c_phone, \n  n_name, \n  c_address, \n  c_comment\norder by \n  revenue desc \nlimit 20;",
+      "answer_rows": 20
      },
      {
       "ok": true,
-      "ms": 3500,
+      "ms": 4580,
       "rows": 20,
-      "first": "57040",
       "error": "",
       "digest": "bc574ed4a08e6807bd4f893566e6541a585c511b0d11c8ce5f3e4231776866ff",
+      "answer": [
+       [
+        "57040",
+        "Customer#000057040",
+        "734235.24",
+        "632.87",
+        "JAPAN",
+        "Eioyzjf4pp",
+        "22-895-641-3466",
+        "sits. slyly regular requests sleep alongside of the regular inst"
+       ],
+       [
+        "143347",
+        "Customer#000143347",
+        "721002.68",
+        "2557.47",
+        "EGYPT",
+        "1aReFYv,Kw4",
+        "14-742-935-3718",
+        "ggle carefully enticing requests. final deposits use bold, bold pinto beans. ironic, idle re"
+       ],
+       [
+        "60838",
+        "Customer#000060838",
+        "679127.31",
+        "2454.77",
+        "BRAZIL",
+        "64EaJ5vMAHWJlBOxJklpNc2RJiWE",
+        "12-913-494-9813",
+        " need to boost against the slyly regular account"
+       ],
+       [
+        "101998",
+        "Customer#000101998",
+        "637029.57",
+        "3790.89",
+        "UNITED KINGDOM",
+        "01c9CILnNtfOQYmZj",
+        "33-593-865-6378",
+        "ress foxes wake slyly after the bold excuses. ironic platelets are furiously carefully bold theodolites"
+       ],
+       [
+        "125341",
+        "Customer#000125341",
+        "633508.08",
+        "4983.51",
+        "GERMANY",
+        "S29ODD6bceU8QSuuEJznkNaK",
+        "17-582-695-5962",
+        "arefully even depths. blithely even excuses sleep furiously. foxes use except the dependencies. ca"
+       ]
+      ],
+      "first": "57040",
       "name": "q10",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  c_custkey, \n  c_name, \n  sum(l_extendedprice * (1 - l_discount)) as revenue,\n  c_acctbal, \n  n_name, \n  c_address, \n  c_phone, \n  c_comment\nfrom \n  customer, \n  orders, \n  lineitem, \n  nation\nwhere \n  c_custkey = o_custkey\n  and l_orderkey = o_orderkey\n  and o_orderdate >= date '1993-10-01'\n  and o_orderdate < date '1993-10-01' + interval '3' month\n  and l_returnflag = 'R'\n  and c_nationkey = n_nationkey\ngroup by \n  c_custkey, \n  c_name, \n  c_acctbal, \n  c_phone, \n  n_name, \n  c_address, \n  c_comment\norder by \n  revenue desc \nlimit 20;",
+      "answer_rows": 20
      },
      {
       "ok": true,
-      "ms": 3689,
+      "ms": 4645,
       "rows": 20,
-      "first": "57040",
       "error": "",
       "digest": "bc574ed4a08e6807bd4f893566e6541a585c511b0d11c8ce5f3e4231776866ff",
+      "answer": [
+       [
+        "57040",
+        "Customer#000057040",
+        "734235.24",
+        "632.87",
+        "JAPAN",
+        "Eioyzjf4pp",
+        "22-895-641-3466",
+        "sits. slyly regular requests sleep alongside of the regular inst"
+       ],
+       [
+        "143347",
+        "Customer#000143347",
+        "721002.68",
+        "2557.47",
+        "EGYPT",
+        "1aReFYv,Kw4",
+        "14-742-935-3718",
+        "ggle carefully enticing requests. final deposits use bold, bold pinto beans. ironic, idle re"
+       ],
+       [
+        "60838",
+        "Customer#000060838",
+        "679127.31",
+        "2454.77",
+        "BRAZIL",
+        "64EaJ5vMAHWJlBOxJklpNc2RJiWE",
+        "12-913-494-9813",
+        " need to boost against the slyly regular account"
+       ],
+       [
+        "101998",
+        "Customer#000101998",
+        "637029.57",
+        "3790.89",
+        "UNITED KINGDOM",
+        "01c9CILnNtfOQYmZj",
+        "33-593-865-6378",
+        "ress foxes wake slyly after the bold excuses. ironic platelets are furiously carefully bold theodolites"
+       ],
+       [
+        "125341",
+        "Customer#000125341",
+        "633508.08",
+        "4983.51",
+        "GERMANY",
+        "S29ODD6bceU8QSuuEJznkNaK",
+        "17-582-695-5962",
+        "arefully even depths. blithely even excuses sleep furiously. foxes use except the dependencies. ca"
+       ]
+      ],
+      "first": "57040",
       "name": "q10",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  c_custkey, \n  c_name, \n  sum(l_extendedprice * (1 - l_discount)) as revenue,\n  c_acctbal, \n  n_name, \n  c_address, \n  c_phone, \n  c_comment\nfrom \n  customer, \n  orders, \n  lineitem, \n  nation\nwhere \n  c_custkey = o_custkey\n  and l_orderkey = o_orderkey\n  and o_orderdate >= date '1993-10-01'\n  and o_orderdate < date '1993-10-01' + interval '3' month\n  and l_returnflag = 'R'\n  and c_nationkey = n_nationkey\ngroup by \n  c_custkey, \n  c_name, \n  c_acctbal, \n  c_phone, \n  n_name, \n  c_address, \n  c_comment\norder by \n  revenue desc \nlimit 20;",
+      "answer_rows": 20
      },
      {
       "ok": true,
-      "ms": 3030,
+      "ms": 3677,
       "rows": 1048,
-      "first": "129760",
       "error": "",
       "digest": "a1392f66318b233bf760de5d9b4be2d255d23ecec92e17eb86258e4964c4e176",
+      "answer": [
+       [
+        "129760",
+        "17538456.86"
+       ],
+       [
+        "166726",
+        "16503353.92"
+       ],
+       [
+        "191287",
+        "16474801.97"
+       ],
+       [
+        "161758",
+        "16101755.54"
+       ],
+       [
+        "34452",
+        "15983844.72"
+       ]
+      ],
+      "first": "129760",
       "name": "q11",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  ps_partkey, \n  sum(ps_supplycost * ps_availqty) as value\nfrom \n  partsupp, \n  supplier, \n  nation\nwhere \n  ps_suppkey = s_suppkey\n  and s_nationkey = n_nationkey\n  and n_name = 'GERMANY'\ngroup by \n  ps_partkey \nhaving \n  sum(ps_supplycost * ps_availqty) > (\n    select \n      sum(ps_supplycost * ps_availqty) * 0.0001\n    from \n      partsupp, \n      supplier, \n      nation\n    where \n      ps_suppkey = s_suppkey\n      and s_nationkey = n_nationkey\n      and n_name = 'GERMANY' \n   )\norder by \n  value desc;",
+      "answer_rows": 1048
      },
      {
       "ok": true,
-      "ms": 3103,
+      "ms": 3894,
       "rows": 1048,
-      "first": "129760",
       "error": "",
       "digest": "a1392f66318b233bf760de5d9b4be2d255d23ecec92e17eb86258e4964c4e176",
+      "answer": [
+       [
+        "129760",
+        "17538456.86"
+       ],
+       [
+        "166726",
+        "16503353.92"
+       ],
+       [
+        "191287",
+        "16474801.97"
+       ],
+       [
+        "161758",
+        "16101755.54"
+       ],
+       [
+        "34452",
+        "15983844.72"
+       ]
+      ],
+      "first": "129760",
       "name": "q11",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  ps_partkey, \n  sum(ps_supplycost * ps_availqty) as value\nfrom \n  partsupp, \n  supplier, \n  nation\nwhere \n  ps_suppkey = s_suppkey\n  and s_nationkey = n_nationkey\n  and n_name = 'GERMANY'\ngroup by \n  ps_partkey \nhaving \n  sum(ps_supplycost * ps_availqty) > (\n    select \n      sum(ps_supplycost * ps_availqty) * 0.0001\n    from \n      partsupp, \n      supplier, \n      nation\n    where \n      ps_suppkey = s_suppkey\n      and s_nationkey = n_nationkey\n      and n_name = 'GERMANY' \n   )\norder by \n  value desc;",
+      "answer_rows": 1048
      },
      {
       "ok": true,
-      "ms": 3487,
+      "ms": 3874,
       "rows": 1048,
-      "first": "129760",
       "error": "",
       "digest": "a1392f66318b233bf760de5d9b4be2d255d23ecec92e17eb86258e4964c4e176",
+      "answer": [
+       [
+        "129760",
+        "17538456.86"
+       ],
+       [
+        "166726",
+        "16503353.92"
+       ],
+       [
+        "191287",
+        "16474801.97"
+       ],
+       [
+        "161758",
+        "16101755.54"
+       ],
+       [
+        "34452",
+        "15983844.72"
+       ]
+      ],
+      "first": "129760",
       "name": "q11",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  ps_partkey, \n  sum(ps_supplycost * ps_availqty) as value\nfrom \n  partsupp, \n  supplier, \n  nation\nwhere \n  ps_suppkey = s_suppkey\n  and s_nationkey = n_nationkey\n  and n_name = 'GERMANY'\ngroup by \n  ps_partkey \nhaving \n  sum(ps_supplycost * ps_availqty) > (\n    select \n      sum(ps_supplycost * ps_availqty) * 0.0001\n    from \n      partsupp, \n      supplier, \n      nation\n    where \n      ps_suppkey = s_suppkey\n      and s_nationkey = n_nationkey\n      and n_name = 'GERMANY' \n   )\norder by \n  value desc;",
+      "answer_rows": 1048
      },
      {
       "ok": true,
-      "ms": 2143,
+      "ms": 2487,
       "rows": 2,
-      "first": "MAIL",
       "error": "",
       "digest": "66b2216fa14f71932d511f31c84310bf0041957519af943f692aee26e2a627fb",
+      "answer": [
+       [
+        "MAIL",
+        "6202",
+        "9324"
+       ],
+       [
+        "SHIP",
+        "6200",
+        "9262"
+       ]
+      ],
+      "first": "MAIL",
       "name": "q12",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  l_shipmode,\n  sum(case when o_orderpriority = '1-URGENT' or o_orderpriority = '2-HIGH' then 1 else 0 end) as high_line_count,\n  sum(case when o_orderpriority <> '1-URGENT' and o_orderpriority <> '2-HIGH' then 1 else 0 end) as low_line_count\nfrom \n  orders, \n  lineitem\nwhere \n  o_orderkey = l_orderkey\n  and l_shipmode in ('MAIL', 'SHIP')\n  and l_commitdate < l_receiptdate\n  and l_shipdate < l_commitdate\n  and l_receiptdate >= date '1994-01-01'\n  and l_receiptdate < date '1994-01-01' + interval '1' year\ngroup by \n  l_shipmode\norder by \n  l_shipmode;"
      },
      {
       "ok": true,
-      "ms": 1960,
+      "ms": 2568,
       "rows": 2,
-      "first": "MAIL",
       "error": "",
       "digest": "66b2216fa14f71932d511f31c84310bf0041957519af943f692aee26e2a627fb",
+      "answer": [
+       [
+        "MAIL",
+        "6202",
+        "9324"
+       ],
+       [
+        "SHIP",
+        "6200",
+        "9262"
+       ]
+      ],
+      "first": "MAIL",
       "name": "q12",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  l_shipmode,\n  sum(case when o_orderpriority = '1-URGENT' or o_orderpriority = '2-HIGH' then 1 else 0 end) as high_line_count,\n  sum(case when o_orderpriority <> '1-URGENT' and o_orderpriority <> '2-HIGH' then 1 else 0 end) as low_line_count\nfrom \n  orders, \n  lineitem\nwhere \n  o_orderkey = l_orderkey\n  and l_shipmode in ('MAIL', 'SHIP')\n  and l_commitdate < l_receiptdate\n  and l_shipdate < l_commitdate\n  and l_receiptdate >= date '1994-01-01'\n  and l_receiptdate < date '1994-01-01' + interval '1' year\ngroup by \n  l_shipmode\norder by \n  l_shipmode;"
      },
      {
       "ok": true,
-      "ms": 1756,
+      "ms": 2444,
       "rows": 2,
-      "first": "MAIL",
       "error": "",
       "digest": "66b2216fa14f71932d511f31c84310bf0041957519af943f692aee26e2a627fb",
+      "answer": [
+       [
+        "MAIL",
+        "6202",
+        "9324"
+       ],
+       [
+        "SHIP",
+        "6200",
+        "9262"
+       ]
+      ],
+      "first": "MAIL",
       "name": "q12",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  l_shipmode,\n  sum(case when o_orderpriority = '1-URGENT' or o_orderpriority = '2-HIGH' then 1 else 0 end) as high_line_count,\n  sum(case when o_orderpriority <> '1-URGENT' and o_orderpriority <> '2-HIGH' then 1 else 0 end) as low_line_count\nfrom \n  orders, \n  lineitem\nwhere \n  o_orderkey = l_orderkey\n  and l_shipmode in ('MAIL', 'SHIP')\n  and l_commitdate < l_receiptdate\n  and l_shipdate < l_commitdate\n  and l_receiptdate >= date '1994-01-01'\n  and l_receiptdate < date '1994-01-01' + interval '1' year\ngroup by \n  l_shipmode\norder by \n  l_shipmode;"
      },
      {
       "ok": true,
-      "ms": 2703,
+      "ms": 2712,
       "rows": 1,
-      "first": "16.38",
       "error": "",
       "digest": "d8c2ed712ecd7c75b272c01246c4602fd301a2689981bdd97038e2bba7d87078",
+      "answer": [
+       [
+        "16.38"
+       ]
+      ],
+      "first": "16.38",
       "name": "q14",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice*(1-l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue\nfrom \n  lineitem, \n  part\nwhere \n  l_partkey = p_partkey\n  and l_shipdate >= date '1995-09-01'\n  and l_shipdate < date '1995-09-01' + interval '1' month;"
      },
      {
       "ok": true,
-      "ms": 2932,
+      "ms": 2776,
       "rows": 1,
-      "first": "16.38",
       "error": "",
       "digest": "d8c2ed712ecd7c75b272c01246c4602fd301a2689981bdd97038e2bba7d87078",
+      "answer": [
+       [
+        "16.38"
+       ]
+      ],
+      "first": "16.38",
       "name": "q14",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice*(1-l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue\nfrom \n  lineitem, \n  part\nwhere \n  l_partkey = p_partkey\n  and l_shipdate >= date '1995-09-01'\n  and l_shipdate < date '1995-09-01' + interval '1' month;"
      },
      {
       "ok": true,
-      "ms": 2787,
+      "ms": 2786,
       "rows": 1,
-      "first": "16.38",
       "error": "",
       "digest": "d8c2ed712ecd7c75b272c01246c4602fd301a2689981bdd97038e2bba7d87078",
+      "answer": [
+       [
+        "16.38"
+       ]
+      ],
+      "first": "16.38",
       "name": "q14",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice*(1-l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue\nfrom \n  lineitem, \n  part\nwhere \n  l_partkey = p_partkey\n  and l_shipdate >= date '1995-09-01'\n  and l_shipdate < date '1995-09-01' + interval '1' month;"
      },
      {
       "ok": true,
-      "ms": 45,
+      "ms": 47,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1119,7 +1962,7 @@
      },
      {
       "ok": true,
-      "ms": 84,
+      "ms": 50,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1130,7 +1973,7 @@
      },
      {
       "ok": true,
-      "ms": 54,
+      "ms": 43,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1141,7 +1984,7 @@
      },
      {
       "ok": true,
-      "ms": 43,
+      "ms": 100,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1152,7 +1995,7 @@
      },
      {
       "ok": true,
-      "ms": 43,
+      "ms": 98,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1163,7 +2006,7 @@
      },
      {
       "ok": true,
-      "ms": 141,
+      "ms": 121,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1252,120 +2095,120 @@
     "first_failure": null
    },
    "summary": {
-    "load_ms": 32456,
-    "load_mib_s": 32.3,
+    "load_ms": 38717,
+    "load_mib_s": 27.1,
     "load_ms_by_table": {
-     "loadLineitem": 26798,
-     "loadOrders": 3299,
-     "loadPartsupp": 1095,
-     "loadPart": 373,
-     "loadCustomer": 478,
-     "loadSupplier": 262,
-     "loadNation": 43,
-     "loadRegion": 108
+     "loadLineitem": 31846,
+     "loadOrders": 4016,
+     "loadPartsupp": 1457,
+     "loadPart": 500,
+     "loadCustomer": 484,
+     "loadSupplier": 260,
+     "loadNation": 75,
+     "loadRegion": 79
     },
     "queries": {
      "q1": {
       "runs_ms": [
-       2717,
-       2921,
-       2741
+       3819,
+       3787,
+       3633
       ],
-      "min_ms": 2717,
-      "median_ms": 2741
+      "min_ms": 3633,
+      "median_ms": 3787
      },
      "q3": {
       "runs_ms": [
-       2117,
-       2033,
-       1970
+       2372,
+       2299,
+       2226
       ],
-      "min_ms": 1970,
-      "median_ms": 2033
+      "min_ms": 2226,
+      "median_ms": 2299
      },
      "q4": {
       "runs_ms": [
-       1306,
-       1370,
-       1320
+       1546,
+       1586,
+       1618
       ],
-      "min_ms": 1306,
-      "median_ms": 1320
+      "min_ms": 1546,
+      "median_ms": 1586
      },
      "q6": {
       "runs_ms": [
-       993,
-       990,
-       1015
+       1216,
+       1193,
+       1178
       ],
-      "min_ms": 990,
-      "median_ms": 993
+      "min_ms": 1178,
+      "median_ms": 1193
      },
      "q7": {
       "runs_ms": [
-       8368,
-       8082,
-       8406
+       8853,
+       9005,
+       9119
       ],
-      "min_ms": 8082,
-      "median_ms": 8368
+      "min_ms": 8853,
+      "median_ms": 9005
      },
      "q8": {
       "runs_ms": [
-       8728,
-       8634,
-       8443
+       9665,
+       9456,
+       9340
       ],
-      "min_ms": 8443,
-      "median_ms": 8634
+      "min_ms": 9340,
+      "median_ms": 9456
      },
      "q9": {
       "runs_ms": [
-       8667,
-       8537,
-       8476
+       9750,
+       10168,
+       9861
       ],
-      "min_ms": 8476,
-      "median_ms": 8537
+      "min_ms": 9750,
+      "median_ms": 9861
      },
      "q10": {
       "runs_ms": [
-       3743,
-       3500,
-       3689
+       4309,
+       4580,
+       4645
       ],
-      "min_ms": 3500,
-      "median_ms": 3689
+      "min_ms": 4309,
+      "median_ms": 4580
      },
      "q11": {
       "runs_ms": [
-       3030,
-       3103,
-       3487
+       3677,
+       3894,
+       3874
       ],
-      "min_ms": 3030,
-      "median_ms": 3103
+      "min_ms": 3677,
+      "median_ms": 3874
      },
      "q12": {
       "runs_ms": [
-       2143,
-       1960,
-       1756
+       2487,
+       2568,
+       2444
       ],
-      "min_ms": 1756,
-      "median_ms": 1960
+      "min_ms": 2444,
+      "median_ms": 2487
      },
      "q14": {
       "runs_ms": [
-       2703,
-       2932,
-       2787
+       2712,
+       2776,
+       2786
       ],
-      "min_ms": 2703,
-      "median_ms": 2787
+      "min_ms": 2712,
+      "median_ms": 2776
      }
     },
-    "queries_total_median_ms": 44165,
+    "queries_total_median_ms": 50904,
     "row_counts": {
      "countLineitem": [
       {
@@ -1421,12 +2264,21 @@
   "local": {
    "data": {
     "chunks": 8,
+    "chunks_per_path": 1,
     "bytes": 1100695743,
-    "bytes_per_node": {
-     "NODE1": 549260759,
-     "NODE2": 551434984
-    },
-    "seconds": 77.2
+    "seconds": 108.4,
+    "per_node": {
+     "NODE1": {
+      "generate_s": 107.1,
+      "write_s": 1.2,
+      "bytes": 549260759
+     },
+     "NODE2": {
+      "generate_s": 106.9,
+      "write_s": 1.2,
+      "bytes": 551434984
+     }
+    }
    },
    "plan": {
     "plan": "bamboo/perftest/configs/tests/tpch-sf1-2D2F.jmx",
@@ -1443,7 +2295,7 @@
     "steps": [
      {
       "ok": true,
-      "ms": 101,
+      "ms": 116,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1454,7 +2306,7 @@
      },
      {
       "ok": true,
-      "ms": 84,
+      "ms": 66,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1465,7 +2317,7 @@
      },
      {
       "ok": true,
-      "ms": 75,
+      "ms": 96,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1476,7 +2328,7 @@
      },
      {
       "ok": true,
-      "ms": 52,
+      "ms": 90,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1487,7 +2339,7 @@
      },
      {
       "ok": true,
-      "ms": 115,
+      "ms": 57,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1498,7 +2350,7 @@
      },
      {
       "ok": true,
-      "ms": 84,
+      "ms": 85,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1509,7 +2361,7 @@
      },
      {
       "ok": true,
-      "ms": 76,
+      "ms": 77,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1520,7 +2372,7 @@
      },
      {
       "ok": true,
-      "ms": 132,
+      "ms": 96,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1531,7 +2383,7 @@
      },
      {
       "ok": true,
-      "ms": 174,
+      "ms": 94,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1542,7 +2394,7 @@
      },
      {
       "ok": true,
-      "ms": 128,
+      "ms": 46,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1553,7 +2405,7 @@
      },
      {
       "ok": true,
-      "ms": 52,
+      "ms": 46,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1564,7 +2416,7 @@
      },
      {
       "ok": true,
-      "ms": 91,
+      "ms": 74,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1586,7 +2438,7 @@
      },
      {
       "ok": true,
-      "ms": 187,
+      "ms": 78,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1597,7 +2449,7 @@
      },
      {
       "ok": true,
-      "ms": 80,
+      "ms": 105,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1608,7 +2460,7 @@
      },
      {
       "ok": true,
-      "ms": 81,
+      "ms": 72,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1619,7 +2471,7 @@
      },
      {
       "ok": true,
-      "ms": 92,
+      "ms": 99,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1641,7 +2493,7 @@
      },
      {
       "ok": true,
-      "ms": 44,
+      "ms": 106,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1652,7 +2504,7 @@
      },
      {
       "ok": true,
-      "ms": 45,
+      "ms": 57,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1663,7 +2515,7 @@
      },
      {
       "ok": true,
-      "ms": 78,
+      "ms": 60,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1674,7 +2526,7 @@
      },
      {
       "ok": true,
-      "ms": 77,
+      "ms": 57,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1685,7 +2537,7 @@
      },
      {
       "ok": true,
-      "ms": 109,
+      "ms": 136,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1696,7 +2548,7 @@
      },
      {
       "ok": true,
-      "ms": 120,
+      "ms": 47,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1707,7 +2559,7 @@
      },
      {
       "ok": true,
-      "ms": 105,
+      "ms": 80,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1718,7 +2570,7 @@
      },
      {
       "ok": true,
-      "ms": 149,
+      "ms": 101,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1729,7 +2581,7 @@
      },
      {
       "ok": true,
-      "ms": 24282,
+      "ms": 30329,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1740,7 +2592,7 @@
      },
      {
       "ok": true,
-      "ms": 457,
+      "ms": 576,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1751,7 +2603,7 @@
      },
      {
       "ok": true,
-      "ms": 502,
+      "ms": 600,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1762,7 +2614,7 @@
      },
      {
       "ok": true,
-      "ms": 481,
+      "ms": 664,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1773,7 +2625,7 @@
      },
      {
       "ok": true,
-      "ms": 498,
+      "ms": 636,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1784,7 +2636,7 @@
      },
      {
       "ok": true,
-      "ms": 530,
+      "ms": 672,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1795,7 +2647,7 @@
      },
      {
       "ok": true,
-      "ms": 2862,
+      "ms": 3465,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1806,7 +2658,7 @@
      },
      {
       "ok": true,
-      "ms": 259,
+      "ms": 209,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1817,7 +2669,7 @@
      },
      {
       "ok": true,
-      "ms": 181,
+      "ms": 186,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1828,7 +2680,7 @@
      },
      {
       "ok": true,
-      "ms": 177,
+      "ms": 182,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1839,7 +2691,7 @@
      },
      {
       "ok": true,
-      "ms": 1049,
+      "ms": 1400,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1850,7 +2702,7 @@
      },
      {
       "ok": true,
-      "ms": 84,
+      "ms": 150,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1861,7 +2713,7 @@
      },
      {
       "ok": true,
-      "ms": 89,
+      "ms": 117,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1872,7 +2724,7 @@
      },
      {
       "ok": true,
-      "ms": 559,
+      "ms": 487,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1883,7 +2735,7 @@
      },
      {
       "ok": true,
-      "ms": 79,
+      "ms": 59,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1894,7 +2746,7 @@
      },
      {
       "ok": true,
-      "ms": 429,
+      "ms": 443,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1905,7 +2757,7 @@
      },
      {
       "ok": true,
-      "ms": 84,
+      "ms": 118,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1916,7 +2768,7 @@
      },
      {
       "ok": true,
-      "ms": 50,
+      "ms": 54,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1927,7 +2779,7 @@
      },
      {
       "ok": true,
-      "ms": 222,
+      "ms": 220,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1938,7 +2790,7 @@
      },
      {
       "ok": true,
-      "ms": 106,
+      "ms": 45,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1949,7 +2801,7 @@
      },
      {
       "ok": true,
-      "ms": 53,
+      "ms": 80,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1960,7 +2812,7 @@
      },
      {
       "ok": true,
-      "ms": 141,
+      "ms": 60,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1971,7 +2823,7 @@
      },
      {
       "ok": true,
-      "ms": 46,
+      "ms": 53,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1982,7 +2834,7 @@
      },
      {
       "ok": true,
-      "ms": 57,
+      "ms": 52,
       "rows": 0,
       "first": "",
       "error": "",
@@ -1993,7 +2845,7 @@
      },
      {
       "ok": true,
-      "ms": 93,
+      "ms": 80,
       "rows": 0,
       "first": "",
       "error": "",
@@ -2004,7 +2856,7 @@
      },
      {
       "ok": true,
-      "ms": 81,
+      "ms": 46,
       "rows": 0,
       "first": "",
       "error": "",
@@ -2015,7 +2867,7 @@
      },
      {
       "ok": true,
-      "ms": 641,
+      "ms": 794,
       "rows": 1,
       "first": "6001215",
       "error": "",
@@ -2034,7 +2886,7 @@
      },
      {
       "ok": true,
-      "ms": 341,
+      "ms": 464,
       "rows": 1,
       "first": "1500000",
       "error": "",
@@ -2053,7 +2905,7 @@
      },
      {
       "ok": true,
-      "ms": 334,
+      "ms": 345,
       "rows": 1,
       "first": "800000",
       "error": "",
@@ -2072,7 +2924,7 @@
      },
      {
       "ok": true,
-      "ms": 416,
+      "ms": 425,
       "rows": 1,
       "first": "200000",
       "error": "",
@@ -2091,7 +2943,7 @@
      },
      {
       "ok": true,
-      "ms": 321,
+      "ms": 464,
       "rows": 1,
       "first": "150000",
       "error": "",
@@ -2110,7 +2962,7 @@
      },
      {
       "ok": true,
-      "ms": 335,
+      "ms": 364,
       "rows": 1,
       "first": "10000",
       "error": "",
@@ -2129,370 +2981,1204 @@
      },
      {
       "ok": true,
-      "ms": 2698,
+      "ms": 3825,
       "rows": 4,
-      "first": "A",
       "error": "",
       "digest": "56f31e3be7b38c41cd69e746e965866ac46ffbe0296723e2816a6ff7fdca431b",
+      "answer": [
+       [
+        "A",
+        "F",
+        "37734107.00",
+        "56586554400.73",
+        "53758257382.21",
+        "55909065592.19",
+        "25.52",
+        "38273.13",
+        "0.05",
+        "1478493"
+       ],
+       [
+        "N",
+        "F",
+        "991417.00",
+        "1487504710.38",
+        "1413082173.74",
+        "1469649232.14",
+        "25.52",
+        "38284.47",
+        "0.05",
+        "38854"
+       ],
+       [
+        "N",
+        "O",
+        "74429437.00",
+        "111631834353.84",
+        "106051847034.07",
+        "110297937149.42",
+        "25.50",
+        "38249.32",
+        "0.05",
+        "2918531"
+       ],
+       [
+        "R",
+        "F",
+        "37719753.00",
+        "56568041380.90",
+        "53741292921.05",
+        "55889619477.81",
+        "25.51",
+        "38250.85",
+        "0.05",
+        "1478870"
+       ]
+      ],
+      "first": "A",
       "name": "q1",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select\n  l_returnflag,\n  l_linestatus,\n  sum(l_quantity) as sum_qty,\n  sum(l_extendedprice) as sum_base_price,\n  sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,\n  sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,\n  avg(l_quantity) as avg_qty,\n  avg(l_extendedprice) as avg_price,\n  avg(l_discount) as avg_disc,\n  count(*) as count_order\nfrom\n  lineitem\nwhere\n  l_shipdate <= date '1998-12-01' - interval '90' day\ngroup by\n  l_returnflag,\n  l_linestatus\norder by\n  l_returnflag,\n  l_linestatus;"
      },
      {
       "ok": true,
-      "ms": 2761,
+      "ms": 3676,
       "rows": 4,
-      "first": "A",
       "error": "",
       "digest": "56f31e3be7b38c41cd69e746e965866ac46ffbe0296723e2816a6ff7fdca431b",
+      "answer": [
+       [
+        "A",
+        "F",
+        "37734107.00",
+        "56586554400.73",
+        "53758257382.21",
+        "55909065592.19",
+        "25.52",
+        "38273.13",
+        "0.05",
+        "1478493"
+       ],
+       [
+        "N",
+        "F",
+        "991417.00",
+        "1487504710.38",
+        "1413082173.74",
+        "1469649232.14",
+        "25.52",
+        "38284.47",
+        "0.05",
+        "38854"
+       ],
+       [
+        "N",
+        "O",
+        "74429437.00",
+        "111631834353.84",
+        "106051847034.07",
+        "110297937149.42",
+        "25.50",
+        "38249.32",
+        "0.05",
+        "2918531"
+       ],
+       [
+        "R",
+        "F",
+        "37719753.00",
+        "56568041380.90",
+        "53741292921.05",
+        "55889619477.81",
+        "25.51",
+        "38250.85",
+        "0.05",
+        "1478870"
+       ]
+      ],
+      "first": "A",
       "name": "q1",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select\n  l_returnflag,\n  l_linestatus,\n  sum(l_quantity) as sum_qty,\n  sum(l_extendedprice) as sum_base_price,\n  sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,\n  sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,\n  avg(l_quantity) as avg_qty,\n  avg(l_extendedprice) as avg_price,\n  avg(l_discount) as avg_disc,\n  count(*) as count_order\nfrom\n  lineitem\nwhere\n  l_shipdate <= date '1998-12-01' - interval '90' day\ngroup by\n  l_returnflag,\n  l_linestatus\norder by\n  l_returnflag,\n  l_linestatus;"
      },
      {
       "ok": true,
-      "ms": 2881,
+      "ms": 3556,
       "rows": 4,
-      "first": "A",
       "error": "",
       "digest": "56f31e3be7b38c41cd69e746e965866ac46ffbe0296723e2816a6ff7fdca431b",
+      "answer": [
+       [
+        "A",
+        "F",
+        "37734107.00",
+        "56586554400.73",
+        "53758257382.21",
+        "55909065592.19",
+        "25.52",
+        "38273.13",
+        "0.05",
+        "1478493"
+       ],
+       [
+        "N",
+        "F",
+        "991417.00",
+        "1487504710.38",
+        "1413082173.74",
+        "1469649232.14",
+        "25.52",
+        "38284.47",
+        "0.05",
+        "38854"
+       ],
+       [
+        "N",
+        "O",
+        "74429437.00",
+        "111631834353.84",
+        "106051847034.07",
+        "110297937149.42",
+        "25.50",
+        "38249.32",
+        "0.05",
+        "2918531"
+       ],
+       [
+        "R",
+        "F",
+        "37719753.00",
+        "56568041380.90",
+        "53741292921.05",
+        "55889619477.81",
+        "25.51",
+        "38250.85",
+        "0.05",
+        "1478870"
+       ]
+      ],
+      "first": "A",
       "name": "q1",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select\n  l_returnflag,\n  l_linestatus,\n  sum(l_quantity) as sum_qty,\n  sum(l_extendedprice) as sum_base_price,\n  sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,\n  sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,\n  avg(l_quantity) as avg_qty,\n  avg(l_extendedprice) as avg_price,\n  avg(l_discount) as avg_disc,\n  count(*) as count_order\nfrom\n  lineitem\nwhere\n  l_shipdate <= date '1998-12-01' - interval '90' day\ngroup by\n  l_returnflag,\n  l_linestatus\norder by\n  l_returnflag,\n  l_linestatus;"
      },
      {
       "ok": true,
-      "ms": 2111,
+      "ms": 2376,
       "rows": 10,
-      "first": "2456423",
       "error": "",
       "digest": "087c7bf3d0c40f62caacdf93354cd20601875a58eb060b6961b74d22a75ec2b1",
+      "answer": [
+       [
+        "2456423",
+        "406181.00",
+        "1995-03-05",
+        "0"
+       ],
+       [
+        "3459808",
+        "405838.70",
+        "1995-03-04",
+        "0"
+       ],
+       [
+        "492164",
+        "390324.06",
+        "1995-02-19",
+        "0"
+       ],
+       [
+        "1188320",
+        "384537.93",
+        "1995-03-09",
+        "0"
+       ],
+       [
+        "2435712",
+        "378673.06",
+        "1995-02-26",
+        "0"
+       ]
+      ],
+      "first": "2456423",
       "name": "q3",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  l_orderkey,\n  sum(l_extendedprice*(1-l_discount)) as revenue,\n  o_orderdate,\n  o_shippriority\nfrom \n  customer, \n  orders, \n  lineitem\nwhere \n  c_mktsegment = 'BUILDING'\n  and c_custkey = o_custkey\n  and l_orderkey = o_orderkey\n  and o_orderdate < '1995-03-15'\n  and l_shipdate > '1995-03-15'\ngroup by \n  l_orderkey, \n  o_orderdate, \n  o_shippriority\norder by \n  revenue desc, \n  o_orderdate\nlimit 10;",
+      "answer_rows": 10
      },
      {
       "ok": true,
-      "ms": 2060,
+      "ms": 2368,
       "rows": 10,
-      "first": "2456423",
       "error": "",
       "digest": "087c7bf3d0c40f62caacdf93354cd20601875a58eb060b6961b74d22a75ec2b1",
+      "answer": [
+       [
+        "2456423",
+        "406181.00",
+        "1995-03-05",
+        "0"
+       ],
+       [
+        "3459808",
+        "405838.70",
+        "1995-03-04",
+        "0"
+       ],
+       [
+        "492164",
+        "390324.06",
+        "1995-02-19",
+        "0"
+       ],
+       [
+        "1188320",
+        "384537.93",
+        "1995-03-09",
+        "0"
+       ],
+       [
+        "2435712",
+        "378673.06",
+        "1995-02-26",
+        "0"
+       ]
+      ],
+      "first": "2456423",
       "name": "q3",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  l_orderkey,\n  sum(l_extendedprice*(1-l_discount)) as revenue,\n  o_orderdate,\n  o_shippriority\nfrom \n  customer, \n  orders, \n  lineitem\nwhere \n  c_mktsegment = 'BUILDING'\n  and c_custkey = o_custkey\n  and l_orderkey = o_orderkey\n  and o_orderdate < '1995-03-15'\n  and l_shipdate > '1995-03-15'\ngroup by \n  l_orderkey, \n  o_orderdate, \n  o_shippriority\norder by \n  revenue desc, \n  o_orderdate\nlimit 10;",
+      "answer_rows": 10
      },
      {
       "ok": true,
-      "ms": 2142,
+      "ms": 2498,
       "rows": 10,
-      "first": "2456423",
       "error": "",
       "digest": "087c7bf3d0c40f62caacdf93354cd20601875a58eb060b6961b74d22a75ec2b1",
+      "answer": [
+       [
+        "2456423",
+        "406181.00",
+        "1995-03-05",
+        "0"
+       ],
+       [
+        "3459808",
+        "405838.70",
+        "1995-03-04",
+        "0"
+       ],
+       [
+        "492164",
+        "390324.06",
+        "1995-02-19",
+        "0"
+       ],
+       [
+        "1188320",
+        "384537.93",
+        "1995-03-09",
+        "0"
+       ],
+       [
+        "2435712",
+        "378673.06",
+        "1995-02-26",
+        "0"
+       ]
+      ],
+      "first": "2456423",
       "name": "q3",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  l_orderkey,\n  sum(l_extendedprice*(1-l_discount)) as revenue,\n  o_orderdate,\n  o_shippriority\nfrom \n  customer, \n  orders, \n  lineitem\nwhere \n  c_mktsegment = 'BUILDING'\n  and c_custkey = o_custkey\n  and l_orderkey = o_orderkey\n  and o_orderdate < '1995-03-15'\n  and l_shipdate > '1995-03-15'\ngroup by \n  l_orderkey, \n  o_orderdate, \n  o_shippriority\norder by \n  revenue desc, \n  o_orderdate\nlimit 10;",
+      "answer_rows": 10
      },
      {
       "ok": true,
-      "ms": 1329,
+      "ms": 1713,
       "rows": 5,
-      "first": "1-URGENT",
       "error": "",
       "digest": "967d47370f84f34fc2245a70dd84b1279b351c9832826fe2a75252e47a85ad36",
+      "answer": [
+       [
+        "1-URGENT",
+        "10594"
+       ],
+       [
+        "2-HIGH",
+        "10476"
+       ],
+       [
+        "3-MEDIUM",
+        "10410"
+       ],
+       [
+        "4-NOT SPECIFIED",
+        "10556"
+       ],
+       [
+        "5-LOW",
+        "10487"
+       ]
+      ],
+      "first": "1-URGENT",
       "name": "q4",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  o_orderpriority, \n  count(*) as order_count\nfrom \n  orders\nwhere \n  o_orderdate >= date '1993-07-01'\n  and o_orderdate < date '1993-07-01' + interval '3' month\n  and exists (\n    select \n      *\n    from \n      lineitem\n    where \n      l_orderkey = o_orderkey\n      and l_commitdate < l_receiptdate )\ngroup by \n  o_orderpriority\norder by \n  o_orderpriority;"
      },
      {
       "ok": true,
-      "ms": 1260,
+      "ms": 1692,
       "rows": 5,
-      "first": "1-URGENT",
       "error": "",
       "digest": "967d47370f84f34fc2245a70dd84b1279b351c9832826fe2a75252e47a85ad36",
+      "answer": [
+       [
+        "1-URGENT",
+        "10594"
+       ],
+       [
+        "2-HIGH",
+        "10476"
+       ],
+       [
+        "3-MEDIUM",
+        "10410"
+       ],
+       [
+        "4-NOT SPECIFIED",
+        "10556"
+       ],
+       [
+        "5-LOW",
+        "10487"
+       ]
+      ],
+      "first": "1-URGENT",
       "name": "q4",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  o_orderpriority, \n  count(*) as order_count\nfrom \n  orders\nwhere \n  o_orderdate >= date '1993-07-01'\n  and o_orderdate < date '1993-07-01' + interval '3' month\n  and exists (\n    select \n      *\n    from \n      lineitem\n    where \n      l_orderkey = o_orderkey\n      and l_commitdate < l_receiptdate )\ngroup by \n  o_orderpriority\norder by \n  o_orderpriority;"
      },
      {
       "ok": true,
-      "ms": 1237,
+      "ms": 1645,
       "rows": 5,
-      "first": "1-URGENT",
       "error": "",
       "digest": "967d47370f84f34fc2245a70dd84b1279b351c9832826fe2a75252e47a85ad36",
+      "answer": [
+       [
+        "1-URGENT",
+        "10594"
+       ],
+       [
+        "2-HIGH",
+        "10476"
+       ],
+       [
+        "3-MEDIUM",
+        "10410"
+       ],
+       [
+        "4-NOT SPECIFIED",
+        "10556"
+       ],
+       [
+        "5-LOW",
+        "10487"
+       ]
+      ],
+      "first": "1-URGENT",
       "name": "q4",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  o_orderpriority, \n  count(*) as order_count\nfrom \n  orders\nwhere \n  o_orderdate >= date '1993-07-01'\n  and o_orderdate < date '1993-07-01' + interval '3' month\n  and exists (\n    select \n      *\n    from \n      lineitem\n    where \n      l_orderkey = o_orderkey\n      and l_commitdate < l_receiptdate )\ngroup by \n  o_orderpriority\norder by \n  o_orderpriority;"
      },
      {
       "ok": true,
-      "ms": 1086,
+      "ms": 1174,
       "rows": 1,
-      "first": "123141101.83",
       "error": "",
       "digest": "4ea8102ed6cfbab237fa88cf3341093749180861c2f02725d1013fb8afb793e9",
+      "answer": [
+       [
+        "123141101.83"
+       ]
+      ],
+      "first": "123141101.83",
       "name": "q6",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  sum(l_extendedprice*l_discount) as revenue\nfrom \n  lineitem\nwhere \n  l_shipdate >= date '1994-01-01'\n  and l_shipdate < date '1994-01-01' + interval '1' year\n  and l_discount between 0.06 - 0.01 and 0.06 + 0.01\n  and l_quantity < 24;"
      },
      {
       "ok": true,
-      "ms": 962,
+      "ms": 1302,
       "rows": 1,
-      "first": "123141101.83",
       "error": "",
       "digest": "4ea8102ed6cfbab237fa88cf3341093749180861c2f02725d1013fb8afb793e9",
+      "answer": [
+       [
+        "123141101.83"
+       ]
+      ],
+      "first": "123141101.83",
       "name": "q6",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  sum(l_extendedprice*l_discount) as revenue\nfrom \n  lineitem\nwhere \n  l_shipdate >= date '1994-01-01'\n  and l_shipdate < date '1994-01-01' + interval '1' year\n  and l_discount between 0.06 - 0.01 and 0.06 + 0.01\n  and l_quantity < 24;"
      },
      {
       "ok": true,
-      "ms": 927,
+      "ms": 1187,
       "rows": 1,
-      "first": "123141101.83",
       "error": "",
       "digest": "4ea8102ed6cfbab237fa88cf3341093749180861c2f02725d1013fb8afb793e9",
+      "answer": [
+       [
+        "123141101.83"
+       ]
+      ],
+      "first": "123141101.83",
       "name": "q6",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  sum(l_extendedprice*l_discount) as revenue\nfrom \n  lineitem\nwhere \n  l_shipdate >= date '1994-01-01'\n  and l_shipdate < date '1994-01-01' + interval '1' year\n  and l_discount between 0.06 - 0.01 and 0.06 + 0.01\n  and l_quantity < 24;"
      },
      {
       "ok": true,
-      "ms": 7063,
+      "ms": 9484,
       "rows": 4,
-      "first": "FRANCE",
       "error": "",
       "digest": "29729bcaba1f00eadaaa182b3f8ed2ec004d6e74ebd285a61cc82a3e493babd8",
+      "answer": [
+       [
+        "FRANCE",
+        "GERMANY",
+        "1995",
+        "54639732.86"
+       ],
+       [
+        "FRANCE",
+        "GERMANY",
+        "1996",
+        "54633083.54"
+       ],
+       [
+        "GERMANY",
+        "FRANCE",
+        "1995",
+        "52531746.66"
+       ],
+       [
+        "GERMANY",
+        "FRANCE",
+        "1996",
+        "52520549.07"
+       ]
+      ],
+      "first": "FRANCE",
       "name": "q7",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  supp_nation, \n  cust_nation, \n  l_year, \n  sum(volume) as revenue\nfrom \n  ( \n    select \n      n1.n_name as supp_nation,\n      n2.n_name as cust_nation,\n      extract(year from l_shipdate) as l_year,\n      l_extendedprice * (1 - l_discount) as volume\n    from \n      supplier, \n      lineitem, \n      orders, \n      customer, \n      nation n1, \n      nation n2\n    where \n      s_suppkey = l_suppkey\n      and o_orderkey = l_orderkey\n      and c_custkey = o_custkey\n      and s_nationkey = n1.n_nationkey\n      and c_nationkey = n2.n_nationkey\n      and ( \n           (n1.n_name = 'FRANCE'  and n2.n_name = 'GERMANY')\n        or (n1.n_name = 'GERMANY' and n2.n_name = 'FRANCE')\n      )\n      and l_shipdate >= '1995-01-01'\n      and l_shipdate <= '1996-12-31'\n   ) as shipping\ngroup by \n  supp_nation, \n  cust_nation, \n  l_year\norder by \n  supp_nation, \n  cust_nation, \n  l_year;"
      },
      {
       "ok": true,
-      "ms": 7612,
+      "ms": 9368,
       "rows": 4,
-      "first": "FRANCE",
       "error": "",
       "digest": "29729bcaba1f00eadaaa182b3f8ed2ec004d6e74ebd285a61cc82a3e493babd8",
+      "answer": [
+       [
+        "FRANCE",
+        "GERMANY",
+        "1995",
+        "54639732.86"
+       ],
+       [
+        "FRANCE",
+        "GERMANY",
+        "1996",
+        "54633083.54"
+       ],
+       [
+        "GERMANY",
+        "FRANCE",
+        "1995",
+        "52531746.66"
+       ],
+       [
+        "GERMANY",
+        "FRANCE",
+        "1996",
+        "52520549.07"
+       ]
+      ],
+      "first": "FRANCE",
       "name": "q7",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  supp_nation, \n  cust_nation, \n  l_year, \n  sum(volume) as revenue\nfrom \n  ( \n    select \n      n1.n_name as supp_nation,\n      n2.n_name as cust_nation,\n      extract(year from l_shipdate) as l_year,\n      l_extendedprice * (1 - l_discount) as volume\n    from \n      supplier, \n      lineitem, \n      orders, \n      customer, \n      nation n1, \n      nation n2\n    where \n      s_suppkey = l_suppkey\n      and o_orderkey = l_orderkey\n      and c_custkey = o_custkey\n      and s_nationkey = n1.n_nationkey\n      and c_nationkey = n2.n_nationkey\n      and ( \n           (n1.n_name = 'FRANCE'  and n2.n_name = 'GERMANY')\n        or (n1.n_name = 'GERMANY' and n2.n_name = 'FRANCE')\n      )\n      and l_shipdate >= '1995-01-01'\n      and l_shipdate <= '1996-12-31'\n   ) as shipping\ngroup by \n  supp_nation, \n  cust_nation, \n  l_year\norder by \n  supp_nation, \n  cust_nation, \n  l_year;"
      },
      {
       "ok": true,
-      "ms": 7158,
+      "ms": 9160,
       "rows": 4,
-      "first": "FRANCE",
       "error": "",
       "digest": "29729bcaba1f00eadaaa182b3f8ed2ec004d6e74ebd285a61cc82a3e493babd8",
+      "answer": [
+       [
+        "FRANCE",
+        "GERMANY",
+        "1995",
+        "54639732.86"
+       ],
+       [
+        "FRANCE",
+        "GERMANY",
+        "1996",
+        "54633083.54"
+       ],
+       [
+        "GERMANY",
+        "FRANCE",
+        "1995",
+        "52531746.66"
+       ],
+       [
+        "GERMANY",
+        "FRANCE",
+        "1996",
+        "52520549.07"
+       ]
+      ],
+      "first": "FRANCE",
       "name": "q7",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  supp_nation, \n  cust_nation, \n  l_year, \n  sum(volume) as revenue\nfrom \n  ( \n    select \n      n1.n_name as supp_nation,\n      n2.n_name as cust_nation,\n      extract(year from l_shipdate) as l_year,\n      l_extendedprice * (1 - l_discount) as volume\n    from \n      supplier, \n      lineitem, \n      orders, \n      customer, \n      nation n1, \n      nation n2\n    where \n      s_suppkey = l_suppkey\n      and o_orderkey = l_orderkey\n      and c_custkey = o_custkey\n      and s_nationkey = n1.n_nationkey\n      and c_nationkey = n2.n_nationkey\n      and ( \n           (n1.n_name = 'FRANCE'  and n2.n_name = 'GERMANY')\n        or (n1.n_name = 'GERMANY' and n2.n_name = 'FRANCE')\n      )\n      and l_shipdate >= '1995-01-01'\n      and l_shipdate <= '1996-12-31'\n   ) as shipping\ngroup by \n  supp_nation, \n  cust_nation, \n  l_year\norder by \n  supp_nation, \n  cust_nation, \n  l_year;"
      },
      {
       "ok": true,
-      "ms": 8496,
+      "ms": 10072,
       "rows": 2,
-      "first": "1995",
       "error": "",
       "digest": "cc9619527d561da2f25c7bfd9b0224055572e76c1d2f3d114719e310416756b7",
+      "answer": [
+       [
+        "1995",
+        "0.03"
+       ],
+       [
+        "1996",
+        "0.04"
+       ]
+      ],
+      "first": "1995",
       "name": "q8",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  o_year,\n  sum(case when nation = 'BRAZIL' then volume else 0 end) / sum(volume) as mkt_share\nfrom ( \n  select \n    extract(year from o_orderdate) as o_year,\n    l_extendedprice * (1-l_discount) as volume,\n    n2.n_name as nation\n  from \n    part, \n    supplier, \n    lineitem, \n    orders, \n    customer, \n    nation n1, \n    nation n2, \n    region\n  where \n    p_partkey = l_partkey\n    and s_suppkey = l_suppkey\n    and l_orderkey = o_orderkey\n    and o_custkey = c_custkey\n    and c_nationkey = n1.n_nationkey\n    and n1.n_regionkey = r_regionkey\n    and r_name = 'AMERICA'\n    and s_nationkey = n2.n_nationkey\n    and o_orderdate between date '1995-01-01' and date '1996-12-31'\n    and p_type = 'ECONOMY ANODIZED STEEL' \n  ) as all_nations\ngroup by \n  o_year\norder by \n  o_year;"
      },
      {
       "ok": true,
-      "ms": 8000,
+      "ms": 9981,
       "rows": 2,
-      "first": "1995",
       "error": "",
       "digest": "cc9619527d561da2f25c7bfd9b0224055572e76c1d2f3d114719e310416756b7",
+      "answer": [
+       [
+        "1995",
+        "0.03"
+       ],
+       [
+        "1996",
+        "0.04"
+       ]
+      ],
+      "first": "1995",
       "name": "q8",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  o_year,\n  sum(case when nation = 'BRAZIL' then volume else 0 end) / sum(volume) as mkt_share\nfrom ( \n  select \n    extract(year from o_orderdate) as o_year,\n    l_extendedprice * (1-l_discount) as volume,\n    n2.n_name as nation\n  from \n    part, \n    supplier, \n    lineitem, \n    orders, \n    customer, \n    nation n1, \n    nation n2, \n    region\n  where \n    p_partkey = l_partkey\n    and s_suppkey = l_suppkey\n    and l_orderkey = o_orderkey\n    and o_custkey = c_custkey\n    and c_nationkey = n1.n_nationkey\n    and n1.n_regionkey = r_regionkey\n    and r_name = 'AMERICA'\n    and s_nationkey = n2.n_nationkey\n    and o_orderdate between date '1995-01-01' and date '1996-12-31'\n    and p_type = 'ECONOMY ANODIZED STEEL' \n  ) as all_nations\ngroup by \n  o_year\norder by \n  o_year;"
      },
      {
       "ok": true,
-      "ms": 8415,
+      "ms": 10054,
       "rows": 2,
-      "first": "1995",
       "error": "",
       "digest": "cc9619527d561da2f25c7bfd9b0224055572e76c1d2f3d114719e310416756b7",
+      "answer": [
+       [
+        "1995",
+        "0.03"
+       ],
+       [
+        "1996",
+        "0.04"
+       ]
+      ],
+      "first": "1995",
       "name": "q8",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  o_year,\n  sum(case when nation = 'BRAZIL' then volume else 0 end) / sum(volume) as mkt_share\nfrom ( \n  select \n    extract(year from o_orderdate) as o_year,\n    l_extendedprice * (1-l_discount) as volume,\n    n2.n_name as nation\n  from \n    part, \n    supplier, \n    lineitem, \n    orders, \n    customer, \n    nation n1, \n    nation n2, \n    region\n  where \n    p_partkey = l_partkey\n    and s_suppkey = l_suppkey\n    and l_orderkey = o_orderkey\n    and o_custkey = c_custkey\n    and c_nationkey = n1.n_nationkey\n    and n1.n_regionkey = r_regionkey\n    and r_name = 'AMERICA'\n    and s_nationkey = n2.n_nationkey\n    and o_orderdate between date '1995-01-01' and date '1996-12-31'\n    and p_type = 'ECONOMY ANODIZED STEEL' \n  ) as all_nations\ngroup by \n  o_year\norder by \n  o_year;"
      },
      {
       "ok": true,
-      "ms": 8699,
+      "ms": 9930,
       "rows": 175,
-      "first": "ALGERIA",
       "error": "",
       "digest": "858e34589c5e54d279acefb55ba2dc8ac4e4df9135941aeb908378bc9ca608dd",
+      "answer": [
+       [
+        "ALGERIA",
+        "1998",
+        "27136900.41"
+       ],
+       [
+        "ALGERIA",
+        "1997",
+        "48611833.70"
+       ],
+       [
+        "ALGERIA",
+        "1996",
+        "48285482.91"
+       ],
+       [
+        "ALGERIA",
+        "1995",
+        "44402273.96"
+       ],
+       [
+        "ALGERIA",
+        "1994",
+        "48694008.22"
+       ]
+      ],
+      "first": "ALGERIA",
       "name": "q9",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  nation, \n  o_year, \n  sum(amount) as sum_profit\nfrom ( \n  select \n    n_name as nation,\n    extract(year from o_orderdate) as o_year,\n    l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount\n  from \n    part, \n    supplier, \n    lineitem, \n    partsupp, \n    orders, \n    nation\n  where \n    s_suppkey = l_suppkey\n    and ps_suppkey = l_suppkey\n    and ps_partkey = l_partkey\n    and p_partkey = l_partkey\n    and o_orderkey = l_orderkey\n    and s_nationkey = n_nationkey\n    and p_name like '%green%' \n  ) as profit\ngroup by \n  nation, \n  o_year\norder by \n  nation, \n  o_year desc;",
+      "answer_rows": 175
      },
      {
       "ok": true,
-      "ms": 8145,
+      "ms": 9751,
       "rows": 175,
-      "first": "ALGERIA",
       "error": "",
       "digest": "858e34589c5e54d279acefb55ba2dc8ac4e4df9135941aeb908378bc9ca608dd",
+      "answer": [
+       [
+        "ALGERIA",
+        "1998",
+        "27136900.41"
+       ],
+       [
+        "ALGERIA",
+        "1997",
+        "48611833.70"
+       ],
+       [
+        "ALGERIA",
+        "1996",
+        "48285482.91"
+       ],
+       [
+        "ALGERIA",
+        "1995",
+        "44402273.96"
+       ],
+       [
+        "ALGERIA",
+        "1994",
+        "48694008.22"
+       ]
+      ],
+      "first": "ALGERIA",
       "name": "q9",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  nation, \n  o_year, \n  sum(amount) as sum_profit\nfrom ( \n  select \n    n_name as nation,\n    extract(year from o_orderdate) as o_year,\n    l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount\n  from \n    part, \n    supplier, \n    lineitem, \n    partsupp, \n    orders, \n    nation\n  where \n    s_suppkey = l_suppkey\n    and ps_suppkey = l_suppkey\n    and ps_partkey = l_partkey\n    and p_partkey = l_partkey\n    and o_orderkey = l_orderkey\n    and s_nationkey = n_nationkey\n    and p_name like '%green%' \n  ) as profit\ngroup by \n  nation, \n  o_year\norder by \n  nation, \n  o_year desc;",
+      "answer_rows": 175
      },
      {
       "ok": true,
-      "ms": 7697,
+      "ms": 9868,
       "rows": 175,
-      "first": "ALGERIA",
       "error": "",
       "digest": "858e34589c5e54d279acefb55ba2dc8ac4e4df9135941aeb908378bc9ca608dd",
+      "answer": [
+       [
+        "ALGERIA",
+        "1998",
+        "27136900.41"
+       ],
+       [
+        "ALGERIA",
+        "1997",
+        "48611833.70"
+       ],
+       [
+        "ALGERIA",
+        "1996",
+        "48285482.91"
+       ],
+       [
+        "ALGERIA",
+        "1995",
+        "44402273.96"
+       ],
+       [
+        "ALGERIA",
+        "1994",
+        "48694008.22"
+       ]
+      ],
+      "first": "ALGERIA",
       "name": "q9",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  nation, \n  o_year, \n  sum(amount) as sum_profit\nfrom ( \n  select \n    n_name as nation,\n    extract(year from o_orderdate) as o_year,\n    l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount\n  from \n    part, \n    supplier, \n    lineitem, \n    partsupp, \n    orders, \n    nation\n  where \n    s_suppkey = l_suppkey\n    and ps_suppkey = l_suppkey\n    and ps_partkey = l_partkey\n    and p_partkey = l_partkey\n    and o_orderkey = l_orderkey\n    and s_nationkey = n_nationkey\n    and p_name like '%green%' \n  ) as profit\ngroup by \n  nation, \n  o_year\norder by \n  nation, \n  o_year desc;",
+      "answer_rows": 175
      },
      {
       "ok": true,
-      "ms": 3925,
+      "ms": 4824,
       "rows": 20,
-      "first": "57040",
       "error": "",
       "digest": "bc574ed4a08e6807bd4f893566e6541a585c511b0d11c8ce5f3e4231776866ff",
+      "answer": [
+       [
+        "57040",
+        "Customer#000057040",
+        "734235.24",
+        "632.87",
+        "JAPAN",
+        "Eioyzjf4pp",
+        "22-895-641-3466",
+        "sits. slyly regular requests sleep alongside of the regular inst"
+       ],
+       [
+        "143347",
+        "Customer#000143347",
+        "721002.68",
+        "2557.47",
+        "EGYPT",
+        "1aReFYv,Kw4",
+        "14-742-935-3718",
+        "ggle carefully enticing requests. final deposits use bold, bold pinto beans. ironic, idle re"
+       ],
+       [
+        "60838",
+        "Customer#000060838",
+        "679127.31",
+        "2454.77",
+        "BRAZIL",
+        "64EaJ5vMAHWJlBOxJklpNc2RJiWE",
+        "12-913-494-9813",
+        " need to boost against the slyly regular account"
+       ],
+       [
+        "101998",
+        "Customer#000101998",
+        "637029.57",
+        "3790.89",
+        "UNITED KINGDOM",
+        "01c9CILnNtfOQYmZj",
+        "33-593-865-6378",
+        "ress foxes wake slyly after the bold excuses. ironic platelets are furiously carefully bold theodolites"
+       ],
+       [
+        "125341",
+        "Customer#000125341",
+        "633508.08",
+        "4983.51",
+        "GERMANY",
+        "S29ODD6bceU8QSuuEJznkNaK",
+        "17-582-695-5962",
+        "arefully even depths. blithely even excuses sleep furiously. foxes use except the dependencies. ca"
+       ]
+      ],
+      "first": "57040",
       "name": "q10",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  c_custkey, \n  c_name, \n  sum(l_extendedprice * (1 - l_discount)) as revenue,\n  c_acctbal, \n  n_name, \n  c_address, \n  c_phone, \n  c_comment\nfrom \n  customer, \n  orders, \n  lineitem, \n  nation\nwhere \n  c_custkey = o_custkey\n  and l_orderkey = o_orderkey\n  and o_orderdate >= date '1993-10-01'\n  and o_orderdate < date '1993-10-01' + interval '3' month\n  and l_returnflag = 'R'\n  and c_nationkey = n_nationkey\ngroup by \n  c_custkey, \n  c_name, \n  c_acctbal, \n  c_phone, \n  n_name, \n  c_address, \n  c_comment\norder by \n  revenue desc \nlimit 20;",
+      "answer_rows": 20
      },
      {
       "ok": true,
-      "ms": 3606,
+      "ms": 4553,
       "rows": 20,
-      "first": "57040",
       "error": "",
       "digest": "bc574ed4a08e6807bd4f893566e6541a585c511b0d11c8ce5f3e4231776866ff",
+      "answer": [
+       [
+        "57040",
+        "Customer#000057040",
+        "734235.24",
+        "632.87",
+        "JAPAN",
+        "Eioyzjf4pp",
+        "22-895-641-3466",
+        "sits. slyly regular requests sleep alongside of the regular inst"
+       ],
+       [
+        "143347",
+        "Customer#000143347",
+        "721002.68",
+        "2557.47",
+        "EGYPT",
+        "1aReFYv,Kw4",
+        "14-742-935-3718",
+        "ggle carefully enticing requests. final deposits use bold, bold pinto beans. ironic, idle re"
+       ],
+       [
+        "60838",
+        "Customer#000060838",
+        "679127.31",
+        "2454.77",
+        "BRAZIL",
+        "64EaJ5vMAHWJlBOxJklpNc2RJiWE",
+        "12-913-494-9813",
+        " need to boost against the slyly regular account"
+       ],
+       [
+        "101998",
+        "Customer#000101998",
+        "637029.57",
+        "3790.89",
+        "UNITED KINGDOM",
+        "01c9CILnNtfOQYmZj",
+        "33-593-865-6378",
+        "ress foxes wake slyly after the bold excuses. ironic platelets are furiously carefully bold theodolites"
+       ],
+       [
+        "125341",
+        "Customer#000125341",
+        "633508.08",
+        "4983.51",
+        "GERMANY",
+        "S29ODD6bceU8QSuuEJznkNaK",
+        "17-582-695-5962",
+        "arefully even depths. blithely even excuses sleep furiously. foxes use except the dependencies. ca"
+       ]
+      ],
+      "first": "57040",
       "name": "q10",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  c_custkey, \n  c_name, \n  sum(l_extendedprice * (1 - l_discount)) as revenue,\n  c_acctbal, \n  n_name, \n  c_address, \n  c_phone, \n  c_comment\nfrom \n  customer, \n  orders, \n  lineitem, \n  nation\nwhere \n  c_custkey = o_custkey\n  and l_orderkey = o_orderkey\n  and o_orderdate >= date '1993-10-01'\n  and o_orderdate < date '1993-10-01' + interval '3' month\n  and l_returnflag = 'R'\n  and c_nationkey = n_nationkey\ngroup by \n  c_custkey, \n  c_name, \n  c_acctbal, \n  c_phone, \n  n_name, \n  c_address, \n  c_comment\norder by \n  revenue desc \nlimit 20;",
+      "answer_rows": 20
      },
      {
       "ok": true,
-      "ms": 3865,
+      "ms": 4578,
       "rows": 20,
-      "first": "57040",
       "error": "",
       "digest": "bc574ed4a08e6807bd4f893566e6541a585c511b0d11c8ce5f3e4231776866ff",
+      "answer": [
+       [
+        "57040",
+        "Customer#000057040",
+        "734235.24",
+        "632.87",
+        "JAPAN",
+        "Eioyzjf4pp",
+        "22-895-641-3466",
+        "sits. slyly regular requests sleep alongside of the regular inst"
+       ],
+       [
+        "143347",
+        "Customer#000143347",
+        "721002.68",
+        "2557.47",
+        "EGYPT",
+        "1aReFYv,Kw4",
+        "14-742-935-3718",
+        "ggle carefully enticing requests. final deposits use bold, bold pinto beans. ironic, idle re"
+       ],
+       [
+        "60838",
+        "Customer#000060838",
+        "679127.31",
+        "2454.77",
+        "BRAZIL",
+        "64EaJ5vMAHWJlBOxJklpNc2RJiWE",
+        "12-913-494-9813",
+        " need to boost against the slyly regular account"
+       ],
+       [
+        "101998",
+        "Customer#000101998",
+        "637029.57",
+        "3790.89",
+        "UNITED KINGDOM",
+        "01c9CILnNtfOQYmZj",
+        "33-593-865-6378",
+        "ress foxes wake slyly after the bold excuses. ironic platelets are furiously carefully bold theodolites"
+       ],
+       [
+        "125341",
+        "Customer#000125341",
+        "633508.08",
+        "4983.51",
+        "GERMANY",
+        "S29ODD6bceU8QSuuEJznkNaK",
+        "17-582-695-5962",
+        "arefully even depths. blithely even excuses sleep furiously. foxes use except the dependencies. ca"
+       ]
+      ],
+      "first": "57040",
       "name": "q10",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  c_custkey, \n  c_name, \n  sum(l_extendedprice * (1 - l_discount)) as revenue,\n  c_acctbal, \n  n_name, \n  c_address, \n  c_phone, \n  c_comment\nfrom \n  customer, \n  orders, \n  lineitem, \n  nation\nwhere \n  c_custkey = o_custkey\n  and l_orderkey = o_orderkey\n  and o_orderdate >= date '1993-10-01'\n  and o_orderdate < date '1993-10-01' + interval '3' month\n  and l_returnflag = 'R'\n  and c_nationkey = n_nationkey\ngroup by \n  c_custkey, \n  c_name, \n  c_acctbal, \n  c_phone, \n  n_name, \n  c_address, \n  c_comment\norder by \n  revenue desc \nlimit 20;",
+      "answer_rows": 20
      },
      {
       "ok": true,
-      "ms": 3520,
+      "ms": 4153,
       "rows": 1048,
-      "first": "129760",
       "error": "",
       "digest": "a1392f66318b233bf760de5d9b4be2d255d23ecec92e17eb86258e4964c4e176",
+      "answer": [
+       [
+        "129760",
+        "17538456.86"
+       ],
+       [
+        "166726",
+        "16503353.92"
+       ],
+       [
+        "191287",
+        "16474801.97"
+       ],
+       [
+        "161758",
+        "16101755.54"
+       ],
+       [
+        "34452",
+        "15983844.72"
+       ]
+      ],
+      "first": "129760",
       "name": "q11",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  ps_partkey, \n  sum(ps_supplycost * ps_availqty) as value\nfrom \n  partsupp, \n  supplier, \n  nation\nwhere \n  ps_suppkey = s_suppkey\n  and s_nationkey = n_nationkey\n  and n_name = 'GERMANY'\ngroup by \n  ps_partkey \nhaving \n  sum(ps_supplycost * ps_availqty) > (\n    select \n      sum(ps_supplycost * ps_availqty) * 0.0001\n    from \n      partsupp, \n      supplier, \n      nation\n    where \n      ps_suppkey = s_suppkey\n      and s_nationkey = n_nationkey\n      and n_name = 'GERMANY' \n   )\norder by \n  value desc;",
+      "answer_rows": 1048
      },
      {
       "ok": true,
-      "ms": 3533,
+      "ms": 4131,
       "rows": 1048,
-      "first": "129760",
       "error": "",
       "digest": "a1392f66318b233bf760de5d9b4be2d255d23ecec92e17eb86258e4964c4e176",
+      "answer": [
+       [
+        "129760",
+        "17538456.86"
+       ],
+       [
+        "166726",
+        "16503353.92"
+       ],
+       [
+        "191287",
+        "16474801.97"
+       ],
+       [
+        "161758",
+        "16101755.54"
+       ],
+       [
+        "34452",
+        "15983844.72"
+       ]
+      ],
+      "first": "129760",
       "name": "q11",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  ps_partkey, \n  sum(ps_supplycost * ps_availqty) as value\nfrom \n  partsupp, \n  supplier, \n  nation\nwhere \n  ps_suppkey = s_suppkey\n  and s_nationkey = n_nationkey\n  and n_name = 'GERMANY'\ngroup by \n  ps_partkey \nhaving \n  sum(ps_supplycost * ps_availqty) > (\n    select \n      sum(ps_supplycost * ps_availqty) * 0.0001\n    from \n      partsupp, \n      supplier, \n      nation\n    where \n      ps_suppkey = s_suppkey\n      and s_nationkey = n_nationkey\n      and n_name = 'GERMANY' \n   )\norder by \n  value desc;",
+      "answer_rows": 1048
      },
      {
       "ok": true,
-      "ms": 3281,
+      "ms": 3987,
       "rows": 1048,
-      "first": "129760",
       "error": "",
       "digest": "a1392f66318b233bf760de5d9b4be2d255d23ecec92e17eb86258e4964c4e176",
+      "answer": [
+       [
+        "129760",
+        "17538456.86"
+       ],
+       [
+        "166726",
+        "16503353.92"
+       ],
+       [
+        "191287",
+        "16474801.97"
+       ],
+       [
+        "161758",
+        "16101755.54"
+       ],
+       [
+        "34452",
+        "15983844.72"
+       ]
+      ],
+      "first": "129760",
       "name": "q11",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  ps_partkey, \n  sum(ps_supplycost * ps_availqty) as value\nfrom \n  partsupp, \n  supplier, \n  nation\nwhere \n  ps_suppkey = s_suppkey\n  and s_nationkey = n_nationkey\n  and n_name = 'GERMANY'\ngroup by \n  ps_partkey \nhaving \n  sum(ps_supplycost * ps_availqty) > (\n    select \n      sum(ps_supplycost * ps_availqty) * 0.0001\n    from \n      partsupp, \n      supplier, \n      nation\n    where \n      ps_suppkey = s_suppkey\n      and s_nationkey = n_nationkey\n      and n_name = 'GERMANY' \n   )\norder by \n  value desc;",
+      "answer_rows": 1048
      },
      {
       "ok": true,
-      "ms": 1884,
+      "ms": 2558,
       "rows": 2,
-      "first": "MAIL",
       "error": "",
       "digest": "66b2216fa14f71932d511f31c84310bf0041957519af943f692aee26e2a627fb",
+      "answer": [
+       [
+        "MAIL",
+        "6202",
+        "9324"
+       ],
+       [
+        "SHIP",
+        "6200",
+        "9262"
+       ]
+      ],
+      "first": "MAIL",
       "name": "q12",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  l_shipmode,\n  sum(case when o_orderpriority = '1-URGENT' or o_orderpriority = '2-HIGH' then 1 else 0 end) as high_line_count,\n  sum(case when o_orderpriority <> '1-URGENT' and o_orderpriority <> '2-HIGH' then 1 else 0 end) as low_line_count\nfrom \n  orders, \n  lineitem\nwhere \n  o_orderkey = l_orderkey\n  and l_shipmode in ('MAIL', 'SHIP')\n  and l_commitdate < l_receiptdate\n  and l_shipdate < l_commitdate\n  and l_receiptdate >= date '1994-01-01'\n  and l_receiptdate < date '1994-01-01' + interval '1' year\ngroup by \n  l_shipmode\norder by \n  l_shipmode;"
      },
      {
       "ok": true,
-      "ms": 1954,
+      "ms": 2496,
       "rows": 2,
-      "first": "MAIL",
       "error": "",
       "digest": "66b2216fa14f71932d511f31c84310bf0041957519af943f692aee26e2a627fb",
+      "answer": [
+       [
+        "MAIL",
+        "6202",
+        "9324"
+       ],
+       [
+        "SHIP",
+        "6200",
+        "9262"
+       ]
+      ],
+      "first": "MAIL",
       "name": "q12",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  l_shipmode,\n  sum(case when o_orderpriority = '1-URGENT' or o_orderpriority = '2-HIGH' then 1 else 0 end) as high_line_count,\n  sum(case when o_orderpriority <> '1-URGENT' and o_orderpriority <> '2-HIGH' then 1 else 0 end) as low_line_count\nfrom \n  orders, \n  lineitem\nwhere \n  o_orderkey = l_orderkey\n  and l_shipmode in ('MAIL', 'SHIP')\n  and l_commitdate < l_receiptdate\n  and l_shipdate < l_commitdate\n  and l_receiptdate >= date '1994-01-01'\n  and l_receiptdate < date '1994-01-01' + interval '1' year\ngroup by \n  l_shipmode\norder by \n  l_shipmode;"
      },
      {
       "ok": true,
-      "ms": 2193,
+      "ms": 2340,
       "rows": 2,
-      "first": "MAIL",
       "error": "",
       "digest": "66b2216fa14f71932d511f31c84310bf0041957519af943f692aee26e2a627fb",
+      "answer": [
+       [
+        "MAIL",
+        "6202",
+        "9324"
+       ],
+       [
+        "SHIP",
+        "6200",
+        "9262"
+       ]
+      ],
+      "first": "MAIL",
       "name": "q12",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  l_shipmode,\n  sum(case when o_orderpriority = '1-URGENT' or o_orderpriority = '2-HIGH' then 1 else 0 end) as high_line_count,\n  sum(case when o_orderpriority <> '1-URGENT' and o_orderpriority <> '2-HIGH' then 1 else 0 end) as low_line_count\nfrom \n  orders, \n  lineitem\nwhere \n  o_orderkey = l_orderkey\n  and l_shipmode in ('MAIL', 'SHIP')\n  and l_commitdate < l_receiptdate\n  and l_shipdate < l_commitdate\n  and l_receiptdate >= date '1994-01-01'\n  and l_receiptdate < date '1994-01-01' + interval '1' year\ngroup by \n  l_shipmode\norder by \n  l_shipmode;"
      },
      {
       "ok": true,
-      "ms": 3030,
+      "ms": 2730,
       "rows": 1,
-      "first": "16.38",
       "error": "",
       "digest": "d8c2ed712ecd7c75b272c01246c4602fd301a2689981bdd97038e2bba7d87078",
+      "answer": [
+       [
+        "16.38"
+       ]
+      ],
+      "first": "16.38",
       "name": "q14",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice*(1-l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue\nfrom \n  lineitem, \n  part\nwhere \n  l_partkey = p_partkey\n  and l_shipdate >= date '1995-09-01'\n  and l_shipdate < date '1995-09-01' + interval '1' month;"
      },
      {
       "ok": true,
-      "ms": 2954,
+      "ms": 2872,
       "rows": 1,
-      "first": "16.38",
       "error": "",
       "digest": "d8c2ed712ecd7c75b272c01246c4602fd301a2689981bdd97038e2bba7d87078",
+      "answer": [
+       [
+        "16.38"
+       ]
+      ],
+      "first": "16.38",
       "name": "q14",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice*(1-l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue\nfrom \n  lineitem, \n  part\nwhere \n  l_partkey = p_partkey\n  and l_shipdate >= date '1995-09-01'\n  and l_shipdate < date '1995-09-01' + interval '1' month;"
      },
      {
       "ok": true,
-      "ms": 2810,
+      "ms": 2902,
       "rows": 1,
-      "first": "16.38",
       "error": "",
       "digest": "d8c2ed712ecd7c75b272c01246c4602fd301a2689981bdd97038e2bba7d87078",
+      "answer": [
+       [
+        "16.38"
+       ]
+      ],
+      "first": "16.38",
       "name": "q14",
       "group": "main",
-      "select": true
+      "select": true,
+      "sql": "select \n  100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice*(1-l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue\nfrom \n  lineitem, \n  part\nwhere \n  l_partkey = p_partkey\n  and l_shipdate >= date '1995-09-01'\n  and l_shipdate < date '1995-09-01' + interval '1' month;"
      },
      {
       "ok": true,
-      "ms": 89,
+      "ms": 60,
       "rows": 0,
       "first": "",
       "error": "",
@@ -2503,7 +4189,7 @@
      },
      {
       "ok": true,
-      "ms": 52,
+      "ms": 95,
       "rows": 0,
       "first": "",
       "error": "",
@@ -2514,7 +4200,7 @@
      },
      {
       "ok": true,
-      "ms": 122,
+      "ms": 48,
       "rows": 0,
       "first": "",
       "error": "",
@@ -2525,7 +4211,7 @@
      },
      {
       "ok": true,
-      "ms": 120,
+      "ms": 52,
       "rows": 0,
       "first": "",
       "error": "",
@@ -2536,7 +4222,7 @@
      },
      {
       "ok": true,
-      "ms": 125,
+      "ms": 88,
       "rows": 0,
       "first": "",
       "error": "",
@@ -2547,7 +4233,7 @@
      },
      {
       "ok": true,
-      "ms": 69,
+      "ms": 160,
       "rows": 0,
       "first": "",
       "error": "",
@@ -2558,7 +4244,7 @@
      },
      {
       "ok": true,
-      "ms": 72,
+      "ms": 104,
       "rows": 0,
       "first": "",
       "error": "",
@@ -2569,7 +4255,7 @@
      },
      {
       "ok": true,
-      "ms": 48,
+      "ms": 79,
       "rows": 0,
       "first": "",
       "error": "",
@@ -2658,120 +4344,120 @@
     "first_failure": null
    },
    "summary": {
-    "load_ms": 29637,
-    "load_mib_s": 35.4,
+    "load_ms": 36484,
+    "load_mib_s": 28.8,
     "load_ms_by_table": {
-     "loadLineitem": 24282,
-     "loadOrders": 2862,
-     "loadPartsupp": 1049,
-     "loadPart": 559,
-     "loadCustomer": 429,
-     "loadSupplier": 222,
-     "loadNation": 141,
-     "loadRegion": 93
+     "loadLineitem": 30329,
+     "loadOrders": 3465,
+     "loadPartsupp": 1400,
+     "loadPart": 487,
+     "loadCustomer": 443,
+     "loadSupplier": 220,
+     "loadNation": 60,
+     "loadRegion": 80
     },
     "queries": {
      "q1": {
       "runs_ms": [
-       2698,
-       2761,
-       2881
+       3825,
+       3676,
+       3556
       ],
-      "min_ms": 2698,
-      "median_ms": 2761
+      "min_ms": 3556,
+      "median_ms": 3676
      },
      "q3": {
       "runs_ms": [
-       2111,
-       2060,
-       2142
+       2376,
+       2368,
+       2498
       ],
-      "min_ms": 2060,
-      "median_ms": 2111
+      "min_ms": 2368,
+      "median_ms": 2376
      },
      "q4": {
       "runs_ms": [
-       1329,
-       1260,
-       1237
+       1713,
+       1692,
+       1645
       ],
-      "min_ms": 1237,
-      "median_ms": 1260
+      "min_ms": 1645,
+      "median_ms": 1692
      },
      "q6": {
       "runs_ms": [
-       1086,
-       962,
-       927
+       1174,
+       1302,
+       1187
       ],
-      "min_ms": 927,
-      "median_ms": 962
+      "min_ms": 1174,
+      "median_ms": 1187
      },
      "q7": {
       "runs_ms": [
-       7063,
-       7612,
-       7158
+       9484,
+       9368,
+       9160
       ],
-      "min_ms": 7063,
-      "median_ms": 7158
+      "min_ms": 9160,
+      "median_ms": 9368
      },
      "q8": {
       "runs_ms": [
-       8496,
-       8000,
-       8415
+       10072,
+       9981,
+       10054
       ],
-      "min_ms": 8000,
-      "median_ms": 8415
+      "min_ms": 9981,
+      "median_ms": 10054
      },
      "q9": {
       "runs_ms": [
-       8699,
-       8145,
-       7697
+       9930,
+       9751,
+       9868
       ],
-      "min_ms": 7697,
-      "median_ms": 8145
+      "min_ms": 9751,
+      "median_ms": 9868
      },
      "q10": {
       "runs_ms": [
-       3925,
-       3606,
-       3865
+       4824,
+       4553,
+       4578
       ],
-      "min_ms": 3606,
-      "median_ms": 3865
+      "min_ms": 4553,
+      "median_ms": 4578
      },
      "q11": {
       "runs_ms": [
-       3520,
-       3533,
-       3281
+       4153,
+       4131,
+       3987
       ],
-      "min_ms": 3281,
-      "median_ms": 3520
+      "min_ms": 3987,
+      "median_ms": 4131
      },
      "q12": {
       "runs_ms": [
-       1884,
-       1954,
-       2193
+       2558,
+       2496,
+       2340
       ],
-      "min_ms": 1884,
-      "median_ms": 1954
+      "min_ms": 2340,
+      "median_ms": 2496
      },
      "q14": {
       "runs_ms": [
-       3030,
-       2954,
-       2810
+       2730,
+       2872,
+       2902
       ],
-      "min_ms": 2810,
-      "median_ms": 2954
+      "min_ms": 2730,
+      "median_ms": 2872
      }
     },
-    "queries_total_median_ms": 43105,
+    "queries_total_median_ms": 52298,
     "row_counts": {
      "countLineitem": [
       {
@@ -2825,6 +4511,10 @@
    }
   }
  },
+ "scratch": [
+  "/var/tmp/rocepool_rapidsse",
+  "/var/tmp/rocepool_rapidsse"
+ ],
  "rocepool": {
   "mdts": "10.99.1.1:19901,10.99.1.2:19901",
   "osts": "10.99.1.1:19951,10.99.1.2:19951",
@@ -2832,65 +4522,320 @@
   "client": "native FUSE (rocepool-fuse)",
   "ost_data": "tier file:/var/tmp/rocepool_rapidsse_tier/ost{node}.img:4 (128 MiB RAM cache per OST)"
  },
+ "duckdb": {
+  "duckdb": "v1.5.6 (Variegata) 069cc9f",
+  "threads": 2,
+  "load_s": {
+   "nation": 0.005,
+   "region": 0.002,
+   "part": 0.286,
+   "supplier": 0.025,
+   "partsupp": 0.527,
+   "customer": 0.235,
+   "orders": 1.171,
+   "lineitem": 4.941
+  },
+  "queries": {
+   "q1": {
+    "runs_s": [
+     0.151,
+     0.14,
+     0.125
+    ],
+    "error": "",
+    "median_ms": 140,
+    "same_answer_as_rapidsse": false,
+    "answer_check": "row 1 column 5 (sum): 53758257382.21 vs 53758257134.8700, difference 247.3",
+    "rapidsse_within_tpch_rules": false,
+    "tpch_rules_check": "row 1 column 5 (sum): 53758257382.21 vs 53758257134.8700, difference 247.3",
+    "rows_returned": 4
+   },
+   "q3": {
+    "runs_s": [
+     0.048,
+     0.039,
+     0.04
+    ],
+    "error": "",
+    "median_ms": 40,
+    "same_answer_as_rapidsse": false,
+    "answer_check": "row 1 column 2 (sum): 406181.00 vs 406181.0111, difference 0.0111",
+    "rapidsse_within_tpch_rules": true,
+    "tpch_rules_check": "within TPC-H's validation rules",
+    "rows_returned": 10
+   },
+   "q4": {
+    "runs_s": [
+     0.045,
+     0.043,
+     0.043
+    ],
+    "error": "",
+    "median_ms": 43,
+    "same_answer_as_rapidsse": true,
+    "answer_check": "identical",
+    "rapidsse_within_tpch_rules": true,
+    "tpch_rules_check": "identical",
+    "rows_returned": 5
+   },
+   "q6": {
+    "runs_s": [
+     0.016,
+     0.015,
+     0.015
+    ],
+    "error": "",
+    "median_ms": 15,
+    "same_answer_as_rapidsse": false,
+    "answer_check": "row 1 column 1 (sum): 123141101.83 vs 123141078.2283, difference 23.6",
+    "rapidsse_within_tpch_rules": true,
+    "tpch_rules_check": "within TPC-H's validation rules",
+    "rows_returned": 1
+   },
+   "q7": {
+    "runs_s": [
+     0.044,
+     0.046,
+     0.05
+    ],
+    "error": "",
+    "median_ms": 46,
+    "same_answer_as_rapidsse": false,
+    "answer_check": "row 1 column 4 (sum): 54639732.86 vs 54639732.7336, difference 0.1264",
+    "rapidsse_within_tpch_rules": true,
+    "tpch_rules_check": "within TPC-H's validation rules",
+    "rows_returned": 4
+   },
+   "q8": {
+    "runs_s": [
+     0.03,
+     0.028,
+     0.03
+    ],
+    "error": "",
+    "median_ms": 30,
+    "same_answer_as_rapidsse": true,
+    "answer_check": "identical",
+    "rapidsse_within_tpch_rules": true,
+    "tpch_rules_check": "identical",
+    "rows_returned": 2
+   },
+   "q9": {
+    "runs_s": [
+     0.14,
+     0.138,
+     0.132
+    ],
+    "error": "",
+    "median_ms": 138,
+    "same_answer_as_rapidsse": false,
+    "answer_check": "row 1 column 3 (sum): 27136900.41 vs 27136900.1803, difference 0.2297",
+    "rapidsse_within_tpch_rules": true,
+    "tpch_rules_check": "within TPC-H's validation rules",
+    "rows_returned": 175
+   },
+   "q10": {
+    "runs_s": [
+     0.113,
+     0.102,
+     0.104
+    ],
+    "error": "",
+    "median_ms": 104,
+    "same_answer_as_rapidsse": false,
+    "answer_check": "row 1 column 3 (sum): 734235.24 vs 734235.2455, difference 0.0055",
+    "rapidsse_within_tpch_rules": true,
+    "tpch_rules_check": "within TPC-H's validation rules",
+    "rows_returned": 20
+   },
+   "q11": {
+    "runs_s": [
+     0.01,
+     0.008,
+     0.008
+    ],
+    "error": "",
+    "median_ms": 8,
+    "same_answer_as_rapidsse": true,
+    "answer_check": "identical",
+    "rapidsse_within_tpch_rules": true,
+    "tpch_rules_check": "identical",
+    "rows_returned": 1048
+   },
+   "q12": {
+    "runs_s": [
+     0.069,
+     0.069,
+     0.068
+    ],
+    "error": "",
+    "median_ms": 69,
+    "same_answer_as_rapidsse": true,
+    "answer_check": "identical",
+    "rapidsse_within_tpch_rules": true,
+    "tpch_rules_check": "identical",
+    "rows_returned": 2
+   },
+   "q14": {
+    "runs_s": [
+     0.029,
+     0.028,
+     0.025
+    ],
+    "error": "",
+    "median_ms": 28,
+    "same_answer_as_rapidsse": true,
+    "answer_check": "identical",
+    "rapidsse_within_tpch_rules": true,
+    "tpch_rules_check": "identical",
+    "rows_returned": 1
+   }
+  },
+  "errors": [],
+  "load_total_s": 7.23,
+  "queries_total_median_ms": 661
+ },
  "comparison": {
   "load_ms": {
-   "rocepool": 32456,
-   "local": 29637
+   "rocepool": 38717,
+   "local": 36484
   },
   "queries_total_median_ms": {
-   "rocepool": 44165,
-   "local": 43105
+   "rocepool": 50904,
+   "local": 52298
   },
   "per_query_median_ms": {
    "q1": {
-    "rocepool": 2741,
-    "local": 2761
+    "rocepool": 3787,
+    "local": 3676
    },
    "q3": {
-    "rocepool": 2033,
-    "local": 2111
+    "rocepool": 2299,
+    "local": 2376
    },
    "q4": {
-    "rocepool": 1320,
-    "local": 1260
+    "rocepool": 1586,
+    "local": 1692
    },
    "q6": {
-    "rocepool": 993,
-    "local": 962
+    "rocepool": 1193,
+    "local": 1187
    },
    "q7": {
-    "rocepool": 8368,
-    "local": 7158
+    "rocepool": 9005,
+    "local": 9368
    },
    "q8": {
-    "rocepool": 8634,
-    "local": 8415
+    "rocepool": 9456,
+    "local": 10054
    },
    "q9": {
-    "rocepool": 8537,
-    "local": 8145
+    "rocepool": 9861,
+    "local": 9868
    },
    "q10": {
-    "rocepool": 3689,
-    "local": 3865
+    "rocepool": 4580,
+    "local": 4578
    },
    "q11": {
-    "rocepool": 3103,
-    "local": 3520
+    "rocepool": 3874,
+    "local": 4131
    },
    "q12": {
-    "rocepool": 1960,
-    "local": 1954
+    "rocepool": 2487,
+    "local": 2496
    },
    "q14": {
-    "rocepool": 2787,
-    "local": 2954
+    "rocepool": 2776,
+    "local": 2872
    }
   },
   "answers": {
    "compared": 39,
    "identical": 39,
    "differ": []
+  },
+  "data_preparation_s": {
+   "rocepool": 108.2,
+   "local": 108.4
+  },
+  "three_way_median_ms": {
+   "q1": {
+    "rapidsse_rocepool": 3787,
+    "rapidsse_local": 3676,
+    "duckdb": 140,
+    "duckdb_same_answer": false
+   },
+   "q3": {
+    "rapidsse_rocepool": 2299,
+    "rapidsse_local": 2376,
+    "duckdb": 40,
+    "duckdb_same_answer": false
+   },
+   "q4": {
+    "rapidsse_rocepool": 1586,
+    "rapidsse_local": 1692,
+    "duckdb": 43,
+    "duckdb_same_answer": true
+   },
+   "q6": {
+    "rapidsse_rocepool": 1193,
+    "rapidsse_local": 1187,
+    "duckdb": 15,
+    "duckdb_same_answer": false
+   },
+   "q7": {
+    "rapidsse_rocepool": 9005,
+    "rapidsse_local": 9368,
+    "duckdb": 46,
+    "duckdb_same_answer": false
+   },
+   "q8": {
+    "rapidsse_rocepool": 9456,
+    "rapidsse_local": 10054,
+    "duckdb": 30,
+    "duckdb_same_answer": true
+   },
+   "q9": {
+    "rapidsse_rocepool": 9861,
+    "rapidsse_local": 9868,
+    "duckdb": 138,
+    "duckdb_same_answer": false
+   },
+   "q10": {
+    "rapidsse_rocepool": 4580,
+    "rapidsse_local": 4578,
+    "duckdb": 104,
+    "duckdb_same_answer": false
+   },
+   "q11": {
+    "rapidsse_rocepool": 3874,
+    "rapidsse_local": 4131,
+    "duckdb": 8,
+    "duckdb_same_answer": true
+   },
+   "q12": {
+    "rapidsse_rocepool": 2487,
+    "rapidsse_local": 2496,
+    "duckdb": 69,
+    "duckdb_same_answer": true
+   },
+   "q14": {
+    "rapidsse_rocepool": 2776,
+    "rapidsse_local": 2872,
+    "duckdb": 28,
+    "duckdb_same_answer": true
+   }
+  },
+  "three_way_total_ms": {
+   "rapidsse_rocepool": 50904,
+   "rapidsse_local": 52298,
+   "duckdb": 661
+  },
+  "three_way_load_s": {
+   "rapidsse_rocepool": 38.717,
+   "rapidsse_local": 36.484,
+   "duckdb": 7.23
   }
  },
  "passed": true
