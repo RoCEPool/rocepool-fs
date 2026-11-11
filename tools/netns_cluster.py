@@ -47,6 +47,19 @@ def _addr(ifname: str, addr: str) -> None:
     _request(RTM_NEWADDR, NLM_F_CREATE | NLM_F_EXCL, body)
 
 
+def _default_route(gw: str, ifname: str) -> None:
+    """default via <gw>: a real host has one, and software that broadcasts to
+    255.255.255.255 (RapidsSE's cluster heartbeat) needs a route for it --
+    with only the /24 the send fails and the nodes never find each other."""
+    RTM_NEWROUTE, RTA_GATEWAY, RTA_OIF = 24, 5, 4
+    RT_TABLE_MAIN, RTPROT_BOOT, RT_SCOPE_UNIVERSE, RTN_UNICAST = 254, 3, 0, 1
+    body = (struct.pack("=BBBBBBBBI", socket.AF_INET, 0, 0, 0, RT_TABLE_MAIN, RTPROT_BOOT, RT_SCOPE_UNIVERSE,
+                        RTN_UNICAST, 0)
+            + _attr(RTA_GATEWAY, socket.inet_aton(gw))
+            + _attr(RTA_OIF, struct.pack("=I", socket.if_nametoindex(ifname))))
+    _request(RTM_NEWROUTE, NLM_F_CREATE | NLM_F_EXCL, body)
+
+
 def _link_up(ifname: str, master: int | None = None) -> None:
     body = _ifinfo(socket.if_nametoindex(ifname), IFF_UP, IFF_UP)
     if master is not None:
@@ -109,7 +122,8 @@ def up(n: int) -> list[str]:
             os.close(fd)
         _link_up(f"rpv{i}", master=br)
         ip = node_ip(i)
-        _inside(ns, lambda ip=ip: (_link_up("lo"), _link_up("eth0"), _addr("eth0", ip)))
+        _inside(ns, lambda ip=ip: (_link_up("lo"), _link_up("eth0"), _addr("eth0", ip),
+                                   _default_route(BRIDGE_IP, "eth0")))
     with open(STATE, "w") as f:
         f.write(str(n))
     print(f"netns cluster up: {n} nodes {node_ip(0)}..{node_ip(n - 1)} on bridge {BRIDGE} ({BRIDGE_IP})")

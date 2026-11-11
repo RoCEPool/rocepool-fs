@@ -1,0 +1,2897 @@
+{
+ "what": "RapidsSE on rocepool: RapidsSE's own TPC-H regression test",
+ "nodes": 2,
+ "cluster": "simulated: 2 network+mount namespaces on one bridge, softverbs RDMA emulator, 2 CPU cores shared by all nodes",
+ "sf": "1",
+ "rapidsse": {
+  "tree": "<RapidsSE tree>",
+  "commit": "90012081f5a974439470ddd96bc6118be5d6fb59",
+  "version": "v1.2.0-dev2-171-g90012081f5",
+  "partitions_per_node": 1,
+  "threads_per_node": 2,
+  "region_mib_per_node": 2880
+ },
+ "runs": {
+  "rocepool": {
+   "data": {
+    "chunks": 8,
+    "bytes": 1100695743,
+    "bytes_per_node": {
+     "NODE1": 549260759,
+     "NODE2": 551434984
+    },
+    "seconds": 79.6
+   },
+   "plan": {
+    "plan": "bamboo/perftest/configs/tests/tpch-sf1-2D2F.jmx",
+    "client": "RapidsSE JDBC driver (sejdbc-1.1.0.jar): RapidsSE JDBC 1",
+    "variables": {
+     "JDBC_URL": "jdbc:se://localhost:9123",
+     "SF": "1",
+     "QUERY_LOOP_COUNT": "3",
+     "SLEEP_TIME": "3"
+    },
+    "remap": {
+     "/mnt/disk": "/run/rocepool_rapidsse/node/disk"
+    },
+    "steps": [
+     {
+      "ok": true,
+      "ms": 96,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createLineitem",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 56,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createOrders",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 69,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createPartsupp",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 57,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createPart",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 80,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createCustomer",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 119,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createSupplier",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 51,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createNation",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 85,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createRegion",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 152,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxL_ORDERKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 91,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxL_PARTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 176,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxL_SHIPDATE",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 46,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxL_SUPPKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 47,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxL_RECEIPTDATE",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 95,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxO_CUSTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 56,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxO_ORDERKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 156,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxO_ORDERDATE",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 64,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxPS_SUPPKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 132,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxPS_PARTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 87,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxP_PARTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 95,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxC_CUSTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 99,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxC_NATIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 135,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxS_SUPPKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 43,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxS_NATIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 67,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxN_NATIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 63,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxN_REGIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 47,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxR_REGIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 26798,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadLineitem",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 434,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxL_ORDERKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 493,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxL_PARTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 521,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxL_SHIPDATE",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 501,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxL_SUPPKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 487,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxL_RECEIPTDATE",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 3299,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadOrders",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 162,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxO_CUSTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 188,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxO_ORDERKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 144,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxO_ORDERDATE",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 1095,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadPartsupp",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 126,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxPS_SUPPKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 84,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxPS_PARTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 373,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadPart",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 57,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxP_PARTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 478,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadCustomer",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 60,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxC_CUSTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 83,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxC_NATIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 262,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadSupplier",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 62,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxS_SUPPKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 80,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxS_NATIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 43,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadNation",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 43,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxN_NATIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 44,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxN_REGIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 108,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadRegion",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 42,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxR_REGIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 2570,
+      "rows": 1,
+      "first": "6001215",
+      "error": "",
+      "digest": "dc722ed927a9bde43f9b39c5a395001a895dda9a1f2457859f61ec067e64a50b",
+      "name": "countLineitem",
+      "group": "main",
+      "select": true,
+      "assertions": [
+       {
+        "variable": "lineitemCount_1",
+        "expected": "6001215",
+        "actual": "6001215",
+        "ok": true
+       }
+      ]
+     },
+     {
+      "ok": true,
+      "ms": 369,
+      "rows": 1,
+      "first": "1500000",
+      "error": "",
+      "digest": "f6905ceb8bffdfa92043262482af63a96bd38014c6461c17ad3abe60b7d146a1",
+      "name": "countOrders",
+      "group": "main",
+      "select": true,
+      "assertions": [
+       {
+        "variable": "ordersCount_1",
+        "expected": "1500000",
+        "actual": "1500000",
+        "ok": true
+       }
+      ]
+     },
+     {
+      "ok": true,
+      "ms": 345,
+      "rows": 1,
+      "first": "800000",
+      "error": "",
+      "digest": "26054907d74e609ac2e5c78100a004b0f8896ba30f814f9192813e5a3aa658ae",
+      "name": "countPartsupp",
+      "group": "main",
+      "select": true,
+      "assertions": [
+       {
+        "variable": "partsuppCount_1",
+        "expected": "800000",
+        "actual": "800000",
+        "ok": true
+       }
+      ]
+     },
+     {
+      "ok": true,
+      "ms": 324,
+      "rows": 1,
+      "first": "200000",
+      "error": "",
+      "digest": "106a19fc889ddb83d013603518afa99ffdb1be7567264b27790fef72763a9841",
+      "name": "countPart",
+      "group": "main",
+      "select": true,
+      "assertions": [
+       {
+        "variable": "partCount_1",
+        "expected": "200000",
+        "actual": "200000",
+        "ok": true
+       }
+      ]
+     },
+     {
+      "ok": true,
+      "ms": 319,
+      "rows": 1,
+      "first": "150000",
+      "error": "",
+      "digest": "de535cf27d996f4c203f410bb6f4abcb758a60868dc20320451ba3d223dea8ab",
+      "name": "countCustomer",
+      "group": "main",
+      "select": true,
+      "assertions": [
+       {
+        "variable": "customerCount_1",
+        "expected": "150000",
+        "actual": "150000",
+        "ok": true
+       }
+      ]
+     },
+     {
+      "ok": true,
+      "ms": 312,
+      "rows": 1,
+      "first": "10000",
+      "error": "",
+      "digest": "56ca62c526894f2238cbe4e9a170bb9730c10be6ca319a1bba4f1454aaf1a274",
+      "name": "countSupplier",
+      "group": "main",
+      "select": true,
+      "assertions": [
+       {
+        "variable": "supplierCount_1",
+        "expected": "10000",
+        "actual": "10000",
+        "ok": true
+       }
+      ]
+     },
+     {
+      "ok": true,
+      "ms": 2717,
+      "rows": 4,
+      "first": "A",
+      "error": "",
+      "digest": "56f31e3be7b38c41cd69e746e965866ac46ffbe0296723e2816a6ff7fdca431b",
+      "name": "q1",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2921,
+      "rows": 4,
+      "first": "A",
+      "error": "",
+      "digest": "56f31e3be7b38c41cd69e746e965866ac46ffbe0296723e2816a6ff7fdca431b",
+      "name": "q1",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2741,
+      "rows": 4,
+      "first": "A",
+      "error": "",
+      "digest": "56f31e3be7b38c41cd69e746e965866ac46ffbe0296723e2816a6ff7fdca431b",
+      "name": "q1",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2117,
+      "rows": 10,
+      "first": "2456423",
+      "error": "",
+      "digest": "087c7bf3d0c40f62caacdf93354cd20601875a58eb060b6961b74d22a75ec2b1",
+      "name": "q3",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2033,
+      "rows": 10,
+      "first": "2456423",
+      "error": "",
+      "digest": "087c7bf3d0c40f62caacdf93354cd20601875a58eb060b6961b74d22a75ec2b1",
+      "name": "q3",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 1970,
+      "rows": 10,
+      "first": "2456423",
+      "error": "",
+      "digest": "087c7bf3d0c40f62caacdf93354cd20601875a58eb060b6961b74d22a75ec2b1",
+      "name": "q3",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 1306,
+      "rows": 5,
+      "first": "1-URGENT",
+      "error": "",
+      "digest": "967d47370f84f34fc2245a70dd84b1279b351c9832826fe2a75252e47a85ad36",
+      "name": "q4",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 1370,
+      "rows": 5,
+      "first": "1-URGENT",
+      "error": "",
+      "digest": "967d47370f84f34fc2245a70dd84b1279b351c9832826fe2a75252e47a85ad36",
+      "name": "q4",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 1320,
+      "rows": 5,
+      "first": "1-URGENT",
+      "error": "",
+      "digest": "967d47370f84f34fc2245a70dd84b1279b351c9832826fe2a75252e47a85ad36",
+      "name": "q4",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 993,
+      "rows": 1,
+      "first": "123141101.83",
+      "error": "",
+      "digest": "4ea8102ed6cfbab237fa88cf3341093749180861c2f02725d1013fb8afb793e9",
+      "name": "q6",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 990,
+      "rows": 1,
+      "first": "123141101.83",
+      "error": "",
+      "digest": "4ea8102ed6cfbab237fa88cf3341093749180861c2f02725d1013fb8afb793e9",
+      "name": "q6",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 1015,
+      "rows": 1,
+      "first": "123141101.83",
+      "error": "",
+      "digest": "4ea8102ed6cfbab237fa88cf3341093749180861c2f02725d1013fb8afb793e9",
+      "name": "q6",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 8368,
+      "rows": 4,
+      "first": "FRANCE",
+      "error": "",
+      "digest": "29729bcaba1f00eadaaa182b3f8ed2ec004d6e74ebd285a61cc82a3e493babd8",
+      "name": "q7",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 8082,
+      "rows": 4,
+      "first": "FRANCE",
+      "error": "",
+      "digest": "29729bcaba1f00eadaaa182b3f8ed2ec004d6e74ebd285a61cc82a3e493babd8",
+      "name": "q7",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 8406,
+      "rows": 4,
+      "first": "FRANCE",
+      "error": "",
+      "digest": "29729bcaba1f00eadaaa182b3f8ed2ec004d6e74ebd285a61cc82a3e493babd8",
+      "name": "q7",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 8728,
+      "rows": 2,
+      "first": "1995",
+      "error": "",
+      "digest": "cc9619527d561da2f25c7bfd9b0224055572e76c1d2f3d114719e310416756b7",
+      "name": "q8",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 8634,
+      "rows": 2,
+      "first": "1995",
+      "error": "",
+      "digest": "cc9619527d561da2f25c7bfd9b0224055572e76c1d2f3d114719e310416756b7",
+      "name": "q8",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 8443,
+      "rows": 2,
+      "first": "1995",
+      "error": "",
+      "digest": "cc9619527d561da2f25c7bfd9b0224055572e76c1d2f3d114719e310416756b7",
+      "name": "q8",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 8667,
+      "rows": 175,
+      "first": "ALGERIA",
+      "error": "",
+      "digest": "858e34589c5e54d279acefb55ba2dc8ac4e4df9135941aeb908378bc9ca608dd",
+      "name": "q9",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 8537,
+      "rows": 175,
+      "first": "ALGERIA",
+      "error": "",
+      "digest": "858e34589c5e54d279acefb55ba2dc8ac4e4df9135941aeb908378bc9ca608dd",
+      "name": "q9",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 8476,
+      "rows": 175,
+      "first": "ALGERIA",
+      "error": "",
+      "digest": "858e34589c5e54d279acefb55ba2dc8ac4e4df9135941aeb908378bc9ca608dd",
+      "name": "q9",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 3743,
+      "rows": 20,
+      "first": "57040",
+      "error": "",
+      "digest": "bc574ed4a08e6807bd4f893566e6541a585c511b0d11c8ce5f3e4231776866ff",
+      "name": "q10",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 3500,
+      "rows": 20,
+      "first": "57040",
+      "error": "",
+      "digest": "bc574ed4a08e6807bd4f893566e6541a585c511b0d11c8ce5f3e4231776866ff",
+      "name": "q10",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 3689,
+      "rows": 20,
+      "first": "57040",
+      "error": "",
+      "digest": "bc574ed4a08e6807bd4f893566e6541a585c511b0d11c8ce5f3e4231776866ff",
+      "name": "q10",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 3030,
+      "rows": 1048,
+      "first": "129760",
+      "error": "",
+      "digest": "a1392f66318b233bf760de5d9b4be2d255d23ecec92e17eb86258e4964c4e176",
+      "name": "q11",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 3103,
+      "rows": 1048,
+      "first": "129760",
+      "error": "",
+      "digest": "a1392f66318b233bf760de5d9b4be2d255d23ecec92e17eb86258e4964c4e176",
+      "name": "q11",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 3487,
+      "rows": 1048,
+      "first": "129760",
+      "error": "",
+      "digest": "a1392f66318b233bf760de5d9b4be2d255d23ecec92e17eb86258e4964c4e176",
+      "name": "q11",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2143,
+      "rows": 2,
+      "first": "MAIL",
+      "error": "",
+      "digest": "66b2216fa14f71932d511f31c84310bf0041957519af943f692aee26e2a627fb",
+      "name": "q12",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 1960,
+      "rows": 2,
+      "first": "MAIL",
+      "error": "",
+      "digest": "66b2216fa14f71932d511f31c84310bf0041957519af943f692aee26e2a627fb",
+      "name": "q12",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 1756,
+      "rows": 2,
+      "first": "MAIL",
+      "error": "",
+      "digest": "66b2216fa14f71932d511f31c84310bf0041957519af943f692aee26e2a627fb",
+      "name": "q12",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2703,
+      "rows": 1,
+      "first": "16.38",
+      "error": "",
+      "digest": "d8c2ed712ecd7c75b272c01246c4602fd301a2689981bdd97038e2bba7d87078",
+      "name": "q14",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2932,
+      "rows": 1,
+      "first": "16.38",
+      "error": "",
+      "digest": "d8c2ed712ecd7c75b272c01246c4602fd301a2689981bdd97038e2bba7d87078",
+      "name": "q14",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2787,
+      "rows": 1,
+      "first": "16.38",
+      "error": "",
+      "digest": "d8c2ed712ecd7c75b272c01246c4602fd301a2689981bdd97038e2bba7d87078",
+      "name": "q14",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 45,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropNation",
+      "group": "teardown",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 43,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropRegion",
+      "group": "teardown",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 43,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropSupplier",
+      "group": "teardown",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 84,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropCustomer",
+      "group": "teardown",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 54,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropPart",
+      "group": "teardown",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 43,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropPartsupp",
+      "group": "teardown",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 43,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropOrders",
+      "group": "teardown",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 141,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropLineitem",
+      "group": "teardown",
+      "select": false
+     }
+    ],
+    "not_executed": [
+     "/Test Plan/Main Thread Group/Setup/Check for failure (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/Setup/Check for failure (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/Setup/prepareData/generateData (data generation: done by the runner, same dbgen chunking)",
+     "/Test Plan/Main Thread Group/Setup/Check for failure (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/Setup/Check for failure (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/Setup/Check for failure (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/Check for setup failure (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q1 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q1 Group/Q1Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q1 Group/Q1Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q1 Group/Q1Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q3 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q3 Group/Q3Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q3 Group/Q3Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q3 Group/Q3Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q4 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q4 Group/Q4Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q4 Group/Q4Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q4 Group/Q4Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q6 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q6 Group/Q6Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q6 Group/Q6Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q6 Group/Q6Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q7 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q7 Group/Q7Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q7 Group/Q7Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q7 Group/Q7Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q8 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q8 Group/Q8Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q8 Group/Q8Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q8 Group/Q8Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q9 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q9 Group/Q9Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q9 Group/Q9Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q9 Group/Q9Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q10 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q10 Group/Q10Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q10 Group/Q10Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q10 Group/Q10Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q11 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q11 Group/Q11Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q11 Group/Q11Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q11 Group/Q11Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q12 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q12 Group/Q12Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q12 Group/Q12Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q12 Group/Q12Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q14 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q14 Group/Q14Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q14 Group/Q14Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q14 Group/Q14Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/Check for any query failures (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/Log completion (log / exit-on-failure)"
+    ],
+    "disabled_in_plan": [
+     "/Test Plan/tearDown Thread Group/dropQ15View",
+     "/Test Plan/Main Thread Group/Setup/createTables/createQ15View",
+     "/Test Plan/Main Thread Group/Setup/validateRowCount/countNation",
+     "/Test Plan/Main Thread Group/Setup/validateRowCount/countRegion",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q2 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q5 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q13 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q15 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q16 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q17 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q18 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q19 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q20 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q21 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q22 Group",
+     "/Test Plan/Main Thread Group/TPC-H Pipeline Queries"
+    ],
+    "passed": true,
+    "first_failure": null
+   },
+   "summary": {
+    "load_ms": 32456,
+    "load_mib_s": 32.3,
+    "load_ms_by_table": {
+     "loadLineitem": 26798,
+     "loadOrders": 3299,
+     "loadPartsupp": 1095,
+     "loadPart": 373,
+     "loadCustomer": 478,
+     "loadSupplier": 262,
+     "loadNation": 43,
+     "loadRegion": 108
+    },
+    "queries": {
+     "q1": {
+      "runs_ms": [
+       2717,
+       2921,
+       2741
+      ],
+      "min_ms": 2717,
+      "median_ms": 2741
+     },
+     "q3": {
+      "runs_ms": [
+       2117,
+       2033,
+       1970
+      ],
+      "min_ms": 1970,
+      "median_ms": 2033
+     },
+     "q4": {
+      "runs_ms": [
+       1306,
+       1370,
+       1320
+      ],
+      "min_ms": 1306,
+      "median_ms": 1320
+     },
+     "q6": {
+      "runs_ms": [
+       993,
+       990,
+       1015
+      ],
+      "min_ms": 990,
+      "median_ms": 993
+     },
+     "q7": {
+      "runs_ms": [
+       8368,
+       8082,
+       8406
+      ],
+      "min_ms": 8082,
+      "median_ms": 8368
+     },
+     "q8": {
+      "runs_ms": [
+       8728,
+       8634,
+       8443
+      ],
+      "min_ms": 8443,
+      "median_ms": 8634
+     },
+     "q9": {
+      "runs_ms": [
+       8667,
+       8537,
+       8476
+      ],
+      "min_ms": 8476,
+      "median_ms": 8537
+     },
+     "q10": {
+      "runs_ms": [
+       3743,
+       3500,
+       3689
+      ],
+      "min_ms": 3500,
+      "median_ms": 3689
+     },
+     "q11": {
+      "runs_ms": [
+       3030,
+       3103,
+       3487
+      ],
+      "min_ms": 3030,
+      "median_ms": 3103
+     },
+     "q12": {
+      "runs_ms": [
+       2143,
+       1960,
+       1756
+      ],
+      "min_ms": 1756,
+      "median_ms": 1960
+     },
+     "q14": {
+      "runs_ms": [
+       2703,
+       2932,
+       2787
+      ],
+      "min_ms": 2703,
+      "median_ms": 2787
+     }
+    },
+    "queries_total_median_ms": 44165,
+    "row_counts": {
+     "countLineitem": [
+      {
+       "variable": "lineitemCount_1",
+       "expected": "6001215",
+       "actual": "6001215",
+       "ok": true
+      }
+     ],
+     "countOrders": [
+      {
+       "variable": "ordersCount_1",
+       "expected": "1500000",
+       "actual": "1500000",
+       "ok": true
+      }
+     ],
+     "countPartsupp": [
+      {
+       "variable": "partsuppCount_1",
+       "expected": "800000",
+       "actual": "800000",
+       "ok": true
+      }
+     ],
+     "countPart": [
+      {
+       "variable": "partCount_1",
+       "expected": "200000",
+       "actual": "200000",
+       "ok": true
+      }
+     ],
+     "countCustomer": [
+      {
+       "variable": "customerCount_1",
+       "expected": "150000",
+       "actual": "150000",
+       "ok": true
+      }
+     ],
+     "countSupplier": [
+      {
+       "variable": "supplierCount_1",
+       "expected": "10000",
+       "actual": "10000",
+       "ok": true
+      }
+     ]
+    }
+   }
+  },
+  "local": {
+   "data": {
+    "chunks": 8,
+    "bytes": 1100695743,
+    "bytes_per_node": {
+     "NODE1": 549260759,
+     "NODE2": 551434984
+    },
+    "seconds": 77.2
+   },
+   "plan": {
+    "plan": "bamboo/perftest/configs/tests/tpch-sf1-2D2F.jmx",
+    "client": "RapidsSE JDBC driver (sejdbc-1.1.0.jar): RapidsSE JDBC 1",
+    "variables": {
+     "JDBC_URL": "jdbc:se://localhost:9123",
+     "SF": "1",
+     "QUERY_LOOP_COUNT": "3",
+     "SLEEP_TIME": "3"
+    },
+    "remap": {
+     "/mnt/disk": "/run/rocepool_rapidsse/node/disk"
+    },
+    "steps": [
+     {
+      "ok": true,
+      "ms": 101,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createLineitem",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 84,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createOrders",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 75,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createPartsupp",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 52,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createPart",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 115,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createCustomer",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 84,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createSupplier",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 76,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createNation",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 132,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createRegion",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 174,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxL_ORDERKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 128,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxL_PARTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 52,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxL_SHIPDATE",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 91,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxL_SUPPKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 68,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxL_RECEIPTDATE",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 187,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxO_CUSTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 80,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxO_ORDERKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 81,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxO_ORDERDATE",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 92,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxPS_SUPPKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 46,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxPS_PARTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 44,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxP_PARTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 45,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxC_CUSTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 78,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxC_NATIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 77,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxS_SUPPKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 109,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxS_NATIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 120,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxN_NATIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 105,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxN_REGIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 149,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "createIndex_IxR_REGIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 24282,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadLineitem",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 457,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxL_ORDERKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 502,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxL_PARTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 481,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxL_SHIPDATE",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 498,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxL_SUPPKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 530,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxL_RECEIPTDATE",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 2862,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadOrders",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 259,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxO_CUSTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 181,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxO_ORDERKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 177,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxO_ORDERDATE",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 1049,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadPartsupp",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 84,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxPS_SUPPKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 89,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxPS_PARTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 559,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadPart",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 79,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxP_PARTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 429,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadCustomer",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 84,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxC_CUSTKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 50,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxC_NATIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 222,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadSupplier",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 106,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxS_SUPPKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 53,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxS_NATIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 141,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadNation",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 46,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxN_NATIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 57,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxN_REGIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 93,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "loadRegion",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 81,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "compact_IxR_REGIONKEY",
+      "group": "main",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 641,
+      "rows": 1,
+      "first": "6001215",
+      "error": "",
+      "digest": "dc722ed927a9bde43f9b39c5a395001a895dda9a1f2457859f61ec067e64a50b",
+      "name": "countLineitem",
+      "group": "main",
+      "select": true,
+      "assertions": [
+       {
+        "variable": "lineitemCount_1",
+        "expected": "6001215",
+        "actual": "6001215",
+        "ok": true
+       }
+      ]
+     },
+     {
+      "ok": true,
+      "ms": 341,
+      "rows": 1,
+      "first": "1500000",
+      "error": "",
+      "digest": "f6905ceb8bffdfa92043262482af63a96bd38014c6461c17ad3abe60b7d146a1",
+      "name": "countOrders",
+      "group": "main",
+      "select": true,
+      "assertions": [
+       {
+        "variable": "ordersCount_1",
+        "expected": "1500000",
+        "actual": "1500000",
+        "ok": true
+       }
+      ]
+     },
+     {
+      "ok": true,
+      "ms": 334,
+      "rows": 1,
+      "first": "800000",
+      "error": "",
+      "digest": "26054907d74e609ac2e5c78100a004b0f8896ba30f814f9192813e5a3aa658ae",
+      "name": "countPartsupp",
+      "group": "main",
+      "select": true,
+      "assertions": [
+       {
+        "variable": "partsuppCount_1",
+        "expected": "800000",
+        "actual": "800000",
+        "ok": true
+       }
+      ]
+     },
+     {
+      "ok": true,
+      "ms": 416,
+      "rows": 1,
+      "first": "200000",
+      "error": "",
+      "digest": "106a19fc889ddb83d013603518afa99ffdb1be7567264b27790fef72763a9841",
+      "name": "countPart",
+      "group": "main",
+      "select": true,
+      "assertions": [
+       {
+        "variable": "partCount_1",
+        "expected": "200000",
+        "actual": "200000",
+        "ok": true
+       }
+      ]
+     },
+     {
+      "ok": true,
+      "ms": 321,
+      "rows": 1,
+      "first": "150000",
+      "error": "",
+      "digest": "de535cf27d996f4c203f410bb6f4abcb758a60868dc20320451ba3d223dea8ab",
+      "name": "countCustomer",
+      "group": "main",
+      "select": true,
+      "assertions": [
+       {
+        "variable": "customerCount_1",
+        "expected": "150000",
+        "actual": "150000",
+        "ok": true
+       }
+      ]
+     },
+     {
+      "ok": true,
+      "ms": 335,
+      "rows": 1,
+      "first": "10000",
+      "error": "",
+      "digest": "56ca62c526894f2238cbe4e9a170bb9730c10be6ca319a1bba4f1454aaf1a274",
+      "name": "countSupplier",
+      "group": "main",
+      "select": true,
+      "assertions": [
+       {
+        "variable": "supplierCount_1",
+        "expected": "10000",
+        "actual": "10000",
+        "ok": true
+       }
+      ]
+     },
+     {
+      "ok": true,
+      "ms": 2698,
+      "rows": 4,
+      "first": "A",
+      "error": "",
+      "digest": "56f31e3be7b38c41cd69e746e965866ac46ffbe0296723e2816a6ff7fdca431b",
+      "name": "q1",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2761,
+      "rows": 4,
+      "first": "A",
+      "error": "",
+      "digest": "56f31e3be7b38c41cd69e746e965866ac46ffbe0296723e2816a6ff7fdca431b",
+      "name": "q1",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2881,
+      "rows": 4,
+      "first": "A",
+      "error": "",
+      "digest": "56f31e3be7b38c41cd69e746e965866ac46ffbe0296723e2816a6ff7fdca431b",
+      "name": "q1",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2111,
+      "rows": 10,
+      "first": "2456423",
+      "error": "",
+      "digest": "087c7bf3d0c40f62caacdf93354cd20601875a58eb060b6961b74d22a75ec2b1",
+      "name": "q3",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2060,
+      "rows": 10,
+      "first": "2456423",
+      "error": "",
+      "digest": "087c7bf3d0c40f62caacdf93354cd20601875a58eb060b6961b74d22a75ec2b1",
+      "name": "q3",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2142,
+      "rows": 10,
+      "first": "2456423",
+      "error": "",
+      "digest": "087c7bf3d0c40f62caacdf93354cd20601875a58eb060b6961b74d22a75ec2b1",
+      "name": "q3",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 1329,
+      "rows": 5,
+      "first": "1-URGENT",
+      "error": "",
+      "digest": "967d47370f84f34fc2245a70dd84b1279b351c9832826fe2a75252e47a85ad36",
+      "name": "q4",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 1260,
+      "rows": 5,
+      "first": "1-URGENT",
+      "error": "",
+      "digest": "967d47370f84f34fc2245a70dd84b1279b351c9832826fe2a75252e47a85ad36",
+      "name": "q4",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 1237,
+      "rows": 5,
+      "first": "1-URGENT",
+      "error": "",
+      "digest": "967d47370f84f34fc2245a70dd84b1279b351c9832826fe2a75252e47a85ad36",
+      "name": "q4",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 1086,
+      "rows": 1,
+      "first": "123141101.83",
+      "error": "",
+      "digest": "4ea8102ed6cfbab237fa88cf3341093749180861c2f02725d1013fb8afb793e9",
+      "name": "q6",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 962,
+      "rows": 1,
+      "first": "123141101.83",
+      "error": "",
+      "digest": "4ea8102ed6cfbab237fa88cf3341093749180861c2f02725d1013fb8afb793e9",
+      "name": "q6",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 927,
+      "rows": 1,
+      "first": "123141101.83",
+      "error": "",
+      "digest": "4ea8102ed6cfbab237fa88cf3341093749180861c2f02725d1013fb8afb793e9",
+      "name": "q6",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 7063,
+      "rows": 4,
+      "first": "FRANCE",
+      "error": "",
+      "digest": "29729bcaba1f00eadaaa182b3f8ed2ec004d6e74ebd285a61cc82a3e493babd8",
+      "name": "q7",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 7612,
+      "rows": 4,
+      "first": "FRANCE",
+      "error": "",
+      "digest": "29729bcaba1f00eadaaa182b3f8ed2ec004d6e74ebd285a61cc82a3e493babd8",
+      "name": "q7",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 7158,
+      "rows": 4,
+      "first": "FRANCE",
+      "error": "",
+      "digest": "29729bcaba1f00eadaaa182b3f8ed2ec004d6e74ebd285a61cc82a3e493babd8",
+      "name": "q7",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 8496,
+      "rows": 2,
+      "first": "1995",
+      "error": "",
+      "digest": "cc9619527d561da2f25c7bfd9b0224055572e76c1d2f3d114719e310416756b7",
+      "name": "q8",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 8000,
+      "rows": 2,
+      "first": "1995",
+      "error": "",
+      "digest": "cc9619527d561da2f25c7bfd9b0224055572e76c1d2f3d114719e310416756b7",
+      "name": "q8",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 8415,
+      "rows": 2,
+      "first": "1995",
+      "error": "",
+      "digest": "cc9619527d561da2f25c7bfd9b0224055572e76c1d2f3d114719e310416756b7",
+      "name": "q8",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 8699,
+      "rows": 175,
+      "first": "ALGERIA",
+      "error": "",
+      "digest": "858e34589c5e54d279acefb55ba2dc8ac4e4df9135941aeb908378bc9ca608dd",
+      "name": "q9",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 8145,
+      "rows": 175,
+      "first": "ALGERIA",
+      "error": "",
+      "digest": "858e34589c5e54d279acefb55ba2dc8ac4e4df9135941aeb908378bc9ca608dd",
+      "name": "q9",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 7697,
+      "rows": 175,
+      "first": "ALGERIA",
+      "error": "",
+      "digest": "858e34589c5e54d279acefb55ba2dc8ac4e4df9135941aeb908378bc9ca608dd",
+      "name": "q9",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 3925,
+      "rows": 20,
+      "first": "57040",
+      "error": "",
+      "digest": "bc574ed4a08e6807bd4f893566e6541a585c511b0d11c8ce5f3e4231776866ff",
+      "name": "q10",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 3606,
+      "rows": 20,
+      "first": "57040",
+      "error": "",
+      "digest": "bc574ed4a08e6807bd4f893566e6541a585c511b0d11c8ce5f3e4231776866ff",
+      "name": "q10",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 3865,
+      "rows": 20,
+      "first": "57040",
+      "error": "",
+      "digest": "bc574ed4a08e6807bd4f893566e6541a585c511b0d11c8ce5f3e4231776866ff",
+      "name": "q10",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 3520,
+      "rows": 1048,
+      "first": "129760",
+      "error": "",
+      "digest": "a1392f66318b233bf760de5d9b4be2d255d23ecec92e17eb86258e4964c4e176",
+      "name": "q11",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 3533,
+      "rows": 1048,
+      "first": "129760",
+      "error": "",
+      "digest": "a1392f66318b233bf760de5d9b4be2d255d23ecec92e17eb86258e4964c4e176",
+      "name": "q11",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 3281,
+      "rows": 1048,
+      "first": "129760",
+      "error": "",
+      "digest": "a1392f66318b233bf760de5d9b4be2d255d23ecec92e17eb86258e4964c4e176",
+      "name": "q11",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 1884,
+      "rows": 2,
+      "first": "MAIL",
+      "error": "",
+      "digest": "66b2216fa14f71932d511f31c84310bf0041957519af943f692aee26e2a627fb",
+      "name": "q12",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 1954,
+      "rows": 2,
+      "first": "MAIL",
+      "error": "",
+      "digest": "66b2216fa14f71932d511f31c84310bf0041957519af943f692aee26e2a627fb",
+      "name": "q12",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2193,
+      "rows": 2,
+      "first": "MAIL",
+      "error": "",
+      "digest": "66b2216fa14f71932d511f31c84310bf0041957519af943f692aee26e2a627fb",
+      "name": "q12",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 3030,
+      "rows": 1,
+      "first": "16.38",
+      "error": "",
+      "digest": "d8c2ed712ecd7c75b272c01246c4602fd301a2689981bdd97038e2bba7d87078",
+      "name": "q14",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2954,
+      "rows": 1,
+      "first": "16.38",
+      "error": "",
+      "digest": "d8c2ed712ecd7c75b272c01246c4602fd301a2689981bdd97038e2bba7d87078",
+      "name": "q14",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 2810,
+      "rows": 1,
+      "first": "16.38",
+      "error": "",
+      "digest": "d8c2ed712ecd7c75b272c01246c4602fd301a2689981bdd97038e2bba7d87078",
+      "name": "q14",
+      "group": "main",
+      "select": true
+     },
+     {
+      "ok": true,
+      "ms": 89,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropNation",
+      "group": "teardown",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 52,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropRegion",
+      "group": "teardown",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 122,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropSupplier",
+      "group": "teardown",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 120,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropCustomer",
+      "group": "teardown",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 125,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropPart",
+      "group": "teardown",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 69,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropPartsupp",
+      "group": "teardown",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 72,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropOrders",
+      "group": "teardown",
+      "select": false
+     },
+     {
+      "ok": true,
+      "ms": 48,
+      "rows": 0,
+      "first": "",
+      "error": "",
+      "digest": "",
+      "name": "dropLineitem",
+      "group": "teardown",
+      "select": false
+     }
+    ],
+    "not_executed": [
+     "/Test Plan/Main Thread Group/Setup/Check for failure (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/Setup/Check for failure (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/Setup/prepareData/generateData (data generation: done by the runner, same dbgen chunking)",
+     "/Test Plan/Main Thread Group/Setup/Check for failure (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/Setup/Check for failure (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/Setup/Check for failure (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/Check for setup failure (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q1 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q1 Group/Q1Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q1 Group/Q1Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q1 Group/Q1Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q3 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q3 Group/Q3Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q3 Group/Q3Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q3 Group/Q3Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q4 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q4 Group/Q4Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q4 Group/Q4Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q4 Group/Q4Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q6 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q6 Group/Q6Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q6 Group/Q6Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q6 Group/Q6Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q7 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q7 Group/Q7Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q7 Group/Q7Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q7 Group/Q7Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q8 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q8 Group/Q8Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q8 Group/Q8Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q8 Group/Q8Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q9 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q9 Group/Q9Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q9 Group/Q9Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q9 Group/Q9Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q10 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q10 Group/Q10Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q10 Group/Q10Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q10 Group/Q10Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q11 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q11 Group/Q11Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q11 Group/Q11Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q11 Group/Q11Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q12 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q12 Group/Q12Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q12 Group/Q12Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q12 Group/Q12Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q14 Group/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q14 Group/Q14Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q14 Group/Q14Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q14 Group/Q14Loop/Check for error (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/TPC-H Queries/debugMarker (log only)",
+     "/Test Plan/Main Thread Group/Check for any query failures (stop on failure: the runner stops at the first failed step)",
+     "/Test Plan/Main Thread Group/Log completion (log / exit-on-failure)"
+    ],
+    "disabled_in_plan": [
+     "/Test Plan/tearDown Thread Group/dropQ15View",
+     "/Test Plan/Main Thread Group/Setup/createTables/createQ15View",
+     "/Test Plan/Main Thread Group/Setup/validateRowCount/countNation",
+     "/Test Plan/Main Thread Group/Setup/validateRowCount/countRegion",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q2 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q5 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q13 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q15 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q16 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q17 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q18 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q19 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q20 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q21 Group",
+     "/Test Plan/Main Thread Group/TPC-H Queries/Q22 Group",
+     "/Test Plan/Main Thread Group/TPC-H Pipeline Queries"
+    ],
+    "passed": true,
+    "first_failure": null
+   },
+   "summary": {
+    "load_ms": 29637,
+    "load_mib_s": 35.4,
+    "load_ms_by_table": {
+     "loadLineitem": 24282,
+     "loadOrders": 2862,
+     "loadPartsupp": 1049,
+     "loadPart": 559,
+     "loadCustomer": 429,
+     "loadSupplier": 222,
+     "loadNation": 141,
+     "loadRegion": 93
+    },
+    "queries": {
+     "q1": {
+      "runs_ms": [
+       2698,
+       2761,
+       2881
+      ],
+      "min_ms": 2698,
+      "median_ms": 2761
+     },
+     "q3": {
+      "runs_ms": [
+       2111,
+       2060,
+       2142
+      ],
+      "min_ms": 2060,
+      "median_ms": 2111
+     },
+     "q4": {
+      "runs_ms": [
+       1329,
+       1260,
+       1237
+      ],
+      "min_ms": 1237,
+      "median_ms": 1260
+     },
+     "q6": {
+      "runs_ms": [
+       1086,
+       962,
+       927
+      ],
+      "min_ms": 927,
+      "median_ms": 962
+     },
+     "q7": {
+      "runs_ms": [
+       7063,
+       7612,
+       7158
+      ],
+      "min_ms": 7063,
+      "median_ms": 7158
+     },
+     "q8": {
+      "runs_ms": [
+       8496,
+       8000,
+       8415
+      ],
+      "min_ms": 8000,
+      "median_ms": 8415
+     },
+     "q9": {
+      "runs_ms": [
+       8699,
+       8145,
+       7697
+      ],
+      "min_ms": 7697,
+      "median_ms": 8145
+     },
+     "q10": {
+      "runs_ms": [
+       3925,
+       3606,
+       3865
+      ],
+      "min_ms": 3606,
+      "median_ms": 3865
+     },
+     "q11": {
+      "runs_ms": [
+       3520,
+       3533,
+       3281
+      ],
+      "min_ms": 3281,
+      "median_ms": 3520
+     },
+     "q12": {
+      "runs_ms": [
+       1884,
+       1954,
+       2193
+      ],
+      "min_ms": 1884,
+      "median_ms": 1954
+     },
+     "q14": {
+      "runs_ms": [
+       3030,
+       2954,
+       2810
+      ],
+      "min_ms": 2810,
+      "median_ms": 2954
+     }
+    },
+    "queries_total_median_ms": 43105,
+    "row_counts": {
+     "countLineitem": [
+      {
+       "variable": "lineitemCount_1",
+       "expected": "6001215",
+       "actual": "6001215",
+       "ok": true
+      }
+     ],
+     "countOrders": [
+      {
+       "variable": "ordersCount_1",
+       "expected": "1500000",
+       "actual": "1500000",
+       "ok": true
+      }
+     ],
+     "countPartsupp": [
+      {
+       "variable": "partsuppCount_1",
+       "expected": "800000",
+       "actual": "800000",
+       "ok": true
+      }
+     ],
+     "countPart": [
+      {
+       "variable": "partCount_1",
+       "expected": "200000",
+       "actual": "200000",
+       "ok": true
+      }
+     ],
+     "countCustomer": [
+      {
+       "variable": "customerCount_1",
+       "expected": "150000",
+       "actual": "150000",
+       "ok": true
+      }
+     ],
+     "countSupplier": [
+      {
+       "variable": "supplierCount_1",
+       "expected": "10000",
+       "actual": "10000",
+       "ok": true
+      }
+     ]
+    }
+   }
+  }
+ },
+ "rocepool": {
+  "mdts": "10.99.1.1:19901,10.99.1.2:19901",
+  "osts": "10.99.1.1:19951,10.99.1.2:19951",
+  "mount": "/mnt/rocepool_rapidsse",
+  "client": "native FUSE (rocepool-fuse)",
+  "ost_data": "tier file:/var/tmp/rocepool_rapidsse_tier/ost{node}.img:4 (128 MiB RAM cache per OST)"
+ },
+ "comparison": {
+  "load_ms": {
+   "rocepool": 32456,
+   "local": 29637
+  },
+  "queries_total_median_ms": {
+   "rocepool": 44165,
+   "local": 43105
+  },
+  "per_query_median_ms": {
+   "q1": {
+    "rocepool": 2741,
+    "local": 2761
+   },
+   "q3": {
+    "rocepool": 2033,
+    "local": 2111
+   },
+   "q4": {
+    "rocepool": 1320,
+    "local": 1260
+   },
+   "q6": {
+    "rocepool": 993,
+    "local": 962
+   },
+   "q7": {
+    "rocepool": 8368,
+    "local": 7158
+   },
+   "q8": {
+    "rocepool": 8634,
+    "local": 8415
+   },
+   "q9": {
+    "rocepool": 8537,
+    "local": 8145
+   },
+   "q10": {
+    "rocepool": 3689,
+    "local": 3865
+   },
+   "q11": {
+    "rocepool": 3103,
+    "local": 3520
+   },
+   "q12": {
+    "rocepool": 1960,
+    "local": 1954
+   },
+   "q14": {
+    "rocepool": 2787,
+    "local": 2954
+   }
+  },
+  "answers": {
+   "compared": 39,
+   "identical": 39,
+   "differ": []
+  }
+ },
+ "passed": true
+}

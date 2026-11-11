@@ -32,8 +32,10 @@ compatibility with RapidsSE's actual C++ TCompactProtocol implementation,
 since nothing in this sandbox can run that C++ code (no compiler toolchain
 exercised against it, no live cluster). This module was written directly
 against the public Compact Protocol spec and cross-checked against the
-.thrift IDL field IDs/types, which is the strongest verification available
-without a running RapidsSE server to test against.
+.thrift IDL field IDs/types. Since then it has run against a real RapidsSE
+node (tools/rapidsse_tpch.py --client wlp: RapidsSE's TPC-H regression plan,
+every result decoded), which is what found the missing i8 / nested temporal
+structs and the need to skip fields this side does not declare.
 """
 from __future__ import annotations
 
@@ -43,6 +45,7 @@ from typing import Any, ClassVar
 
 # --- Thrift TType ids (as used in the .thrift-derived field specs below) ---
 T_BOOL = "bool"
+T_I8 = "i8"            # Thrift "byte"/"i8": one raw (signed) byte in the compact protocol
 T_I16 = "i16"
 T_I32 = "i32"
 T_I64 = "i64"
@@ -56,16 +59,19 @@ T_ENUM = "enum"         # wire-encoded exactly like i32
 # --- Compact protocol type ids (distinct from TType ids -- see THRIFT-110) ---
 _CT_BOOLEAN_TRUE = 0x01
 _CT_BOOLEAN_FALSE = 0x02
+_CT_BYTE = 0x03
 _CT_I16 = 0x04
 _CT_I32 = 0x05
 _CT_I64 = 0x06
 _CT_DOUBLE = 0x07
 _CT_BINARY = 0x08
 _CT_LIST = 0x09
+_CT_SET = 0x0A
+_CT_MAP = 0x0B
 _CT_STRUCT = 0x0C
 
 _NON_BOOL_CTYPE = {
-    T_I16: _CT_I16, T_I32: _CT_I32, T_I64: _CT_I64, T_ENUM: _CT_I32,
+    T_I8: _CT_BYTE, T_I16: _CT_I16, T_I32: _CT_I32, T_I64: _CT_I64, T_ENUM: _CT_I32,
     T_DOUBLE: _CT_DOUBLE, T_STRING: _CT_BINARY, T_BINARY: _CT_BINARY, T_STRUCT: _CT_STRUCT,
     T_LIST: _CT_LIST,
 }
@@ -137,6 +143,10 @@ class CompactWriter:
     # -- field writers (each writes header + value, bool is header-only) --
     def write_bool_field(self, field_id: int, value: bool) -> None:
         self._write_field_header(T_BOOL, field_id, bool_value=value)
+
+    def write_i8_field(self, field_id: int, value: int) -> None:
+        self._write_field_header(T_I8, field_id)
+        self._write_byte(value & 0xFF)
 
     def write_i16_field(self, field_id: int, value: int) -> None:
         self._write_field_header(T_I16, field_id)
@@ -241,8 +251,59 @@ class CompactReader:
             return field_id, T_BOOL, False
         return field_id, ctype, None
 
+    def read_i8(self) -> int:
+        b = self._read_byte()
+        return b - 256 if b > 127 else b
+
     def read_i16(self) -> int:
         return self._read_zigzag()
+
+    def skip(self, ctype) -> None:
+        """Skip one value of compact type `ctype` (a field this side does not
+        declare): Thrift's rule for forward compatibility -- a newer peer may
+        send fields an older reader does not know."""
+        if ctype == T_BOOL or ctype in (_CT_BOOLEAN_TRUE, _CT_BOOLEAN_FALSE):
+            return  # a bool field's value is in its header
+        if ctype == _CT_BYTE:
+            self._pos += 1
+        elif ctype in (_CT_I16, _CT_I32, _CT_I64):
+            self._read_varint()
+        elif ctype == _CT_DOUBLE:
+            self._pos += 8
+        elif ctype == _CT_BINARY:
+            n = self._read_varint()  # not `_pos += _read_varint()`: _pos would be read before the varint moves it
+            self._pos += n
+        elif ctype in (_CT_LIST, _CT_SET):
+            byte = self._read_byte()
+            size, et = (byte >> 4) & 0x0F, byte & 0x0F
+            if size == 15:
+                size = self._read_varint()
+            for _ in range(size):
+                self._skip_element(et)
+        elif ctype == _CT_MAP:
+            size = self._read_varint()
+            if size:
+                kv = self._read_byte()
+                for _ in range(size):
+                    self._skip_element(kv >> 4)
+                    self._skip_element(kv & 0x0F)
+        elif ctype == _CT_STRUCT:
+            self.read_struct_begin()
+            while True:
+                fid, ct, _ = self.read_field_header()
+                if fid == -1:
+                    break
+                self.skip(ct)
+            self.read_struct_end()
+        else:
+            raise ValueError(f"cannot skip compact type {ctype!r}")
+
+    def _skip_element(self, et: int) -> None:
+        # in a list/set/map a bool element is a whole byte
+        if et in (_CT_BOOLEAN_TRUE, _CT_BOOLEAN_FALSE):
+            self._pos += 1
+        else:
+            self.skip(et)
 
     def read_i32(self) -> int:
         return self._read_zigzag()
@@ -292,6 +353,8 @@ class ThriftStruct:
                 continue
             if ttype == T_BOOL:
                 writer.write_bool_field(field_id, value)
+            elif ttype == T_I8:
+                writer.write_i8_field(field_id, value)
             elif ttype == T_I16:
                 writer.write_i16_field(field_id, value)
             elif ttype == T_I32:
@@ -326,10 +389,13 @@ class ThriftStruct:
                 break
             spec = spec_by_id.get(field_id)
             if spec is None:
-                raise ValueError(f"{cls.__name__}: unknown field id {field_id}")
+                reader.skip(ctype_or_ttype)
+                continue
             _, ttype, attr, nested = spec
             if ttype == T_BOOL:
                 setattr(obj, attr, bool_value)
+            elif ttype == T_I8:
+                setattr(obj, attr, reader.read_i8())
             elif ttype in (T_I16,):
                 setattr(obj, attr, reader.read_i16())
             elif ttype in (T_I32, T_ENUM):

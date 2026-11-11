@@ -84,6 +84,11 @@ The RapidsSE sources they were written
 against are kept unmodified in [third_party/rapidsse/](third_party/rapidsse/UPSTREAM.md),
 with RapidsSE's license, and a test checks the two agree.
 
+The other way round, RapidsSE runs with rocepool as its distributed storage,
+and RapidsSE's own TPC-H SF1 regression test passes on it:
+`sudo python3 tools/rapidsse_tpch.py --rapidsse <RapidsSE tree>`
+([docs/RAPIDSSE_TPCH.md](docs/RAPIDSSE_TPCH.md)).
+
 ## License
 
 Apache License 2.0, see [LICENSE](LICENSE). The third-party sources in `deps/` and

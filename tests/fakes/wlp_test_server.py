@@ -31,7 +31,8 @@ from wlp.messages import (
     AuthenticationOkResponse, ColumnMetadata, ColumnValue, ErrorResponse,
     ParseStatementResponse, ProtocolCompatibleResponse, QueryExecuteResponse,
     QueryReceiptResponse, Row, RowDataResponse, RowMetadataResponse, StatementReceipt,
-    StatementResponse,
+    StatementResponse, MSG_CLEAR_TEXT_TUNNEL_REQUEST, MSG_TUNNEL_SUPPORTED_RESPONSE, TunnelSupportedResponse,
+    MSG_SESSION_CHANGE_REQUEST, MSG_SESSION_CHANGE_RESPONSE, SessionChangeResponse,
 )
 
 import socket
@@ -110,6 +111,7 @@ class WlpTestServer:
 
     def _serve_conn(self, conn: socket.socket) -> None:
         try:
+            conn.sendall(b"RapidsSE")  # the real server's welcome (sen/OP_sendWL.sen)
             self._handshake(conn)
             while True:
                 msg_type, req = self._recv(conn)
@@ -138,8 +140,14 @@ class WlpTestServer:
             serverBuildInfo="test-fixture",
         ))
         msg_type, _req = self._recv(conn)
+        assert msg_type == MSG_CLEAR_TEXT_TUNNEL_REQUEST  # as the real server requires
+        self._send(conn, MSG_TUNNEL_SUPPORTED_RESPONSE, TunnelSupportedResponse())
+        msg_type, _req = self._recv(conn)
         assert msg_type == MSG_PLAIN_AUTHENTICATION_REQUEST
         self._send(conn, MSG_AUTHENTICATION_OK_RESPONSE, AuthenticationOkResponse())
+        msg_type, _req = self._recv(conn)
+        assert msg_type == MSG_SESSION_CHANGE_REQUEST  # AUTHENTICATED -> READY, as the real server
+        self._send(conn, MSG_SESSION_CHANGE_RESPONSE, SessionChangeResponse(sessionId="test", sessionKey=1))
 
     def _run_and_reply(self, conn, sql: str, params: tuple) -> None:
         try:
@@ -173,6 +181,11 @@ class WlpTestServer:
         try:
             self._run_and_reply(conn, req.query, ())
         except _StatementFailed:
+            # as the real server: the error replaced the StatementResponse; the
+            # dialog still ends with a QueryExecuteResponse
+            self._send(conn, MSG_QUERY_EXECUTE_RESPONSE, QueryExecuteResponse(
+                numStatementsParsed=1, numStatementsSucceeded=0, numStatementsFailed=1,
+            ))
             return
         self._send(conn, MSG_QUERY_EXECUTE_RESPONSE, QueryExecuteResponse(
             numStatementsParsed=1, numStatementsSucceeded=1, numStatementsFailed=0,

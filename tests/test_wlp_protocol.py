@@ -72,8 +72,9 @@ class FrameHeaderTests(unittest.TestCase):
     def test_pack_unpack_matches_wlpheader_layout(self):
         raw = pack_header(msg_type=51, body_size=300)
         self.assertEqual(len(raw), HEADER_SIZE)
-        # 4-byte big-endian size, then 1-byte type, matching WlpHeader.hpp.
-        self.assertEqual(raw[0:4], (300).to_bytes(4, "big"))
+        # 4-byte big-endian size (header included, as RapidsSE's AdaptorWL
+        # writes and reads it), then 1-byte type, matching WlpHeader.hpp.
+        self.assertEqual(raw[0:4], (300 + HEADER_SIZE).to_bytes(4, "big"))
         self.assertEqual(raw[4], 51)
         msg_type, body_size = unpack_header(raw)
         self.assertEqual((msg_type, body_size), (51, 300))
