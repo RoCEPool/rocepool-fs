@@ -8,10 +8,24 @@ namespace, read and written through rocepool's native client. RapidsSE's
 own TPC-H SF1 regression test runs on it unchanged.
 
 ```bash
-git clone -b master https://github.com/RoCEPool/RapidsSE /opt/RapidsSE   # git lfs installed
-sudo python3 tools/rapidsse_tpch.py --rapidsse /opt/RapidsSE                       # simulated 2-node cluster
-sudo ROCEPOOL_CLUSTER=cluster.json python3 tools/rapidsse_tpch.py --rapidsse /opt/RapidsSE   # real hosts
+sudo python3 tools/rapidsse_tpch.py --rapidsse auto      # simulated 2-node cluster; auto = clone RapidsSE here
+sudo python3 tools/rapidsse_tpch.py --rapidsse auto \
+     --plan bamboo/perftest/configs/tests/tpch-sf100-2D2F.jmx --sf 100              # SF100, the same way
 ```
+
+On AWS (2 x hpc6id.32xlarge, EFA), one workflow run does everything --
+cluster setup, RapidsSE build and shipping, SF100 data, RapidsSE on rocepool,
+DuckDB, RapidsSE on the instance NVMe -- and brings
+`rapidsse_tpch_report.json` back:
+
+    aws-test: mode=efa type=hpc6id.32xlarge nodes=2 max_hours=3 budget_usd=45
+              command="python3 tools/rapidsse_tpch.py --rapidsse auto
+                       --plan bamboo/perftest/configs/tests/tpch-sf100-2D2F.jmx --sf 100"
+
+(With `HEAD_IP`/`PEER_IPS` set by the workflow, the runner installs what
+RapidsSE's build and JDBC client need, runs `run.sh --bench none` for the
+rocepool cluster, and ships the built RapidsSE tree and dbgen to the same
+path on every host.)
 
 One command does everything, unattended, and stops whatever it started (also
 on failure). Result: `rapidsse_tpch_report.json`.
@@ -23,10 +37,11 @@ on failure). Result: `rapidsse_tpch_report.json`.
 | build | RapidsSE from its unmodified source (`make release`), offline: its third-party tarballs come from its Git LFS. Two build accommodations, no source change: ANTLR's runtime is built without its unit tests (their googletest is a download at configure time), and on gcc >= 12 the warnings RapidsSE's `-Werror` was not written for stay warnings. TPC-H `dbgen` from the same tree. |
 | storage | one MDT and one OST per node (native C servers), the native FUSE client mounted at `/mnt/rocepool_rapidsse` on every node |
 | the disks | the plan's `/mnt/disk1`, `/mnt/disk2` (data files) and the cluster's `disk_paths` (`seData`, RapidsSE's unload/reload directory) become `<rocepool>/rapidsse/NODE<k>/disk1, disk2`, bind-mounted at one path on node k. Each node reads its own share of the data, as from local disks, and every node's data is in the shared pool. |
-| data | TPC-H SF1 with dbgen, chunked like RapidsSE's `bootstrap/generateData.sh`: nodes x paths chunks (8), nation/region in each node's first path, written straight into rocepool |
+| data | TPC-H with dbgen, chunked like RapidsSE's `bootstrap/generateData.sh`: nodes x paths x chunks-per-path, nation/region in each node's first path. Generated in parallel on every node (`tools/rapidsse_gen.py`; ~SF/10 chunks per path, since each dbgen start costs ~4 s), chunks on node-local scratch (`/nvmedata` on AWS), then one sequential write per file into the disks |
 | RapidsSE | one process per node, with `bootstrap/boot.fn`'s command line; ready when every node reports both cluster sockets (`waitForClusterBoot`'s test) |
 | the test | `bamboo/perftest/configs/tests/tpch-sf1-2D2F.jmx`, the SF1 test of RapidsSE's daily regression job, run step by step as JMeter runs it (`tools/rapidsse_jmx.py`: enabled elements only, loops, variables, assertions, stop on the first failure, tearDown group), over RapidsSE's own JDBC driver, or with `--client wlp` over rocepool's WLP client |
-| baseline | the same again with the disks on node-local storage (`--baseline local`), and every query's whole answer compared between the two (SHA-256 of all values) |
+| DuckDB | after RapidsSE on rocepool, on node 0: the same `.tbl` files, read from rocepool's shared namespace (every node's share is there), loaded into an in-memory DuckDB (`tools/rapidsse_duckdb.py`, the DuckDB CLI; on hosts without one its official release build is fetched), the plan's own 11 query texts, as many runs as the plan. Each answer compared with RapidsSE's, exactly and by TPC-H's validation rules. |
+| baseline | RapidsSE again with the disks on node-local storage (`--baseline local`; the instance NVMe on AWS), and every query's whole answer compared between the two storages (SHA-256 of all values) |
 
 The plan, as RapidsSE ships it: create the 8 tables and 18 indexes, load
 (`dload` of 4 files per node, `loadReplicated` for nation/region), compact
@@ -37,47 +52,61 @@ the pipeline queries are switched off in RapidsSE's plan and stay off.
 
 ## Result (2026-11-11, simulated 2-node cluster)
 
-One host, 2 cores and 8 GiB RAM shared by both nodes; softverbs RDMA
+One host, 2 cores and 8 GiB RAM shared by everything; softverbs RDMA
 emulator; RapidsSE v1.2.0-dev2-171 (90012081f5), 1 partition x 2 threads x
-2880 MiB region per node; OST data on a file tier (all nodes share the host's
-RAM with RapidsSE).
+2752 MiB region per node; OST data on a file tier; DuckDB v1.5.6, 2 threads.
 
-**Passed**: all 99 steps; the 6 row counts exact; all 39 query results
-(11 queries x 3, and the 6 counts) identical to the local-disk run. Also
-passed end to end with `--client wlp` (1 loop).
+**Passed**: all 99 steps on both storages; the 6 row counts exact; all 39
+query results identical between rocepool and the local disks. Also passed
+end to end with `--client wlp` (1 loop).
 
-| | rocepool | local disk |
-|---|---|---|
-| data generated | 1.03 GiB, 8 chunks | same |
-| load (all tables) | 32.5 s (32.3 MiB/s) | 29.6 s (35.4 MiB/s) |
-| queries, sum of medians | 44.2 s | 43.1 s |
+| | RapidsSE, rocepool | RapidsSE, local disk | DuckDB (same data, from rocepool) |
+|---|---|---|---|
+| data preparation (1.03 GiB) | 108 s | 108 s | (the same files) |
+| load | 38.7 s | 36.5 s | 7.2 s |
+| 11 queries, sum of medians | 50.9 s | 52.3 s | 0.66 s |
 
-| query | rocepool, s | local, s |
-|---|---|---|
-| Q1 | 2.74 | 2.76 |
-| Q3 | 2.03 | 2.11 |
-| Q4 | 1.32 | 1.26 |
-| Q6 | 0.99 | 0.96 |
-| Q7 | 8.37 | 7.16 |
-| Q8 | 8.63 | 8.41 |
-| Q9 | 8.54 | 8.14 |
-| Q10 | 3.69 | 3.87 |
-| Q11 | 3.10 | 3.52 |
-| Q12 | 1.96 | 1.95 |
-| Q14 | 2.79 | 2.95 |
+| query | RapidsSE rocepool, s | RapidsSE local, s | DuckDB, s |
+|---|---|---|---|
+| Q1 | 3.79 | 3.68 | 0.140 |
+| Q3 | 2.30 | 2.38 | 0.040 |
+| Q4 | 1.59 | 1.69 | 0.043 |
+| Q6 | 1.19 | 1.19 | 0.015 |
+| Q7 | 9.01 | 9.37 | 0.046 |
+| Q8 | 9.46 | 10.05 | 0.030 |
+| Q9 | 9.86 | 9.87 | 0.138 |
+| Q10 | 4.58 | 4.58 | 0.104 |
+| Q11 | 3.87 | 4.13 | 0.008 |
+| Q12 | 2.49 | 2.50 | 0.069 |
+| Q14 | 2.78 | 2.87 | 0.028 |
 
 What the numbers say: here the load is bound by RapidsSE parsing on 2 shared
 cores, not by the storage, and the queries run in RapidsSE's memory, so both
-storages time the same within noise. The comparison that shows rocepool's
-bandwidth needs real hosts (RapidsSE's regression cluster: 2 x r6id.16xlarge,
-32 partitions x 64 threads, 480 GB per node).
+storages time the same within noise. On this host DuckDB is ~5x faster to
+load and ~77x faster on the queries (DuckDB uses both cores in one process;
+RapidsSE's 2 nodes share them with each other and with rocepool's servers).
+The comparison that shows rocepool's bandwidth, and RapidsSE at its intended
+scale, needs real hosts (RapidsSE's regression: 2 x r6id.16xlarge, 32
+partitions x 64 threads, 480 GB per node).
+
+**Answers.** RapidsSE's answers equal DuckDB's exactly in 5 of 11 queries and
+are within TPC-H's validation rules (spec 2.1.3.5: counts exact, sums within
+100, averages and ratios within 1%) in 10 of 11. Q1 is not: its
+`sum(l_extendedprice * (1 - l_discount))` is 53758257382.21 where TPC-H's
+answer (and DuckDB's) is 53758257134.87, 247.3 off. That is exactly the sum
+of every row's product rounded to 2 decimals (checked in DuckDB with
+`sum(round(p * (1 - d), 2))`; `sum_charge` likewise, to the cent): RapidsSE
+keeps DECIMAL(15,2) scale after each multiplication, where SQL keeps the
+exact product. The error grows with the row count. RapidsSE's own plan checks
+only row counts, so it never showed. Storage plays no part: rocepool and the
+local disks give identical answers.
 
 Memory: RapidsSE needs its region to hold the data and each query's
 intermediates. At 2 GiB per node Q8 ran out of region memory; RapidsSE then
 asserted while cleaning up and never answered the client. The runner gives
-RapidsSE what the host can spare (`--mem-mib`, default from free RAM) and
-fails a step that does not answer within `--step-timeout` (default 1800 s)
-instead of hanging.
+RapidsSE what the host can spare (`--mem-mib`, default from free RAM, capped
+by /dev/shm) and fails a step that does not answer within `--step-timeout`
+(default 1800 s) instead of hanging.
 
 ## Fixed on the way
 
@@ -113,5 +142,7 @@ instead of hanging.
 - RapidsSE's unload/reload directories are on rocepool, but the regression
   plan does not unload or reload, so that path is set up, not exercised.
 - Run so far on the simulated cluster only. Real hosts go through the same
-  `tools/cluster.py` layer as the IO500 runs (`ROCEPOOL_CLUSTER`), with the
-  RapidsSE tree at the same path on every host; not yet run there.
+  `tools/cluster.py` layer and `run.sh --bench none` setup as the IO500 runs;
+  that path is unit-tested (the command it builds), not yet run on hosts.
+- The DuckDB comparison runs on one node (DuckDB is single-node); RapidsSE
+  uses all nodes.

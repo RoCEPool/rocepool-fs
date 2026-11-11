@@ -649,7 +649,8 @@ class Run:
         head = self.state["hosts"][0]["public"]
         files = ["onsite_report.json", "onsite_io500.json", "onsite_io500_valid.json", "run.log", "aws_run.out",
                  "onsite_crossover.json", "onsite_stress.json", "onsite_ior.json", "onsite_ior_hard.json",
-                 "onsite_kv.json", "onsite_gds.json", "onsite_kvcache.json", "selftest.log"]
+                 "onsite_kv.json", "onsite_gds.json", "onsite_kvcache.json", "selftest.log",
+                 "rapidsse_tpch_report.json"]  # tools/rapidsse_tpch.py (RapidsSE's TPC-H on rocepool)
         # targeted measurements (roce_onsite.py --bench writes): onsite_writes_spin<N>.json
         # and the probes before the valid run: ranks per node, OFI endpoints per rank, the rates it was sized by
         r = self.ssh(head, "cd /root/rocepool && ls onsite_writes_*.json onsite_io500_ranks.json onsite_io500_eps*.json "
