@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 from wlp.compact_protocol import (
-    T_BOOL, T_DOUBLE, T_I16, T_I32, T_I64, T_LIST, T_STRING, T_STRUCT,
+    T_BOOL, T_DOUBLE, T_I8, T_I16, T_I32, T_I64, T_LIST, T_STRING, T_STRUCT,
     CompactReader, CompactWriter, ThriftStruct, zigzag_decode, zigzag_encode,
 )
 
@@ -105,15 +105,42 @@ class StructRoundTripTests(unittest.TestCase):
         self.assertEqual(got.ratio, 1.25)
         self.assertEqual((got.nested.name, got.nested.value), ("x", 7))
 
-    def test_unknown_field_id_raises(self):
+    def test_unknown_fields_are_skipped(self):
+        # Thrift's forward-compatibility rule: fields this side does not
+        # declare are skipped, whatever their type, and the known ones still
+        # decode (a real RapidsSE sends ColumnValue fields an older client
+        # did not declare)
         writer = CompactWriter()
         writer.write_struct_begin()
-        writer.write_i32_field(99, 42)
+        writer.write_i32_field(90, 42)
+        writer.write_bool_field(91, True)
+        writer.write_i8_field(92, -3)
+        writer.write_double_field(93, 2.5)
+        writer.write_string_field(94, "skip me")
+        writer.write_struct_field(95, _Leaf(name="n", value=1))
+        writer.write_list_field(96, [_Leaf(name="a", value=2), _Leaf(name="b", value=3)])
+        writer.write_double_field(3, 1.25)  # _Outer.ratio, after all of them
+        writer.write_struct_field(6, _Leaf(name="x", value=7))  # _Outer.nested
         writer.write_field_stop()
         writer.write_struct_end()
-        with self.assertRaises(ValueError):
-            _Outer.read(CompactReader(writer.bytes()))
+        got = _Outer.read(CompactReader(writer.bytes()))
+        self.assertEqual(got.ratio, 1.25)
+        self.assertEqual((got.nested.name, got.nested.value), ("x", 7))
+        self.assertIsNone(got.flag)
 
+    def test_i8_round_trip(self):
+        for v in (-128, -1, 0, 9, 127):
+            w = CompactWriter()
+            w.write_struct_begin()
+            w.write_i8_field(1, v)
+            w.write_field_stop()
+            w.write_struct_end()
+
+            @dataclass
+            class _B(ThriftStruct):
+                b: int | None = None
+                _FIELDS: ClassVar = [(1, T_I8, "b", None)]
+            self.assertEqual(_B.read(CompactReader(w.bytes())).b, v)
 
 if __name__ == "__main__":
     unittest.main()

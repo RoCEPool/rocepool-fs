@@ -6,55 +6,53 @@ client or the earlier injected fake/sqlite client with zero code changes,
 exactly matching the interface-first architecture requested for this
 project.
 
-Message flow (from the .thrift IDL comments in RapidsSE's source (third_party/rapidsse/)
-source):
-  connect -> ProtocolCompatibleRequest -> ProtocolCompatibleResponse
+Message flow, as RapidsSE's server implements it (AdaptorWL.cpp's state
+machine, sen/OP_sendWL.sen), checked against a real RapidsSE node
+(v1.2.0-dev2-171, tools/rapidsse_tpch.py runs its TPC-H regression plan
+through this client with --client wlp):
+  connect -> server sends the 8 bytes "RapidsSE" (welcome, unframed)
+          -> ProtocolCompatibleRequest -> ProtocolCompatibleResponse
+          -> ClearTextTunnelRequest -> TunnelSupportedResponse    (state TUNNELED)
           -> PlainAuthenticationRequest -> AuthenticationOkResponse
+          -> SessionChangeRequest -> SessionChangeResponse         (state READY)
   no-params statement (DDL etc.) -> QueryExecuteRequest
           -> QueryReceiptResponse
           -> [RowMetadataResponse, RowDataResponse* ] (if it returns rows)
-          -> StatementResponse (once per batched statement)
-          -> QueryExecuteResponse (batch dialog complete)
-  parameterized statement -> ParseStatementRequest -> ParseStatementResponse
-          -> StatementBindAndExecuteRequest(bound values)
-          -> [RowMetadataResponse, RowDataResponse*] -> StatementResponse
+          -> StatementResponse, or ErrorResponse if the statement failed
+          -> QueryExecuteResponse (batch dialog complete, also after an error)
+  Every message: 8-byte header whose size counts the header itself
+  (wlp/framing.py).
 
-ASSUMPTION FLAGGED: the .thrift comments fully specify the
-QueryExecuteRequest dialog's message sequence, but do not specify what,
-if anything, wraps a single StatementBindAndExecuteRequest's response
-(no QueryReceiptResponse/QueryExecuteResponse pair is documented for it
-in the IDL comments). This client assumes the response is the same
-per-statement sequence (optional RowMetadataResponse + RowDataResponse*,
-then a terminating StatementResponse) with no outer envelope message --
-reasonable given StatementResponse's own doc comment ("sent ... to
-indicate that an individual statement ... has completed") applies
-uniformly, but NOT verified against a real RapidsSE server, since none is
-reachable from this sandbox. `tests/fakes/wlp_test_server.py` implements
-this same assumption on the server side so the two are tested consistently
-with each other; that proves internal consistency, not that this matches
-RapidsSE's real server. Flagging this explicitly rather than presenting it
-as confirmed -- confirm against a real RapidsSE node before production use.
+Not yet exercised against a real node: the parameterized path
+(ParseStatementRequest -> ParseStatementResponse ->
+StatementBindAndExecuteRequest -> [RowMetadataResponse, RowDataResponse*]
+-> StatementResponse); it assumes no outer envelope, as
+`tests/fakes/wlp_test_server.py` does.
 """
 from __future__ import annotations
 
+import datetime
+import decimal
 import socket
 from typing import Any
 
 from .compact_protocol import CompactReader, CompactWriter
-from .framing import recv_frame, send_frame
+from .framing import recv_exact, recv_frame, send_frame
 from .messages import (
-    MSG_AUTHENTICATION_OK_RESPONSE, MSG_ERROR_RESPONSE, MSG_PARSE_STATEMENT_REQUEST,
+    MSG_AUTHENTICATION_OK_RESPONSE, MSG_CLEAR_TEXT_TUNNEL_REQUEST, MSG_ERROR_RESPONSE, MSG_PARSE_STATEMENT_REQUEST,
     MSG_PARSE_STATEMENT_RESPONSE, MSG_PLAIN_AUTHENTICATION_REQUEST,
     MSG_PROTOCOL_COMPATIBLE_REQUEST, MSG_PROTOCOL_COMPATIBLE_RESPONSE,
     MSG_PROTOCOL_INCOMPATIBLE_RESPONSE, MSG_QUERY_EXECUTE_REQUEST, MSG_QUERY_EXECUTE_RESPONSE,
-    MSG_QUERY_RECEIPT_RESPONSE, MSG_ROW_DATA_RESPONSE, MSG_ROW_METADATA_RESPONSE,
-    MSG_STATEMENT_BIND_AND_EXECUTE_REQUEST, MSG_STATEMENT_RESPONSE,
-    ColumnValue, ErrorResponse, ParseStatementRequest, ParseStatementResponse,
+    MSG_QUERY_RECEIPT_RESPONSE, MSG_ROW_DATA_RESPONSE, MSG_ROW_METADATA_RESPONSE, MSG_SESSION_CHANGE_REQUEST,
+    MSG_SESSION_CHANGE_RESPONSE,
+    MSG_STATEMENT_BIND_AND_EXECUTE_REQUEST, MSG_STATEMENT_RESPONSE, MSG_TUNNEL_SUPPORTED_RESPONSE,
+    ClearTextTunnelRequest, ColumnValue, ErrorResponse, ParseStatementRequest, ParseStatementResponse,
     PlainAuthenticationRequest, ProtocolCompatibleRequest, ProtocolCompatibleResponse,
-    QueryExecuteRequest, StatementBindAndExecuteRequest,
+    QueryExecuteRequest, SessionChangeRequest, StatementBindAndExecuteRequest,
 )
 
 PROTOCOL_VERSION = 5
+WELCOME = b"RapidsSE"  # sent by the server on connect, before the first message
 
 
 class WlpError(RuntimeError):
@@ -79,7 +77,17 @@ def _to_column_value(py_value: Any) -> ColumnValue:
     raise TypeError(f"cannot bind Python value of type {type(py_value)!r}")
 
 
+def _tz(offset_hours, offset_minutes):
+    if offset_hours is None and offset_minutes is None:
+        return None
+    return datetime.timezone(datetime.timedelta(hours=offset_hours or 0, minutes=offset_minutes or 0))
+
+
 def _from_column_value(cv: ColumnValue) -> Any:
+    """A received value as Python: DECIMAL -> decimal.Decimal (exact, as the
+    server sends it as text), DATE -> datetime.date, TIME -> datetime.time,
+    TIMESTAMP -> datetime.datetime (with its UTC offset when sent), INTERVAL
+    -> datetime.timedelta (day-time) or a (years, months) tuple (year-month)."""
     if cv.isNull:
         return None
     for attr in ("booleanVal", "tinyIntVal", "smallIntVal", "integerVal",
@@ -87,6 +95,26 @@ def _from_column_value(cv: ColumnValue) -> Any:
         v = getattr(cv, attr, None)
         if v is not None:
             return v
+    if cv.bigDecimalVal is not None:
+        return decimal.Decimal(cv.bigDecimalVal)
+    if cv.dateVal is not None:
+        d = cv.dateVal
+        return datetime.date(d.year, d.month, d.day)
+    if cv.timeVal is not None:
+        t = cv.timeVal
+        return datetime.time(t.hour, t.minute, t.second, t.nanoseconds // 1000,
+                             tzinfo=_tz(t.offsetHours, t.offsetMinutes))
+    if cv.timestampVal is not None:
+        t = cv.timestampVal
+        return datetime.datetime(t.year, t.month, t.day, t.hour, t.minute, t.second, t.nanoseconds // 1000,
+                                 tzinfo=_tz(t.offsetHours, t.offsetMinutes))
+    if cv.intervalVal is not None:
+        iv = cv.intervalVal
+        sign = -1 if iv.isNegative else 1
+        if iv.year is not None or iv.month is not None:
+            return (sign * (iv.year or 0), sign * (iv.month or 0))
+        return sign * datetime.timedelta(days=iv.day or 0, hours=iv.hour or 0, minutes=iv.minute or 0,
+                                         seconds=iv.second or 0, microseconds=(iv.nanoseconds or 0) // 1000)
     return None
 
 
@@ -150,6 +178,13 @@ class WlpClient:
         return msg_type, obj
 
     def _handshake(self, username: str, password: str) -> None:
+        # RapidsSE greets every new connection with 8 bytes, "RapidsSE", before
+        # any framed message (sen/OP_sendWL.sen, sendWL_StartMarker:
+        # "RapidsSE" Socket[].sendStr). Found running against a real node: read
+        # as a header, it made the first reply's length garbage.
+        welcome = recv_exact(self._sock, len(WELCOME))
+        if welcome != WELCOME:
+            raise WlpError(ErrorResponse(errorString=f"not a RapidsSE server (greeting {welcome!r})"))
         self._send(MSG_PROTOCOL_COMPATIBLE_REQUEST, ProtocolCompatibleRequest(
             clientProtocolVersion=PROTOCOL_VERSION, clientDescription="rocepool-wlp-client",
         ))
@@ -158,6 +193,15 @@ class WlpClient:
             raise WlpError(ErrorResponse(errorString="server rejected protocol version"))
         assert msg_type == MSG_PROTOCOL_COMPATIBLE_RESPONSE, resp
 
+        # RapidsSE accepts authentication only in state TUNNELED (AdaptorWL.cpp
+        # vProcessPlainAuthenticationRequest: bCheckState({TUNNELED})), reached
+        # by a ClearTextTunnelRequest -> TunnelSupportedResponse exchange
+        self._send(MSG_CLEAR_TEXT_TUNNEL_REQUEST, ClearTextTunnelRequest())
+        msg_type, resp = self._recv()
+        if msg_type == MSG_ERROR_RESPONSE:
+            raise WlpError(resp)
+        assert msg_type == MSG_TUNNEL_SUPPORTED_RESPONSE, resp
+
         self._send(MSG_PLAIN_AUTHENTICATION_REQUEST, PlainAuthenticationRequest(
             username=username, password=password,
         ))
@@ -165,6 +209,16 @@ class WlpClient:
         if msg_type == MSG_ERROR_RESPONSE:
             raise WlpError(resp)
         assert msg_type == MSG_AUTHENTICATION_OK_RESPONSE, resp
+
+        # ... and queries only in state READY, reached by a SessionChangeRequest
+        # (vProcessSessionChangeRequest: AUTHENTICATED -> READY); no fields set:
+        # RapidsSE ignores catalog and schema
+        self._send(MSG_SESSION_CHANGE_REQUEST, SessionChangeRequest())
+        msg_type, resp = self._recv()
+        if msg_type == MSG_ERROR_RESPONSE:
+            raise WlpError(resp)
+        assert msg_type == MSG_SESSION_CHANGE_RESPONSE, resp
+        self.session_id = resp.sessionId
 
     def close(self) -> None:
         self._sock.close()
@@ -191,7 +245,15 @@ class WlpClient:
             if msg_type == MSG_ERROR_RESPONSE:
                 raise WlpError(resp)
             assert msg_type == MSG_QUERY_RECEIPT_RESPONSE, resp
-            rows = self._drain_single_statement()
+            try:
+                rows = self._drain_single_statement()
+            except WlpError:
+                # a failed statement: RapidsSE sends the ErrorResponse in place of
+                # its StatementResponse and still ends the dialog with a
+                # QueryExecuteResponse -- read it, or the server stays in
+                # API_STATEMENT_SUBMITTED and refuses the next request
+                self._drain_to(MSG_QUERY_EXECUTE_RESPONSE)
+                raise
             msg_type, resp = self._recv()
             if msg_type == MSG_ERROR_RESPONSE:
                 raise WlpError(resp)
@@ -199,6 +261,10 @@ class WlpClient:
 
         self._last_rows = rows
         self._row_cursor = 0
+
+    def _drain_to(self, end_type: int) -> None:
+        while self._recv()[0] != end_type:
+            pass
 
     def _drain_single_statement(self) -> list[tuple]:
         rows: list[tuple] = []

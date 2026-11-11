@@ -14,7 +14,7 @@ from wlp import compact_protocol as cp  # noqa: E402
 from wlp import framing, messages  # noqa: E402
 
 DEFS = os.path.join(ROOT, "third_party", "rapidsse", "src", "wlp", "thrift", "messageDefinitions")
-PRIMITIVE = {"string": {cp.T_STRING, cp.T_BINARY}, "binary": {cp.T_STRING, cp.T_BINARY}, "i32": {cp.T_I32},
+PRIMITIVE = {"i8": {cp.T_I8}, "string": {cp.T_STRING, cp.T_BINARY}, "binary": {cp.T_STRING, cp.T_BINARY}, "i32": {cp.T_I32},
              "i64": {cp.T_I64}, "i16": {cp.T_I16}, "bool": {cp.T_BOOL}, "double": {cp.T_DOUBLE}}
 
 
@@ -73,7 +73,13 @@ class AgainstRapidsSETests(unittest.TestCase):
         self.assertRegex(hpp, r"m_uMsgSize\s*:\s*32")
         self.assertRegex(hpp, r"m_uMsgType\s*:\s*8")
         self.assertEqual(framing.HEADER_SIZE, 8)
-        self.assertEqual(framing.pack_header(51, 0x010203), b"\x00\x01\x02\x03\x33\x00\x00\x00")
+        # the size counts the header too: AdaptorWL.cpp writes the bytes written
+        # (header + body) and reads the body as size - C_WLPHEADER_SIZE
+        adaptor = open(os.path.join(ROOT, "third_party", "rapidsse", "src", "store", "AdaptorWL.cpp")).read()
+        self.assertRegex(adaptor, r"iMsgBodySize\s*=\s*pHeader->iMsgSize\(\)\s*-\s*WLP::C_WLPHEADER_SIZE")
+        self.assertRegex(adaptor, r"iMsgSize\s*=\s*m_pTransport->iBytesWritten\(\)")
+        self.assertEqual(framing.pack_header(51, 0x010203), b"\x00\x01\x02\x0b\x33\x00\x00\x00")
+        self.assertEqual(framing.unpack_header(b"\x00\x01\x02\x0b\x33\x00\x00\x00"), (51, 0x010203))
 
 
 if __name__ == "__main__":

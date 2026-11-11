@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 from .compact_protocol import (
-    T_BINARY, T_BOOL, T_DOUBLE, T_I16, T_I32, T_I64, T_LIST, T_STRING, T_STRUCT, ThriftStruct,
+    T_BINARY, T_BOOL, T_DOUBLE, T_ENUM, T_I8, T_I16, T_I32, T_I64, T_LIST, T_STRING, T_STRUCT, ThriftStruct,
 )
 
 # --- message type ids, from MessageTypes.thrift ---
@@ -22,8 +22,12 @@ MSG_PROTOCOL_COMPATIBLE_REQUEST = 1
 MSG_PROTOCOL_COMPATIBLE_RESPONSE = 2
 MSG_PROTOCOL_INCOMPATIBLE_RESPONSE = 4
 MSG_ERROR_RESPONSE = 6
+MSG_CLEAR_TEXT_TUNNEL_REQUEST = 21
+MSG_TUNNEL_SUPPORTED_RESPONSE = 22
 MSG_PLAIN_AUTHENTICATION_REQUEST = 31
 MSG_AUTHENTICATION_OK_RESPONSE = 38
+MSG_SESSION_CHANGE_REQUEST = 41
+MSG_SESSION_CHANGE_RESPONSE = 42
 MSG_QUERY_EXECUTE_REQUEST = 51
 MSG_QUERY_RECEIPT_RESPONSE = 52
 MSG_ROW_METADATA_RESPONSE = 54
@@ -69,6 +73,38 @@ class PlainAuthenticationRequest(ThriftStruct):
 
 @dataclass
 class AuthenticationOkResponse(ThriftStruct):
+    _FIELDS: ClassVar = []
+
+
+@dataclass
+class SessionChangeRequest(ThriftStruct):
+    defaultFederation: str | None = None
+    defaultCatalog: str | None = None
+    defaultSchema: str | None = None
+    _FIELDS: ClassVar = [
+        (1, T_STRING, "defaultFederation", None),
+        (2, T_STRING, "defaultCatalog", None),
+        (3, T_STRING, "defaultSchema", None),
+    ]
+
+
+@dataclass
+class SessionChangeResponse(ThriftStruct):
+    sessionId: str = ""
+    sessionKey: int = 0
+    _FIELDS: ClassVar = [
+        (1, T_STRING, "sessionId", None),
+        (2, T_I64, "sessionKey", None),
+    ]
+
+
+@dataclass
+class ClearTextTunnelRequest(ThriftStruct):
+    _FIELDS: ClassVar = []
+
+
+@dataclass
+class TunnelSupportedResponse(ThriftStruct):
     _FIELDS: ClassVar = []
 
 
@@ -157,6 +193,78 @@ class RowMetadataResponse(ThriftStruct):
 
 
 @dataclass
+class Timestamp(ThriftStruct):
+    year: int = 0
+    month: int = 0
+    day: int = 0
+    hour: int = 0
+    minute: int = 0
+    second: int = 0
+    nanoseconds: int = 0
+    offsetHours: int | None = None
+    offsetMinutes: int | None = None
+    tzName: str | None = None
+    _FIELDS: ClassVar = [
+        (1, T_I32, "year", None), (2, T_I16, "month", None), (3, T_I16, "day", None),
+        (4, T_I16, "hour", None), (5, T_I16, "minute", None), (6, T_I16, "second", None),
+        (7, T_I32, "nanoseconds", None), (8, T_I8, "offsetHours", None), (9, T_I8, "offsetMinutes", None),
+        (10, T_STRING, "tzName", None),
+    ]
+
+
+@dataclass
+class Date(ThriftStruct):
+    year: int = 0
+    month: int = 0
+    day: int = 0
+    offsetHours: int | None = None
+    offsetMinutes: int | None = None
+    tzName: str | None = None
+    _FIELDS: ClassVar = [
+        (1, T_I32, "year", None), (2, T_I16, "month", None), (3, T_I16, "day", None),
+        (4, T_I8, "offsetHours", None), (5, T_I8, "offsetMinutes", None), (6, T_STRING, "tzName", None),
+    ]
+
+
+@dataclass
+class Time(ThriftStruct):
+    hour: int = 0
+    minute: int = 0
+    second: int = 0
+    nanoseconds: int = 0
+    offsetHours: int | None = None
+    offsetMinutes: int | None = None
+    tzName: str | None = None
+    _FIELDS: ClassVar = [
+        (1, T_I16, "hour", None), (2, T_I16, "minute", None), (3, T_I16, "second", None),
+        (4, T_I32, "nanoseconds", None), (5, T_I8, "offsetHours", None), (6, T_I8, "offsetMinutes", None),
+        (7, T_STRING, "tzName", None),
+    ]
+
+
+INTERVAL_TYPES = ["YEAR", "MONTH", "YEAR_TO_MONTH", "DAY", "HOUR", "MINUTE", "SECOND", "DAY_TO_HOUR",
+                  "DAY_TO_MINUTE", "DAY_TO_SECOND", "HOUR_TO_MINUTE", "HOUR_TO_SECOND", "MINUTE_TO_SECOND"]
+
+
+@dataclass
+class Interval(ThriftStruct):
+    type: int = 0  # IntervalType, index into INTERVAL_TYPES
+    isNegative: bool | None = None
+    year: int | None = None
+    month: int | None = None
+    day: int | None = None
+    hour: int | None = None
+    minute: int | None = None
+    second: int | None = None
+    nanoseconds: int | None = None
+    _FIELDS: ClassVar = [
+        (1, T_ENUM, "type", None), (2, T_BOOL, "isNegative", None), (3, T_I64, "year", None),
+        (4, T_I64, "month", None), (5, T_I64, "day", None), (6, T_I64, "hour", None),
+        (7, T_I64, "minute", None), (8, T_I64, "second", None), (9, T_I64, "nanoseconds", None),
+    ]
+
+
+@dataclass
 class ColumnValue(ThriftStruct):
     isNull: bool | None = None
     booleanVal: bool | None = None
@@ -166,11 +274,10 @@ class ColumnValue(ThriftStruct):
     bigintVal: int | None = None
     doubleVal: float | None = None
     bigDecimalVal: str | None = None
-    # timestampVal / timeVal / dateVal / intervalVal deliberately omitted --
-    # not needed for the byte/int/string/double values this storage adapter
-    # ever binds (object_key, object_value, object_version, timestamps as
-    # doubles, is_dir as bool). Adding them later is a pure extension of
-    # _FIELDS, nothing else here would change.
+    timestampVal: Timestamp | None = None
+    timeVal: Time | None = None
+    dateVal: Date | None = None
+    intervalVal: Interval | None = None
     stringVal: str | None = None
     binaryVal: bytes | None = None
     _FIELDS: ClassVar = [
@@ -182,6 +289,10 @@ class ColumnValue(ThriftStruct):
         (6, T_I64, "bigintVal", None),
         (7, T_DOUBLE, "doubleVal", None),
         (8, T_STRING, "bigDecimalVal", None),
+        (9, T_STRUCT, "timestampVal", Timestamp),
+        (10, T_STRUCT, "timeVal", Time),
+        (11, T_STRUCT, "dateVal", Date),
+        (12, T_STRUCT, "intervalVal", Interval),
         (13, T_STRING, "stringVal", None),
         (14, T_BINARY, "binaryVal", None),  # binary shares STRING wire encoding, decodes to raw bytes
     ]
@@ -269,8 +380,12 @@ MESSAGE_CLASSES = {
     MSG_PROTOCOL_COMPATIBLE_REQUEST: ProtocolCompatibleRequest,
     MSG_PROTOCOL_COMPATIBLE_RESPONSE: ProtocolCompatibleResponse,
     MSG_ERROR_RESPONSE: ErrorResponse,
+    MSG_CLEAR_TEXT_TUNNEL_REQUEST: ClearTextTunnelRequest,
+    MSG_TUNNEL_SUPPORTED_RESPONSE: TunnelSupportedResponse,
     MSG_PLAIN_AUTHENTICATION_REQUEST: PlainAuthenticationRequest,
     MSG_AUTHENTICATION_OK_RESPONSE: AuthenticationOkResponse,
+    MSG_SESSION_CHANGE_REQUEST: SessionChangeRequest,
+    MSG_SESSION_CHANGE_RESPONSE: SessionChangeResponse,
     MSG_QUERY_EXECUTE_REQUEST: QueryExecuteRequest,
     MSG_QUERY_RECEIPT_RESPONSE: QueryReceiptResponse,
     MSG_ROW_METADATA_RESPONSE: RowMetadataResponse,
