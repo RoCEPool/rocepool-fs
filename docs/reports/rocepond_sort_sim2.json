@@ -1,0 +1,120 @@
+{
+ "what": "GraySort-style sort on rocepond + rocepool (rocepond/sort.py)",
+ "nodes": 2,
+ "threads_per_worker": 1,
+ "cores": 2,
+ "cores_note": "one host: its cores run every worker, rocepool's servers and clients, and the emulated RDMA",
+ "scheduler": "rocepond.ProcessExecutor (one worker process per node; not Ray)",
+ "rocepool": {
+  "mdts": "10.99.1.1:19901,10.99.1.2:19901",
+  "osts": "10.99.1.1:19951,10.99.1.2:19951",
+  "mount": "/mnt/rocepool_rocepond",
+  "client": "native FUSE (rocepool-fuse)",
+  "ost_data": "RAM"
+ },
+ "duckdb": "v1.5.6",
+ "sort": {
+  "records": 10737418,
+  "bytes": 1073741800,
+  "partitions": 16,
+  "generate_s": 6.34,
+  "shuffle_s": 4.14,
+  "sort_s": 4.77,
+  "total_s": 8.91,
+  "gib_per_min": 6.734,
+  "validation": {
+   "records_in": 10737418,
+   "records_out": 10737418,
+   "output_bytes": 1073741800,
+   "order_violations_in_files": 0,
+   "partition_ranges_in_order": true,
+   "checksum_equal": true,
+   "largest_partition_records": 672621,
+   "seconds": 3.54
+  },
+  "valid": true
+ },
+ "comparison": {
+  "rocepond_rocepool": {
+   "bytes": 1073741800,
+   "seconds": 8.91,
+   "gib_per_min": 6.734,
+   "cores": 2,
+   "mib_per_s_per_core": 57.46
+  },
+  "smallpond_3fs_published": {
+   "bytes": 121496034869248,
+   "seconds": 1814,
+   "gib_per_min": 3742.6,
+   "compute_cores": 9600,
+   "storage_nodes_not_counted": 25,
+   "mib_per_s_per_compute_core": 6.65
+  }
+ },
+ "passed": true,
+ "disk_tier_runs": {
+  "1_gib": {
+   "records": 10737418,
+   "bytes": 1073741800,
+   "partitions": 16,
+   "generate_s": 6.1,
+   "shuffle_s": 4.33,
+   "sort_s": 4.76,
+   "total_s": 9.09,
+   "gib_per_min": 6.601,
+   "validation": {
+    "records_in": 10737418,
+    "records_out": 10737418,
+    "output_bytes": 1073741800,
+    "order_violations_in_files": 0,
+    "partition_ranges_in_order": true,
+    "checksum_equal": true,
+    "largest_partition_records": 672621,
+    "seconds": 5.91
+   },
+   "valid": true
+  },
+  "2_gib": {
+   "records": 21474836,
+   "bytes": 2147483600,
+   "partitions": 16,
+   "generate_s": 12.25,
+   "shuffle_s": 8.82,
+   "sort_s": 10.77,
+   "total_s": 19.59,
+   "gib_per_min": 6.126,
+   "validation": {
+    "records_in": 21474836,
+    "records_out": 21474836,
+    "output_bytes": 2147483600,
+    "order_violations_in_files": 0,
+    "partition_ranges_in_order": true,
+    "checksum_equal": true,
+    "largest_partition_records": 1343342,
+    "seconds": 10.85
+   },
+   "valid": true
+  },
+  "4_gib": {
+   "records": 42949672,
+   "bytes": 4294967200,
+   "partitions": 16,
+   "generate_s": 24.82,
+   "shuffle_s": 18.6,
+   "sort_s": 21.48,
+   "total_s": 40.08,
+   "gib_per_min": 5.988,
+   "validation": {
+    "records_in": 42949672,
+    "records_out": 42949672,
+    "output_bytes": 4294967200,
+    "order_violations_in_files": 0,
+    "partition_ranges_in_order": true,
+    "checksum_equal": true,
+    "largest_partition_records": 2687341,
+    "seconds": 21.84
+   },
+   "valid": true
+  }
+ }
+}

@@ -91,6 +91,62 @@ What the numbers say, and do not say:
   that is the emulated RDMA and FUSE on 2 busy cores, i.e. this is the mode
   where rocepool's real bandwidth will show on hardware.
 
+## A first comparison with smallpond: GraySort
+
+    sudo python3 tools/rocepond_sort.py --duckdb <DuckDB CLI | auto> [--gib 1] [--partitions 16]
+
+smallpond's own benchmark, and the one DeepSeek published a result for, is
+GraySort (`benchmarks/gray_sort_benchmark.py`): 100-byte records with a
+10-byte key; shuffle them by key prefix into P partitions through the file
+system, then sort every partition. `rocepond/sort.py` is the same pipeline
+in rocepond's Python API:
+
+```python
+records = sp.generate("sort_input", "SELECT left(a, 10) AS keys, ... AS records FROM range(...)")
+buckets = records.repartition(16, by="('0x' || left(keys, 1))::INTEGER")       # shuffle through rocepool
+result  = buckets.map_partitions("SELECT records FROM {0} ORDER BY keys", name="sort_output", fmt="lines")
+```
+
+The shuffle is DuckDB's partitioned write (`COPY ... PARTITION_BY`), as in
+smallpond's ShuffleNode with the DuckDB engine; every byte of shuffle and
+sort is read from and written to rocepool. Validation: every output file in
+key order, partition ranges in order, record count and a checksum of all
+records equal to the input's.
+
+Result (2026-11-14, simulated 2-node cluster: one host, 2 cores, 8 GiB RAM,
+emulated RDMA; all validated):
+
+| data | OST data on | shuffle | sort | shuffle + sort | per core |
+|---|---|---|---|---|---|
+| 1 GiB | RAM | 4.1 s | 4.8 s | 8.9 s = 6.7 GiB/min | 57 MiB/s |
+| 1 GiB | disk tier | 4.3 s | 4.8 s | 9.1 s = 6.6 GiB/min | 56 MiB/s |
+| 2 GiB | disk tier | 8.8 s | 10.8 s | 19.6 s = 6.1 GiB/min | 52 MiB/s |
+| 4 GiB | disk tier | 18.6 s | 21.5 s | 40.1 s = 6.0 GiB/min | 51 MiB/s |
+
+smallpond + 3FS, as published (3FS README): 110.5 TiB in 8,192 partitions in
+30 min 14 s = 3.66 TiB/min, on 50 compute nodes of 192 physical cores each
+plus 25 storage nodes: 6.65 MiB/s per compute core.
+
+What this comparison is and is not:
+- It is not the same software on the same machines: smallpond itself could
+  not be run here (its dependencies -- Ray, pyarrow, polars, the duckdb
+  Python package -- cannot be installed in this environment). It compares
+  rocepond's measured throughput per core with smallpond's published one.
+- Per core, rocepond + rocepool is ~8x the published figure (51-57 vs 6.65
+  MiB/s), and here those 2 cores also run rocepool's servers and the
+  emulated RDMA, while the published figure does not count the 25 storage
+  nodes' cores.
+- But the scales are five orders of magnitude apart, and small favours us:
+  our partitions are 64-256 MiB (theirs ~13.5 GiB), nothing is replicated
+  (3FS stores replicated data on SSDs), there are no stragglers, no
+  scheduling of thousands of tasks, and the network is a memory copy. Our
+  records are hexadecimal text from DuckDB, theirs gensort's.
+- What it does show: the pipeline is correct on rocepool, its per-core cost
+  is in a healthy range, and throughput holds as the data grows past the
+  host's memory (4 GiB sorted = ~13 GiB written through rocepool).
+- The comparison that would settle it: smallpond and rocepond on the same
+  real hosts, each on rocepool and smallpond also on 3FS, at 100+ GiB.
+
 ## Found on the way (rocepool)
 
 Two nodes creating the same directory tree at once (`mkdir -p` on every
