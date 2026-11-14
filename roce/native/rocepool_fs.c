@@ -2250,8 +2250,28 @@ static void open_unregister(handle_t *h) {
 void invalidate_open_caches(const char *path) {
     pthread_mutex_lock(&g_open_lk);
     for (size_t i = 0; i < g_nopen; i++)
-        if (g_open[i]->sc && !strcmp(g_open[i]->path, path)) { sc_clear(g_open[i]->sc); g_open[i]->pre_ok = 0; ra_drop(g_open[i]->ra); }
+        if (g_open[i]->sc && !strcmp(g_open[i]->path, path)) {
+            sc_clear(g_open[i]->sc);
+            g_open[i]->pre_ok = 0;
+            g_open[i]->wr_end = 0;  /* a truncate: the size is the MDT's again */
+            ra_drop(g_open[i]->ra);
+        }
     pthread_mutex_unlock(&g_open_lk);
+}
+
+/* What stat() must report on the client that is writing: a handle buffers
+ * writes (up to DIRTY_CAP, then write-behind), and the MDT learns the new
+ * size when they are flushed. A program that writes and then stats before
+ * closing (DuckDB checks a written file's size this way) would otherwise see
+ * a size short by the buffered tail. */
+int fs_stat(const char *path, attr_t *a) {
+    int rc = fs_getattr(path, a);
+    if (rc || a->is_dir) return rc;
+    pthread_mutex_lock(&g_open_lk);
+    for (size_t i = 0; i < g_nopen; i++)
+        if (g_open[i]->wr_end > a->size && !strcmp(g_open[i]->path, path)) a->size = g_open[i]->wr_end;
+    pthread_mutex_unlock(&g_open_lk);
+    return 0;
 }
 
 handle_t *handle_new(const char *path, int is_dir) {
@@ -2463,6 +2483,7 @@ int handle_flush(handle_t *h) {
  * uses these; the FUSE daemon has zero-copy variants of the same logic). */
 int handle_write(handle_t *h, uint64_t off, const uint8_t *data, size_t len, uint8_t *base) {
     ra_drop(h->ra);  /* this fd's reads ahead may predate this write */
+    if (off + len > h->wr_end) h->wr_end = off + len;
     if (h->ndirty == h->capdirty) {
         h->capdirty = h->capdirty ? 2 * h->capdirty : 64;
         h->dirty = xrealloc(h->dirty, h->capdirty * sizeof(dirty_t));

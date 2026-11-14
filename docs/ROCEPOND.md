@@ -265,6 +265,15 @@ refused. Error paths only. (A directory another node created is otherwise
 visible after at most the TTL, as before; `tests/test_native_fuse.py` has
 both.)
 
+A program that writes a file and stats it before closing saw a size short
+by the tail still in the client's write buffer (the MDT learns the size at
+the flush). The current DuckDB Python package checks every file it writes
+this way and failed with "File size mismatch" on files over the 64 MiB
+buffer. Fixed in `rocepool_fs.c` (`fs_stat`, used by the FUSE client's
+lookup/getattr and the intercept library's stat): the reported size counts
+the client's own buffered writes. `tests/test_native_fuse.py`:
+`test_stat_counts_writes_still_buffered`.
+
 ## Limits
 
 - The SQL is split by hand (per-partition part and merge), as in smallpond.

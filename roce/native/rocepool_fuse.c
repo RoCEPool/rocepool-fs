@@ -397,7 +397,7 @@ static void op_lookup(uint64_t u, uint64_t node, const char *name) {
     char path[4096];
     attr_t a;
     int rc = child_path(node, name, path, sizeof(path));
-    if (!rc) rc = fs_getattr(path, &a);
+    if (!rc) rc = fs_stat(path, &a);
     if (rc) { reply(u, -rc, NULL, 0, NULL, 0); return; }
     reply_entry(u, path, &a, NULL, 0);
 }
@@ -418,7 +418,7 @@ static void op_getattr(uint64_t u, uint64_t node) {
     char path[4096];
     attr_t a;
     int rc = path_for_ino(node, path, sizeof(path));
-    if (!rc) rc = fs_getattr(path, &a);
+    if (!rc) rc = fs_stat(path, &a);
     if (rc) { reply(u, -rc, NULL, 0, NULL, 0); return; }
     reply_attr(u, node, &a);
 }

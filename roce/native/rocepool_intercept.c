@@ -814,7 +814,7 @@ int fcntl64(int fd, int cmd, ...) {   /* what _FILE_OFFSET_BITS=64 programs (Pyt
 /* ---------------------------------------------------------------- stat */
 static int do_stat_path(const char *rel, struct stat *st) {
     attr_t a;
-    int rc = fs_getattr(rel, &a);
+    int rc = fs_stat(rel, &a);
     if (g_log > 1) fprintf(stderr, "rocepool_intercept[%d]: stat %s -> %d\n", (int)getpid(), rel, rc);
     if (rc) return seterr(rc);
     fill_stat(st, rel, &a);
