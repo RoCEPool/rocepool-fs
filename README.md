@@ -89,6 +89,11 @@ and RapidsSE's own TPC-H SF1 regression test passes on it:
 `sudo python3 tools/rapidsse_tpch.py --rapidsse <RapidsSE tree>`
 ([docs/RAPIDSSE_TPCH.md](docs/RAPIDSSE_TPCH.md)).
 
+A prototype of DuckDB on every node with the data and the shuffle on rocepool
+(the design of DeepSeek's smallpond on 3FS) is in `rocepond/`:
+`sudo python3 tools/rocepond_tpch.py --rapidsse auto` runs the same 11 TPC-H
+queries on it ([docs/ROCEPOND.md](docs/ROCEPOND.md)).
+
 ## License
 
 Apache License 2.0, see [LICENSE](LICENSE). The third-party sources in `deps/` and

@@ -1071,6 +1071,13 @@ static int require_parent_dir(const char *path) {
     char par[4096];
     attr_t pa;
     int rc = fs_getattr(parent_of(path, par, sizeof(par)), &pa);
+    if (rc == -ENOENT) {
+        /* maybe only this client's cached "not there": another client can
+         * have created the directory since (two nodes doing mkdir -p of the
+         * same tree). Ask the MDT before refusing. */
+        ac_del(par);
+        rc = fs_getattr(par, &pa);
+    }
     if (rc) return rc;
     return pa.is_dir ? 0 : -ENOTDIR;
 }
@@ -1080,6 +1087,7 @@ int fs_mkdir(const char *path, attr_t *a) {
     if (rc) return rc;
     rc = mdt_create(path, 1, 1, NULL, a);
     if (rc == 0) ac_put(path, a);
+    else if (rc == -EEXIST) ac_del(path);  /* the MDT says it exists: a cached "not there" is stale */
     return rc;
 }
 
@@ -1089,6 +1097,7 @@ int fs_create_file_excl(const char *path, int exclusive, attr_t *a) {
     attr_t lay;
     choose_layout(path, &lay);
     rc = mdt_create(path, 0, exclusive, &lay, a);
+    if (rc == -EEXIST) ac_del(path);  /* it exists: a cached "not there" is stale */
     if (rc == -EEXIST && !exclusive) return -EISDIR;  /* exists as a directory */
     if (rc == 0) ac_put(path, a);
     return rc;
