@@ -156,6 +156,48 @@ class AwsClusterTests(unittest.TestCase):
         self.assertNotIn("efa_installer", setup)
         self.assertNotIn("rdma_rxe", setup)
 
+    def test_gpu_mode_two_hosts_with_efa_talk_rdma_in_one_placement_group(self):
+        # 2 x g6e.8xlarge (one L40S each, EFA): the cluster GPU-prefetch validation
+        r = self.run_tool("--mode", "gpu", "--nodes", "2", "--type", "g6e.8xlarge", "--command", "true",
+                          env_extra={"FAKE_AWS_G_QUOTA": "64", "FAKE_AWS_VCPUS": "g6e.8xlarge=32"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("gpu hosts with EFA (RDMA between them)", r.stdout)
+        run = self.aws_calls("ec2", "run-instances")
+        self.assertEqual(len(run), 1)
+        nics = json.loads(run[0][run[0].index("--network-interfaces") + 1])
+        self.assertEqual(nics[0].get("InterfaceType"), "efa")
+        self.assertIn("GroupName", json.loads(run[0][run[0].index("--placement") + 1]))
+        setups = [c[-1] for c in self.calls(self.ssh_log) if "ROCEPOOL_SETUP" in c[-1]]
+        self.assertEqual(len(setups), 2)
+        for x in setups:
+            self.assertIn("nvidia-smi -L", x)
+            self.assertIn("fi_info -p efa -t FI_EP_RDM", x, "EFA checked (installed when the AMI lacks it)")
+        cmd = [c[-1] for c in self.calls(self.ssh_log) if "PEER_IPS=" in c[-1]]
+        self.assertTrue(cmd and "PEER_IPS=172.31.0.2" in cmd[0], cmd)
+
+    def test_gpu_efa_needs_the_placement_group_no_fallback_without_it(self):
+        r = self.run_tool("--mode", "gpu", "--nodes", "2", "--type", "g6e.8xlarge",
+                          env_extra={"FAKE_AWS_G_QUOTA": "64", "FAKE_AWS_VCPUS": "g6e.8xlarge=32",
+                                     "FAKE_AWS_NO_CAPACITY": "g6e.8xlarge@us-east-1a,g6e.8xlarge@us-east-1d"})
+        self.assertNotEqual(r.returncode, 0)
+        places = [json.loads(c[c.index("--placement") + 1]) for c in self.aws_calls("ec2", "run-instances")]
+        self.assertTrue(places and all("GroupName" in x for x in places),
+                        "never launched outside the placement group (EFA would not work there)")
+
+    def test_gpu_efa_on_refuses_a_type_without_efa_and_off_keeps_tcp(self):
+        r = self.run_tool("--mode", "gpu", "--nodes", "2", "--type", "g6e.2xlarge", "--gpu-efa", "on",
+                          env_extra={"FAKE_AWS_NO_EFA": "1", "FAKE_AWS_G_QUOTA": "128"})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("has no EFA (--gpu-efa on)", r.stdout)
+        self.assertFalse(self.aws_calls("ec2", "run-instances"))
+        r = self.run_tool("--mode", "gpu", "--nodes", "2", "--type", "g6e.8xlarge", "--gpu-efa", "off",
+                          "--command", "true", env_extra={"FAKE_AWS_G_QUOTA": "64", "FAKE_AWS_VCPUS": "g6e.8xlarge=32"},
+                          run_id="rp-test2")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("without EFA (TCP between them)", r.stdout)
+        run = self.aws_calls("ec2", "run-instances")[-1]
+        self.assertNotIn("InterfaceType", run[run.index("--network-interfaces") + 1])
+
     def test_gpu_mode_without_a_deep_learning_ami_stops_before_creating_instances(self):
         r = self.run_tool("--mode", "gpu", "--nodes", "1", "--type", "g6e.2xlarge",
                           env_extra={"FAKE_AWS_NO_EFA": "1", "FAKE_AWS_G_QUOTA": "128",

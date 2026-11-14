@@ -313,8 +313,19 @@ class Run:
         if a.mode == "efa" and not facts["efa"]:
             raise RuntimeError(f"{itype} has no EFA: pick an EFA type (c6in.32xlarge, i4i.32xlarge, hpc7a.96xlarge, ...) "
                                "or --mode rxe")
+        # gpu mode on a type with EFA (g6e.8xlarge and larger, p4d, p5): an EFA
+        # interface, the cluster placement group and the EFA software, so GPU
+        # hosts talk RDMA (NCCL over aws-ofi-nccl, the memory pool over libfabric)
+        # instead of TCP. --gpu-efa on refuses a type without EFA; off keeps TCP.
+        gpu_efa = getattr(a, "gpu_efa", "auto")
+        if a.mode == "gpu" and gpu_efa == "on" and not facts["efa"]:
+            raise RuntimeError(f"{itype} has no EFA (--gpu-efa on): g6e.8xlarge and larger, p4d, p5, ... have one")
+        st["efa"] = a.mode == "efa" or (a.mode == "gpu" and facts["efa"] and gpu_efa != "off")
+        if a.mode == "gpu":
+            log(f"gpu hosts {'with EFA (RDMA between them)' if st['efa'] else 'without EFA (TCP between them)'}")
+        nic_mode = "efa" if st["efa"] else a.mode
         self.check_quota(itype, facts, a.nodes)
-        rails = len(network_interfaces(a.mode, facts, "", ""))
+        rails = len(network_interfaces(nic_mode, facts, "", ""))
         if rails > 1:
             log(f"{itype}: {facts['network_cards']} network cards -> {rails} EFA interfaces per instance "
                 f"(one transport rail each)")
@@ -406,13 +417,15 @@ class Run:
             # zone that cannot take both is rolled back before the next is tried.
             groups = ([("gpu", gpu["type"], gpu["nodes"], gpu["ami"], gpu["facts"])] if gpu else []) + \
                 [("storage", itype, a.nodes, st["ami"], facts)]
-            tries = [(z, True) for z in cand] + ([(z, False) for z in cand] if a.mode in ("rxe", "gpu") else [])
+            # EFA needs the cluster placement group: no fallback without one
+            tries = [(z, True) for z in cand] + ([(z, False) for z in cand]
+                                                  if a.mode in ("rxe", "gpu") and not st["efa"] else [])
             why, done = [], False
             for zone, pg in tries:
                 placement = {"AvailabilityZone": zone, **({"GroupName": st["pg"]} if pg else {})}
                 got = {}
                 for role, t, count, ami, f in groups:
-                    nics = network_interfaces(a.mode, f, by_az[zone], st["sg"])
+                    nics = network_interfaces(nic_mode if role == "storage" else a.mode, f, by_az[zone], st["sg"])
                     r = self.launch(t, count, ami, nics, placement, user_data, role)
                     if r is None:
                         why.append(f"{t} in {zone}{'' if pg else ' (no placement group)'}")
@@ -543,9 +556,9 @@ class Run:
 
     def setup_hosts(self) -> None:
         st = self.state
-        script = self.setup_script()
+        script = self.setup_script(efa=bool(st.get("efa")) and st["mode"] == "gpu")
 
-        jobs = [(h, script, st["mode"]) for h in st["hosts"]]
+        jobs = [(h, script, st["mode"] + (", EFA" if st.get("efa") and st["mode"] == "gpu" else "")) for h in st["hosts"]]
         if st.get("gpu_hosts"):
             g = st["gpu"]
             gscript = self.setup_script("gpu", g["facts"], efa=True)
@@ -749,6 +762,8 @@ def main() -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="create, set up, run, fetch, tear down")
     r.add_argument("--mode", choices=("efa", "rxe", "gpu"), default="efa")
+    r.add_argument("--gpu-efa", choices=("auto", "on", "off"), default="auto",
+                   help="gpu mode: EFA between the GPU hosts (auto: when the type has it)")
     r.add_argument("--nodes", type=int, default=10)
     r.add_argument("--type", help=f"instance type (default {DEFAULT_TYPE['efa']} for efa, {DEFAULT_TYPE['rxe']} for rxe)")
     r.add_argument("--quick", action="store_true", help="30 s IO500 instead of the 300 s valid run")
