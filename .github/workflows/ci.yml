@@ -57,22 +57,25 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc g++ make cmake pkg-config autoconf automake libtool fuse3 iproute2 \
-            libibverbs-dev librdmacm-dev python3-pip
+            libibverbs-dev librdmacm-dev python3-venv
           sudo modprobe fuse || true
-          sudo python3 -m pip install --break-system-packages duckdb ray
+          # a virtual environment: the system's Python packages are apt's to manage
+          python3 -m venv "$HOME/rp"
+          "$HOME/rp/bin/pip" install --quiet duckdb ray
+          echo "RP_PY=$HOME/rp/bin/python3" >> "$GITHUB_ENV"
       - name: tests (ProcessExecutor and RayExecutor)
         run: |
           set -o pipefail
-          sudo -E env "PATH=$PATH" python3 -m unittest -v tests.test_rocepond 2>&1 | tee rocepond.log
+          sudo -E env "PATH=$PATH" "$RP_PY" -m unittest -v tests.test_rocepond 2>&1 | tee rocepond.log
       - name: sort on rocepool, ProcessExecutor (2048 partitions)
         run: |
           set -o pipefail
-          sudo -E env "PATH=$PATH" python3 tools/rocepond_sort.py --gib 0.25 --partitions 2048 --slots 2 \
+          sudo -E env "PATH=$PATH" "$RP_PY" tools/rocepond_sort.py --gib 0.25 --partitions 2048 --slots 2 \
             --report sort_process.json 2>&1 | tee sort_process.log
       - name: sort on rocepool, RayExecutor on a 2-node Ray cluster (2048 partitions)
         run: |
           set -o pipefail
-          sudo -E env "PATH=$PATH" python3 tools/rocepond_sort.py --gib 0.25 --partitions 2048 --slots 2 \
+          sudo -E env "PATH=$PATH" "$RP_PY" tools/rocepond_sort.py --gib 0.25 --partitions 2048 --slots 2 \
             --executor ray --report sort_ray.json 2>&1 | tee sort_ray.log
       - name: summary
         if: always()
