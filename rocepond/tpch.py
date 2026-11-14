@@ -1,9 +1,9 @@
 """The 11 TPC-H queries of RapidsSE's regression plan (Q1, Q3, Q4, Q6, Q7,
 Q8, Q9, Q10, Q11, Q12, Q14, with the plan's parameters), written for
-rocepond: a per-partition part that runs on every node, and a merge.
+rocepond: a per-partition part (one task per partition), and a merge.
 
-Layout: lineitem and orders are repartitioned by order key, so every
-lineitem/orders join is local to a partition; customer, supplier, part,
+Layout: lineitem and orders are repartitioned by order key into the same
+number of partitions, so every lineitem/orders join is local to a partition; customer, supplier, part,
 partsupp, nation and region are broadcast.
 
 What makes each split correct:
@@ -54,15 +54,19 @@ class Tables:
     pass
 
 
-def prepare(sp, files) -> Tables:
-    """`files[table][k]`: the .tbl files of `table` that worker k reads."""
+def prepare(sp, files, partitions: int) -> Tables:
+    """`files[table]`: lists of .tbl files, one list per input partition
+    (a node's share). lineitem and orders go into `partitions` partitions by
+    order key; the other tables are broadcast."""
     t = Tables()
     for name, cols in SCHEMA.items():
         share = [list(f) for f in files[name]]
         if name in REPLICATED_SOURCES:
-            share = [share[0]] + [[] for _ in share[1:]]
-        src = sp.read_csv(name, share, cols)
-        setattr(t, name, src.repartition(hash_by=PARTITIONED[name]) if name in PARTITIONED else src.broadcast())
+            share = share[:1]
+        src = sp.read_csv(name, share, cols, trailing_delimiter=True)
+        df = (src.repartition(partitions, hash_by=PARTITIONED[name], name=name) if name in PARTITIONED
+              else src.broadcast())
+        setattr(t, name, df.as_table(name))
     return t
 
 

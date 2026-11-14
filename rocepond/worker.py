@@ -1,81 +1,39 @@
-"""A rocepond worker: one long-lived DuckDB on one node, taking tasks from
-its standard input, one JSON object per line, answering one per line:
-
-    in : {"id": 7, "mkdirs": ["/mnt/x/tmp/q7"], "sql": ["CREATE ...", "COPY ..."], "fetch": false}
-         (also "rmtree": [dirs], done first; "check_sorted": [files] returns, per
-         file, [records, bytes, first key, last key, order violations])
-    out: {"id": 7, "ok": true, "duck_s": 0.41, "wall_s": 0.43, "rows": [], "error": ""}
-
-`sql` runs in order; `rows` is the last statement's result when "fetch" is
-set. Started by the executor on the node (rocepond/executor.py); with Ray
-this is the body of an actor pinned to the node.
-"""
+"""A rocepond process worker: one long-lived DuckDB, taking tasks
+(rocepond/task.py) from its standard input, one JSON object per line, and
+answering one JSON object per line. Started on a node by ProcessExecutor
+(rocepond/executor.py), several per node."""
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import shutil
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from rocepond.duck import Duck, DuckError  # noqa: E402
-
-
-def check_sorted(path: str, key_bytes: int) -> list:
-    """A file of newline-terminated records: [records, bytes, first key, last
-    key, order violations] -- the keys (the first key_bytes of each record)
-    must not decrease."""
-    n = bad = size = 0
-    first = prev = b""
-    with open(path, "rb", buffering=8 << 20) as f:
-        for line in f:
-            key = line[:key_bytes]
-            if n == 0:
-                first = key
-            elif key < prev:
-                bad += 1
-            prev = key
-            n += 1
-            size += len(line)
-    return [n, size, first.decode("latin-1"), prev.decode("latin-1"), bad]
+from rocepond.task import engine_for, execute  # noqa: E402
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--duckdb", required=True)
+    ap.add_argument("--duckdb", default="")
+    ap.add_argument("--engine", default="auto", choices=("auto", "module", "cli"))
     ap.add_argument("--threads", type=int, default=os.cpu_count() or 1)
-    ap.add_argument("--memory-limit", default="")
+    ap.add_argument("--memory-limit", default="", help="per DuckDB; default: this host's memory shared by --share")
+    ap.add_argument("--share", type=int, default=1, help="DuckDB workers on this host")
     a = ap.parse_args()
-    duck = Duck(a.duckdb, a.threads, a.memory_limit or None)
-    print(json.dumps({"ready": True, "duckdb": duck.version, "threads": a.threads}), flush=True)
+    engine = engine_for({"engine": a.engine, "duckdb": a.duckdb, "threads": a.threads,
+                         "memory_limit": a.memory_limit, "share": a.share})
+    print(json.dumps({"ready": True, "duckdb": engine.version, "threads": a.threads, "pid": os.getpid()}),
+          flush=True)
     for line in sys.stdin:
         line = line.strip()
         if not line:
             continue
         task = json.loads(line)
-        out = {"id": task.get("id"), "ok": True, "duck_s": 0.0, "rows": [], "error": ""}
-        t0 = time.monotonic()
-        try:
-            for d in task.get("rmtree", []):
-                shutil.rmtree(d, ignore_errors=True)
-            for d in task.get("mkdirs", []):
-                os.makedirs(d, exist_ok=True)
-            for sql in task.get("sql", []):
-                secs, rows = duck.run(sql)
-                out["duck_s"] += secs
-                out["rows"] = rows
-            if not task.get("fetch"):
-                out["rows"] = []
-            if task.get("check_sorted"):
-                out["rows"] = [check_sorted(path, task.get("key_bytes", 10)) for path in task["check_sorted"]]
-        except (DuckError, OSError) as exc:
-            out.update(ok=False, error=f"{type(exc).__name__}: {exc}", rows=[])
-        out["wall_s"] = round(time.monotonic() - t0, 4)
-        out["duck_s"] = round(out["duck_s"], 4)
-        print(json.dumps(out), flush=True)
-    duck.close()
+        res = execute(task, engine)
+        res["id"] = task.get("id")
+        print(json.dumps(res), flush=True)
+    engine.close()
     return 0
 
 

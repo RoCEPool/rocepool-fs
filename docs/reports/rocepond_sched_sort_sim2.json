@@ -1,0 +1,165 @@
+{
+ "what": "GraySort-style sort on rocepond + rocepool (rocepond/sort.py)",
+ "nodes": 2,
+ "slots_per_node": 2,
+ "threads_per_task": 1,
+ "cores": 2,
+ "cores_note": "one host: its cores run every worker, rocepool's servers and clients, and the emulated RDMA",
+ "executor": "process",
+ "rocepool": {
+  "mdts": "10.99.1.1:19901,10.99.1.2:19901",
+  "osts": "10.99.1.1:19951,10.99.1.2:19951",
+  "mount": "/mnt/rocepool_rocepond",
+  "client": "native FUSE (rocepool-fuse)",
+  "ost_data": "RAM"
+ },
+ "scheduler": {
+  "scheduler": "rocepond.ProcessExecutor",
+  "nodes": 2,
+  "slots_per_node": 2,
+  "threads_per_slot": 1,
+  "duckdb": "v1.5.6"
+ },
+ "stages": [
+  {
+   "stage": "generate sort_input",
+   "tasks": 16,
+   "wall_s": 6.603,
+   "retries": 0,
+   "tasks_per_s": 2.4,
+   "task_s_total": 26.254,
+   "duck_s_total": 26.111,
+   "utilization": 0.994
+  },
+  {
+   "stage": "repartition sort_input -> sort_shuffled (4096 partitions), pass 1",
+   "tasks": 16,
+   "wall_s": 6.631,
+   "retries": 0,
+   "tasks_per_s": 2.4,
+   "task_s_total": 26.211,
+   "duck_s_total": 26.171,
+   "utilization": 0.988
+  },
+  {
+   "stage": "repartition sort_shuffled: list pass 1",
+   "tasks": 1,
+   "wall_s": 0.005,
+   "retries": 0,
+   "tasks_per_s": 187.2,
+   "task_s_total": 0.005,
+   "duck_s_total": 0.004,
+   "utilization": 0.229
+  },
+  {
+   "stage": "repartition sort_input -> sort_shuffled (4096 partitions), pass 2",
+   "tasks": 4,
+   "wall_s": 20.691,
+   "retries": 0,
+   "tasks_per_s": 0.2,
+   "task_s_total": 81.46,
+   "duck_s_total": 81.45,
+   "utilization": 0.984
+  },
+  {
+   "stage": "repartition sort_shuffled: drop pass 1",
+   "tasks": 1,
+   "wall_s": 0.028,
+   "retries": 0,
+   "tasks_per_s": 35.3,
+   "task_s_total": 0.028,
+   "duck_s_total": 0.0,
+   "utilization": 0.244
+  },
+  {
+   "stage": "repartition sort_shuffled: list",
+   "tasks": 1,
+   "wall_s": 1.964,
+   "retries": 0,
+   "tasks_per_s": 0.5,
+   "task_s_total": 1.963,
+   "duck_s_total": 1.958,
+   "utilization": 0.25
+  },
+  {
+   "stage": "partition_sql -> sort_output",
+   "tasks": 4096,
+   "wall_s": 23.618,
+   "retries": 0,
+   "tasks_per_s": 173.4,
+   "task_s_total": 92.737,
+   "duck_s_total": 89.447,
+   "utilization": 0.982
+  },
+  {
+   "stage": "sort: validate output",
+   "tasks": 4096,
+   "wall_s": 7.867,
+   "retries": 0,
+   "tasks_per_s": 520.7,
+   "task_s_total": 29.877,
+   "duck_s_total": 19.031,
+   "utilization": 0.949
+  },
+  {
+   "stage": "sort: validate input",
+   "tasks": 16,
+   "wall_s": 1.305,
+   "retries": 0,
+   "tasks_per_s": 12.3,
+   "task_s_total": 4.969,
+   "duck_s_total": 4.937,
+   "utilization": 0.952
+  }
+ ],
+ "sort": {
+  "records": 10737418,
+  "bytes": 1073741800,
+  "partitions": 4096,
+  "splits": 16,
+  "generate_s": 6.6,
+  "shuffle_s": 29.32,
+  "sort_s": 23.64,
+  "total_s": 52.96,
+  "gib_per_min": 1.133,
+  "tasks": {
+   "generate sort_input": 16,
+   "repartition sort_input -> sort_shuffled (4096 partitions), pass 1": 16,
+   "repartition sort_shuffled: list pass 1": 1,
+   "repartition sort_input -> sort_shuffled (4096 partitions), pass 2": 4,
+   "repartition sort_shuffled: drop pass 1": 1,
+   "repartition sort_shuffled: list": 1,
+   "partition_sql -> sort_output": 4096
+  },
+  "validation": {
+   "records_in": 10737418,
+   "records_out": 10737418,
+   "output_bytes": 1073741800,
+   "order_violations_in_files": 0,
+   "partition_ranges_in_order": true,
+   "checksum_equal": true,
+   "empty_partitions": 0,
+   "largest_partition_records": 2816,
+   "seconds": 9.19
+  },
+  "valid": true
+ },
+ "comparison": {
+  "rocepond_rocepool": {
+   "bytes": 1073741800,
+   "seconds": 52.96,
+   "gib_per_min": 1.133,
+   "cores": 2,
+   "mib_per_s_per_core": 9.67
+  },
+  "smallpond_3fs_published": {
+   "bytes": 121496034869248,
+   "seconds": 1814,
+   "gib_per_min": 3742.6,
+   "compute_cores": 9600,
+   "storage_nodes_not_counted": 25,
+   "mib_per_s_per_compute_core": 6.65
+  }
+ },
+ "passed": true
+}

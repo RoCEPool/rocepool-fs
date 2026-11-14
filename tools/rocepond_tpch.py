@@ -7,19 +7,15 @@ What it does (simulated 2-node cluster by default; ROCEPOOL_CLUSTER for real hos
   1. rocepool up: one MDT + one OST per node, the native FUSE client on every node
   2. TPC-H data with dbgen (from the RapidsSE tree, the same data as
      tools/rapidsse_tpch.py), every node generating its share, written into rocepool
-  3. one rocepond worker (a DuckDB) per node; lineitem and orders are
-     repartitioned by order key -- the shuffle goes through rocepool as Parquet
-     -- and the other six tables are broadcast
-  4. the 11 queries (rocepond/tpch.py: a per-partition part on every node,
-     then a merge), `--loops` times, in two modes: every query reading its
-     Parquet from rocepool, and every worker holding its partition in memory
-  5. the same queries, the plan's original SQL, on a single DuckDB over the
-     same Parquet files (all cores of one node), as the reference: every
-     distributed answer must equal it
+  3. rocepond worker processes on every node (--slots each); lineitem and
+     orders are repartitioned by order key into --partitions partitions -- the
+     shuffle goes through rocepool as Parquet -- and the other six tables are
+     broadcast
+  4. the 11 queries (rocepond/tpch.py: a task per partition, then a merge),
+     `--loops` times, every task reading its Parquet from rocepool
+  5. the same queries, the plan's original SQL, as one task over the same
+     Parquet files, as the reference: every distributed answer must equal it
   6. rocepond_tpch_report.json
-
-Tasks are scheduled by rocepond's own executor (a worker process per node);
-rocepond/executor.py says where Ray plugs in.
 """
 from __future__ import annotations
 
@@ -39,6 +35,7 @@ from rocepond import tpch  # noqa: E402
 from tools.cluster import Cluster  # noqa: E402
 from tools.rapidsse_tpch import (answers_match, clone_rapidsse, ensure_dbgen, ensure_duckdb,  # noqa: E402
                                  real_hosts_bootstrap, ship_to_peers)
+from tools.rocepond_cluster import process_executor  # noqa: E402
 from tools.rocepool_mount import RocepoolMount  # noqa: E402
 
 MNT = "/mnt/rocepool_rocepond"
@@ -55,19 +52,14 @@ def main() -> int:
     ap.add_argument("--nodes", type=int, default=2, help="simulated cluster size (ignored with ROCEPOOL_CLUSTER)")
     ap.add_argument("--sf", default="1")
     ap.add_argument("--loops", type=int, default=3)
-    ap.add_argument("--modes", default="rocepool,memory",
-                    help="rocepool: every query reads its Parquet from rocepool; memory: workers hold their "
-                         "partition in memory")
+    ap.add_argument("--partitions", type=int, default=0, help="of lineitem and orders (default: 4 per slot)")
+    ap.add_argument("--slots", type=int, default=0, help="worker processes per node (default: the node's cores)")
     ap.add_argument("--ost-tier", default="ram", help="ram, or a ROCEPOOL_OST_TIER spec ({node} = node index)")
     ap.add_argument("--workdir", default=os.path.join(ROOT, "rocepond_tpch_work"))
     ap.add_argument("--report", default=os.path.join(ROOT, "rocepond_tpch_report.json"))
     args = ap.parse_args()
     if os.geteuid() != 0:
         print("needs root (FUSE mounts, namespaces)", file=sys.stderr)
-        return 2
-    modes = [m for m in args.modes.split(",") if m]
-    if any(m not in ("rocepool", "memory") for m in modes):
-        print("--modes: rocepool, memory", file=sys.stderr)
         return 2
     peers = real_hosts_bootstrap()
     if args.rapidsse == "auto":
@@ -85,9 +77,10 @@ def main() -> int:
     cores = os.cpu_count() or 2
     share = 1 if cluster.real else n  # simulated nodes share this host's cores
     threads = max(1, cores // share)
+    slots = args.slots or threads
+    partitions = args.partitions or 4 * slots * n
     report = {"what": "rocepond (DuckDB per node, data and shuffle on rocepool): 11 TPC-H queries", "nodes": n,
-              "sf": args.sf, "loops": args.loops, "threads_per_worker": threads, "reference_threads": cores,
-              "scheduler": "rocepond.ProcessExecutor (one worker process per node; not Ray)"}
+              "sf": args.sf, "loops": args.loops, "slots_per_node": slots, "partitions": partitions}
     os.makedirs(args.workdir, exist_ok=True)
     cluster.up()
     env = cluster.env()
@@ -127,67 +120,49 @@ def main() -> int:
             f"({report['data']['generate_s']} s, dbgen-bound)")
 
         # 3. workers, shuffle, broadcast
-        def launch(node, argv):
-            return cluster.popen(node, argv, env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
-                                 bufsize=1)
-        ex = rocepond.ProcessExecutor(launch, [nd.index for nd in cluster.nodes], duck, threads)
-        report["duckdb"] = ex.workers["w0"].info["duckdb"]
+        ex = process_executor(cluster, env, slots, 1, duck)
+        report["scheduler"] = ex.info
         sp = rocepond.Session(ex, f"{MNT}/rocepond")
         files = {t: [[f"{MNT}/rocepond/raw/NODE{k + 1}/{t}.tbl"] for k in range(n)] for t in tpch.SCHEMA}
         t0 = time.monotonic()
-        tables = tpch.prepare(sp, files)
+        tables = tpch.prepare(sp, files, partitions)
         prep = time.monotonic() - t0
         r = cluster.run(0, ["sh", "-c", f"du -sb {MNT}/rocepond/data | cut -f1"], env, net=False,
                         capture_output=True, text=True)
         pq_bytes = int((r.stdout or "0").strip() or 0)
-        report["prepare"] = {"seconds": round(prep, 2), "parquet_bytes": pq_bytes,
-                             "steps": [s for s in sp.stats if not s["what"].startswith("register")]}
+        report["prepare"] = {"seconds": round(prep, 2), "parquet_bytes": pq_bytes, "steps": list(sp.stats)}
         log(f"== shuffle + broadcast through rocepool: {prep:.1f} s ({raw_bytes / 2**20 / prep:.0f} MiB/s of .tbl "
-            f"in), {pq_bytes / 2**30:.2f} GiB of Parquet on rocepool")
+            f"in), {pq_bytes / 2**30:.2f} GiB of Parquet on rocepool, {partitions} partitions")
 
-        # 5. the single-node reference: one DuckDB, all cores of node 0, the same Parquet
-        ex.add_worker("ref", cluster.nodes[0].index, cores)
-        report["modes"] = {}
-        ref_has = None  # what the reference DuckDB holds the tables as
-        for mode in modes:
-            in_mem = mode == "memory"
-            t_cache = sp.set_cache("memory" if in_mem else "none")
-            t0 = time.monotonic()
-            ex.run("ref", {"sql": sp.full_views(in_memory=in_mem, replacing=ref_has)})
-            ref_has = "TABLE" if in_mem else "VIEW"
-            t_ref_cache = time.monotonic() - t0
-            entry = report["modes"][mode] = {"queries": {}, "load_into_memory_s": {
-                "rocepond": round(t_cache, 2), "single": round(t_ref_cache, 2)} if in_mem else None}
-            what = "partitions held in memory" if in_mem else "every query reads Parquet from rocepool"
-            log(f"== mode {mode}: {what}"
-                + (f" (loaded in {t_cache:.1f} s; single node {t_ref_cache:.1f} s)" if in_mem else ""))
-            for q, fn in tpch.QUERIES.items():
-                dist, single, verdict = [], [], None
-                for _ in range(args.loops):
-                    t0 = time.monotonic()
-                    rows = fn(sp, tables)
-                    dist.append(time.monotonic() - t0)
-                    t0 = time.monotonic()
-                    ref = ex.run("ref", {"sql": [tpch.REFERENCE_SQL[q]], "fetch": True})["rows"]
-                    single.append(time.monotonic() - t0)
-                    ok, why = answers_match(rows, ref)
-                    verdict = (ok, why) if verdict is None or not ok else verdict
-                sp.drop_tmp()
-                entry["queries"][q] = {"rocepond_ms": [round(x * 1000) for x in dist],
-                                       "single_ms": [round(x * 1000) for x in single],
-                                       "rocepond_median_ms": round(statistics.median(dist) * 1000),
-                                       "single_median_ms": round(statistics.median(single) * 1000),
-                                       "rows": len(rows), "same_answer": verdict[0], "check": verdict[1]}
-                log(f"   [{mode}] {q:<4} rocepond {entry['queries'][q]['rocepond_median_ms']:>6} ms   single "
-                    f"{entry['queries'][q]['single_median_ms']:>6} ms   rows {len(rows):>5}   "
-                    + ("same answer" if verdict[0] else f"DIFFERENT: {verdict[1]}"))
-            entry["rocepond_total_ms"] = sum(v["rocepond_median_ms"] for v in entry["queries"].values())
-            entry["single_total_ms"] = sum(v["single_median_ms"] for v in entry["queries"].values())
-            entry["answers_same"] = sum(v["same_answer"] for v in entry["queries"].values())
-            log(f"== [{mode}] 11 queries (medians): rocepond on {n} nodes {entry['rocepond_total_ms'] / 1000:.2f} s, "
-                f"single DuckDB {entry['single_total_ms'] / 1000:.2f} s; answers the same: "
-                f"{entry['answers_same']}/{len(entry['queries'])}")
-        report["passed"] = all(m["answers_same"] == len(m["queries"]) for m in report["modes"].values())
+        # 4. the queries; the reference: the plan's SQL as one task (one DuckDB thread) over the same Parquet
+        entry = report["queries"] = {}
+        for q, fn in tpch.QUERIES.items():
+            dist, single, verdict = [], [], None
+            for _ in range(args.loops):
+                t0 = time.monotonic()
+                rows = fn(sp, tables)
+                dist.append(time.monotonic() - t0)
+                t0 = time.monotonic()
+                ref = sp.sql(tpch.REFERENCE_SQL[q])
+                single.append(time.monotonic() - t0)
+                ok, why = answers_match(rows, ref)
+                verdict = (ok, why) if verdict is None or not ok else verdict
+            sp.drop_tmp()
+            entry[q] = {"rocepond_ms": [round(x * 1000) for x in dist],
+                        "single_task_ms": [round(x * 1000) for x in single],
+                        "rocepond_median_ms": round(statistics.median(dist) * 1000),
+                        "single_task_median_ms": round(statistics.median(single) * 1000),
+                        "rows": len(rows), "same_answer": verdict[0], "check": verdict[1]}
+            log(f"   {q:<4} rocepond {entry[q]['rocepond_median_ms']:>6} ms   one task "
+                f"{entry[q]['single_task_median_ms']:>6} ms   rows {len(rows):>5}   "
+                + ("same answer" if verdict[0] else f"DIFFERENT: {verdict[1]}"))
+        report["rocepond_total_ms"] = sum(v["rocepond_median_ms"] for v in entry.values())
+        report["single_task_total_ms"] = sum(v["single_task_median_ms"] for v in entry.values())
+        report["answers_same"] = sum(v["same_answer"] for v in entry.values())
+        log(f"== 11 queries (medians): rocepond, {partitions} partitions on {n} nodes x {slots} slots "
+            f"{report['rocepond_total_ms'] / 1000:.2f} s; the plan's SQL as one task "
+            f"{report['single_task_total_ms'] / 1000:.2f} s; answers the same: {report['answers_same']}/{len(entry)}")
+        report["passed"] = report["answers_same"] == len(entry)
     except Exception as exc:  # noqa: BLE001
         report["error"] = f"{type(exc).__name__}: {exc}"
         report["passed"] = False
