@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import sys
@@ -33,7 +34,11 @@ class RayOnCluster:
 
     def __init__(self, cluster, env: dict, cpus: int):
         self.cluster, self.cpus = cluster, cpus
-        self.env = dict(env, RAY_DISABLE_USAGE_STATS="1")
+        # one authentication token for the head, the worker nodes and the driver
+        # (current Ray refuses a node whose token differs from the head's)
+        self.env = dict(env, RAY_DISABLE_USAGE_STATS="1", RAY_AUTH_MODE="token", RAY_AUTH_TOKEN=secrets.token_hex(32))
+        force = [v for v in env.get("ROCEPOOL_FORCE_ENV", "").split(",") if v]
+        self.env["ROCEPOOL_FORCE_ENV"] = ",".join(force + ["RAY_DISABLE_USAGE_STATS", "RAY_AUTH_MODE", "RAY_AUTH_TOKEN"])
         self.address = f"{cluster.nodes[0].ip}:{self.PORT}"
         self.started = False
 
