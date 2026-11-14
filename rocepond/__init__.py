@@ -24,6 +24,11 @@ How it works:
     partition; each result is a Parquet file in the shared file system.
   - sql(sql, *tables): `sql` runs on one worker (over broadcast tables and
     partial results) and its rows come back.
+  - generate(name, sql) / repartition(P, by=expr) / map_partitions(sql, ...):
+    a data set made on every worker, range- or hash-partitioned into P
+    partitions through the file system (DuckDB's partitioned write, as
+    smallpond's shuffle), each partition then processed by one worker --
+    the shape of a distributed sort (tools/rocepond_sort.py).
   - cache="memory": workers load their partition into DuckDB's memory once
     (queries then do not read the file system); the default "none" reads
     Parquet from the file system in every query.
@@ -49,11 +54,12 @@ def _lit(path: str) -> str:
 class DataFrame:
     session: "Session"
     name: str
-    kind: str  # source | partitioned | broadcast | partial
+    kind: str  # source | partitioned | broadcast | partial | perworker | bucketed | files
     columns: list[tuple[str, str]] = field(default_factory=list)
     files_by_worker: list[list[str]] = field(default_factory=list)  # source only
     trailing_delimiter: bool = True
     delim: str = "|"
+    npartitions: int = 0  # bucketed / files
 
     # ---- a source's rows, as a DuckDB table expression
     def _csv(self, files: list[str]) -> str:
@@ -64,8 +70,26 @@ class DataFrame:
         return (f"(SELECT {sel} FROM read_csv([{flist}], delim={_lit(self.delim)}, header=false, quote='', "
                 f"escape='', columns={{{cols}{extra}}}))")
 
-    def repartition(self, hash_by: str) -> "DataFrame":
-        return self.session._repartition(self, hash_by)
+    def repartition(self, npartitions: int | None = None, *, hash_by: str | None = None,
+                    by: str | None = None, name: str | None = None) -> "DataFrame":
+        """Two forms:
+        - a source table, `repartition(hash_by="key")`: one partition per
+          worker, rows placed by key (co-partitioning for joins)
+        - a generated / per-worker data set, `repartition(P, by="expr")`:
+          P partitions, a row going to the partition numbered by `expr`
+          (0..P-1) -- e.g. a range partition by key prefix before a sort"""
+        if self.kind == "source":
+            if not hash_by:
+                raise ValueError("repartition of a source table: hash_by=")
+            return self.session._repartition(self, hash_by)
+        if npartitions is None or not by:
+            raise ValueError("repartition of a data set: repartition(npartitions, by='expr')")
+        return self.session._bucket(self, npartitions, by, name or f"{self.name}_by")
+
+    def map_partitions(self, sql: str, name: str, fmt: str = "parquet") -> "DataFrame":
+        """`sql` over every partition ({0} is the partition), each result
+        one file; fmt "parquet", or "lines": the first column, one value per line."""
+        return self.session._map_partitions(self, sql, name, fmt)
 
     def broadcast(self) -> "DataFrame":
         return self.session._broadcast(self)
@@ -163,6 +187,68 @@ class Session:
         self.tables[src.name] = df
         self._register(src.name, lambda p: f"{base}/*.parquet")
         return df
+
+    # ---- data sets that are not tables of a join: generate, range-partition, process
+    def generate(self, name: str, sql: str, compression: str = "uncompressed") -> DataFrame:
+        """`sql` on every worker ({worker} = its number, {nworkers}), each
+        writing its rows as one Parquet file on the shared file system."""
+        base = self._data(name)
+        tasks = {w: {"mkdirs": [base], "sql": [
+            f"COPY ({sql.strip().rstrip(';').format(worker=k, nworkers=self.n)}) TO "
+            f"{_lit(f'{base}/from-{k}.parquet')} (FORMAT parquet, USE_TMP_FILE false, COMPRESSION {compression})"]}
+            for k, w in enumerate(self.workers)}
+        t0 = time.monotonic()
+        self._stat(f"generate {name}", t0, self.ex.run_all(tasks))
+        return DataFrame(self, name, "perworker")
+
+    def _bucket(self, df: DataFrame, npartitions: int, by: str, name: str,
+                compression: str = "uncompressed") -> DataFrame:
+        """The shuffle into P partitions, as smallpond's ShuffleNode does it
+        with DuckDB: every worker reads its own file once and writes it
+        hive-partitioned (COPY ... PARTITION_BY) into the shared file system;
+        partition i is then data/<name>/bucket=<i>/*.parquet."""
+        if df.kind != "perworker":
+            raise ValueError("repartition(P, by=): a generated data set")
+        src, base = self._data(df.name), self._data(name)
+        tasks = {w: {"mkdirs": [base], "sql": [
+            f"COPY (SELECT *, ({by}) AS bucket FROM read_parquet({_lit(f'{src}/from-{k}.parquet')})) TO {_lit(base)} "
+            f"(FORMAT parquet, PARTITION_BY (bucket), OVERWRITE_OR_IGNORE, FILENAME_PATTERN 'from-{k}-{{i}}', "
+            f"COMPRESSION {compression})"]}
+            for k, w in enumerate(self.workers)}
+        t0 = time.monotonic()
+        self._stat(f"repartition {df.name} into {npartitions} by {by}", t0, self.ex.run_all(tasks))
+        return DataFrame(self, name, "bucketed", npartitions=npartitions)
+
+    def partition_files(self, df: DataFrame, i: int) -> str:
+        if df.kind == "bucketed":
+            return f"{self._data(df.name)}/bucket={i}/*.parquet"
+        if df.kind == "files":
+            return f"{self._data(df.name)}/part-{i:05d}.{df.columns[0][0]}"
+        raise ValueError(f"{df.name}: not partitioned into files")
+
+    def _map_partitions(self, df: DataFrame, sql: str, name: str, fmt: str) -> DataFrame:
+        """Partition i is processed by worker i % n (its partitions one after
+        the other, the workers in parallel); result i is part-<i>.<ext>."""
+        if df.kind != "bucketed":
+            raise ValueError("map_partitions: a data set repartitioned into P partitions")
+        if fmt not in ("parquet", "lines"):
+            raise ValueError("fmt: parquet or lines")
+        base = self._data(name)
+        ext = "parquet" if fmt == "parquet" else "dat"
+        opts = ("FORMAT parquet, USE_TMP_FILE false" if fmt == "parquet" else
+                "FORMAT csv, HEADER false, QUOTE '', ESCAPE '', DELIMITER '\t', USE_TMP_FILE false")
+        tasks = {w: {"mkdirs": [base], "sql": []} for w in self.workers}
+        for i in range(df.npartitions):
+            q = sql.strip().rstrip(";").format(f"read_parquet({_lit(self.partition_files(df, i))})")
+            tasks[self.workers[i % self.n]]["sql"].append(
+                f"COPY ({q}) TO {_lit(f'{base}/part-{i:05d}.{ext}')} ({opts})")
+        t0 = time.monotonic()
+        self._stat(f"map_partitions {df.name} -> {name}", t0, self.ex.run_all(tasks))
+        return DataFrame(self, name, "files", columns=[(ext, "")], npartitions=df.npartitions)
+
+    def partition_sql(self, sql: str, *dfs: DataFrame) -> DataFrame:
+        """smallpond's name for partial_sql()."""
+        return self.partial_sql(sql, *dfs)
 
     # ---- queries
     def _ref(self, df: DataFrame, single: bool) -> str:

@@ -118,6 +118,60 @@ class SessionTests(unittest.TestCase):
                                              "'/shared/pond/data/t/p=0/*.parquet')"])
 
 
+class SortPipelineTaskTests(unittest.TestCase):
+    """generate -> repartition(P, by=) -> map_partitions: the tasks they send."""
+
+    def setUp(self):
+        self.ex = RecordingExecutor(2)
+        self.sp = rocepond.Session(self.ex, "/shared/pond")
+
+    def sql_of(self, worker):
+        return [s for w, t in self.ex.tasks if w == worker for s in t.get("sql", [])]
+
+    def test_generate_shuffle_map(self):
+        g = self.sp.generate("g", "select i as k from range({worker}, 10, {nworkers}) t(i)")
+        self.assertEqual(self.sql_of("w1"), ["COPY (select i as k from range(1, 10, 2) t(i)) TO "
+                                             "'/shared/pond/data/g/from-1.parquet' (FORMAT parquet, "
+                                             "USE_TMP_FILE false, COMPRESSION uncompressed)"])
+        self.ex.tasks.clear()
+        b = g.repartition(4, by="k % 4", name="b")
+        self.assertEqual((b.kind, b.npartitions), ("bucketed", 4))
+        # each worker reads its own file once and writes it hive-partitioned (smallpond's shuffle)
+        self.assertEqual(self.sql_of("w0"), [
+            "COPY (SELECT *, (k % 4) AS bucket FROM read_parquet('/shared/pond/data/g/from-0.parquet')) TO "
+            "'/shared/pond/data/b' (FORMAT parquet, PARTITION_BY (bucket), OVERWRITE_OR_IGNORE, "
+            "FILENAME_PATTERN 'from-0-{i}', COMPRESSION uncompressed)"])
+        self.ex.tasks.clear()
+        out = b.map_partitions("SELECT k FROM {0} ORDER BY k", name="o", fmt="lines")
+        self.assertEqual((out.kind, out.npartitions), ("files", 4))
+        w0, w1 = self.sql_of("w0"), self.sql_of("w1")
+        self.assertEqual(len(w0), 2)  # partitions 0 and 2 on worker 0, 1 and 3 on worker 1
+        self.assertIn("read_parquet('/shared/pond/data/b/bucket=2/*.parquet')", w0[1])
+        self.assertIn("TO '/shared/pond/data/o/part-00003.dat'", w1[1])
+        self.assertEqual(self.sp.partition_files(out, 3), "/shared/pond/data/o/part-00003.dat")
+
+    def test_misuse_is_refused(self):
+        g = self.sp.generate("g", "select 1 as k")
+        with self.assertRaises(ValueError):
+            g.repartition(hash_by="k")  # that form is for source tables
+        with self.assertRaises(ValueError):
+            g.map_partitions("select * from {0}", name="o")  # not partitioned yet
+        with self.assertRaises(ValueError):
+            g.repartition(4, by="k % 4").map_partitions("select * from {0}", name="o", fmt="csv")
+
+    def test_check_sorted(self):
+        from rocepond.worker import check_sorted
+        with tempfile.NamedTemporaryFile("wb", delete=False) as f:
+            f.write(b"aaa1 x\naaa1 y\naab0 z\n")
+        try:
+            self.assertEqual(check_sorted(f.name, 4), [3, 21, "aaa1", "aab0", 0])
+            with open(f.name, "ab") as g:
+                g.write(b"aaa9 late\n")
+            self.assertEqual(check_sorted(f.name, 4)[4], 1)
+        finally:
+            os.unlink(f.name)
+
+
 @unittest.skipUnless(os.path.isdir(os.path.join(RAPIDSSE, "bamboo")), "set RAPIDSSE_TREE to a RapidsSE tree")
 class ReferenceSqlTests(unittest.TestCase):
     def test_reference_sql_is_the_plans_text(self):
@@ -198,6 +252,34 @@ class EndToEndTests(unittest.TestCase):
         with self.assertRaises(rocepond.TaskError):
             self.sp.sql("select no_such_column from nation")
         self.assertEqual(self.sp.sql("select count(*) from nation"), [["25"]])
+
+
+
+@unittest.skipUnless(DUCKDB, "set ROCEPOND_DUCKDB (DuckDB CLI)")
+class SortEndToEndTests(unittest.TestCase):
+    def test_sort_is_valid_and_globally_ordered(self):
+        from rocepond import sort
+        tmp = tempfile.mkdtemp()
+
+        def launch(node, argv):
+            return subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+        ex = rocepond.ProcessExecutor(launch, [0, 1], DUCKDB, threads=1)
+        try:
+            res = sort.run(rocepond.Session(ex, f"{tmp}/pond"), 20_000_000, 16)
+            self.assertTrue(res["valid"], res)
+            self.assertEqual(res["records"], 200_000)
+            # independently: the files in order are one sorted sequence of 100-byte records
+            keys, size = [], 0
+            for path in sorted(glob.glob(f"{tmp}/pond/data/sort_output/part-*.dat")):
+                for line in open(path, "rb"):
+                    self.assertEqual(len(line), 100)
+                    keys.append(line[:10])
+                    size += len(line)
+            self.assertEqual(size, 20_000_000)
+            self.assertEqual(keys, sorted(keys))
+        finally:
+            ex.close()
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,8 @@
 its standard input, one JSON object per line, answering one per line:
 
     in : {"id": 7, "mkdirs": ["/mnt/x/tmp/q7"], "sql": ["CREATE ...", "COPY ..."], "fetch": false}
-         (also "rmtree": [dirs], done first)
+         (also "rmtree": [dirs], done first; "check_sorted": [files] returns, per
+         file, [records, bytes, first key, last key, order violations])
     out: {"id": 7, "ok": true, "duck_s": 0.41, "wall_s": 0.43, "rows": [], "error": ""}
 
 `sql` runs in order; `rows` is the last statement's result when "fetch" is
@@ -20,6 +21,25 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rocepond.duck import Duck, DuckError  # noqa: E402
+
+
+def check_sorted(path: str, key_bytes: int) -> list:
+    """A file of newline-terminated records: [records, bytes, first key, last
+    key, order violations] -- the keys (the first key_bytes of each record)
+    must not decrease."""
+    n = bad = size = 0
+    first = prev = b""
+    with open(path, "rb", buffering=8 << 20) as f:
+        for line in f:
+            key = line[:key_bytes]
+            if n == 0:
+                first = key
+            elif key < prev:
+                bad += 1
+            prev = key
+            n += 1
+            size += len(line)
+    return [n, size, first.decode("latin-1"), prev.decode("latin-1"), bad]
 
 
 def main() -> int:
@@ -48,6 +68,8 @@ def main() -> int:
                 out["rows"] = rows
             if not task.get("fetch"):
                 out["rows"] = []
+            if task.get("check_sorted"):
+                out["rows"] = [check_sorted(path, task.get("key_bytes", 10)) for path in task["check_sorted"]]
         except (DuckError, OSError) as exc:
             out.update(ok=False, error=f"{type(exc).__name__}: {exc}", rows=[])
         out["wall_s"] = round(time.monotonic() - t0, 4)
