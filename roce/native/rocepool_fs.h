@@ -118,6 +118,10 @@ typedef struct {
     uint8_t *pre;
     size_t pre_len;
     volatile int pre_ok;
+    /* the highest end offset written through this handle (0 again after a
+     * truncate): buffered writes the MDT has not heard of yet still count in
+     * what a stat reports -- fs_stat */
+    _Atomic uint64_t wr_end;
 } handle_t;
 
 /* short names used throughout the client sources */
@@ -151,6 +155,8 @@ int fs_statfs(uint64_t *bytes_total, uint64_t *bytes_used, uint64_t *files_total
 
 /* ---- namespace (paths are normalised: no leading slash; "" = root) ---- */
 int fs_getattr(const char *path, attr_t *a);
+/* fs_getattr for a stat: a file's size includes this client's writes still buffered in open handles */
+int fs_stat(const char *path, attr_t *a);
 /* open for reading: the attributes and, for a small inline file, its whole
  * content in one MDT request (*data malloc'd, NULL if not fetched).
  * -EISDIR for a directory. */

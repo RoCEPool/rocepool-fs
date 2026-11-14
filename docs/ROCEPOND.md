@@ -1,48 +1,162 @@
-# rocepond: DuckDB on every node, data and shuffle on rocepool (prototype)
+# rocepond: DuckDB tasks over a cluster, data and shuffle on rocepool
 
-The design of DeepSeek's smallpond (DuckDB + their 3FS file system), on
-rocepool: each node runs DuckDB; tables, the shuffle between nodes and the
-partial results are Parquet files in rocepool's shared namespace. A small
-Python API in smallpond's style:
+The design of DeepSeek's smallpond (DuckDB + their 3FS file system + Ray), on
+rocepool, in Python: data, the shuffle and every intermediate result are
+Parquet files in rocepool's shared namespace; the work is DuckDB tasks, one
+per partition, scheduled over the cluster.
 
 ```python
 import rocepond
-sp = rocepond.Session(executor, root="/mnt/rocepool/rocepond")
-lineitem = sp.read_csv("lineitem", files_by_worker, columns).repartition(hash_by="l_orderkey")
-orders   = sp.read_csv("orders",   files_by_worker, columns).repartition(hash_by="o_orderkey")
-sp.read_csv("part", files_by_worker, columns).broadcast()
+ex = rocepond.RayExecutor(address="auto")              # or rocepond.ProcessExecutor(...), rocepond.local_executor(8)
+sp = rocepond.Session(ex, root="/mnt/rocepool/rocepond")
 
-partial = sp.partial_sql("""select l_shipmode, count(*) as n from {0}, {1}
-                            where o_orderkey = l_orderkey group by l_shipmode""", orders, lineitem)
-rows = sp.sql("select l_shipmode, sum(n) from {0} group by l_shipmode order by 1", partial)
+events = sp.read_parquet(["/mnt/rocepool/in/day=1/*.parquet", "/mnt/rocepool/in/day=2/*.parquet"])
+users  = sp.read_csv("users", [["/mnt/rocepool/in/users.csv"]], columns, delim=",").broadcast()
+
+by_user = events.repartition(1024, hash_by="user_id")                  # the shuffle, through rocepool
+partial = sp.partition_sql("SELECT country, count(*) AS n FROM {0} JOIN {1} USING (user_id) GROUP BY country",
+                           by_user, users)                              # 1024 tasks
+rows = sp.sql("SELECT country, sum(n) FROM {0} GROUP BY country ORDER BY 2 DESC", partial)
 ```
 
-- `repartition(hash_by=K)`: every worker reads its share of the source and
-  writes one Parquet file per partition into rocepool; worker p then sees
-  partition p. Tables repartitioned on their join key are co-partitioned, so
-  that join is local to a node. The shuffle goes through the file system.
-- `broadcast()`: one copy on rocepool, read by every worker.
-- `partial_sql(sql, ...)`: runs on every worker over its partition; each
-  result is a Parquet file on rocepool.
-- `sql(sql, ...)`: runs on one worker over broadcast tables and partial
-  results; returns the rows.
-- `set_cache("memory")`: workers load their partition into DuckDB's memory
-  once; the default reads Parquet from rocepool in every query.
+## The API
 
-As in smallpond, the user chooses the partitioning and writes the
-per-partition and the merging SQL; nothing rewrites a query automatically.
+A DataFrame is a list of partitions; a partition is data on the shared file
+system. Operations run when called; each is one task per partition.
 
-**Scheduling.** Tasks go to one long-lived worker process per node
-(`rocepond/executor.py`, started over tools/cluster.py: a namespace when
-simulated, ssh on real hosts). Ray is not used yet: the environment this was
-built in cannot install packages. The executor is the one layer to replace
-(a worker becomes a Ray actor pinned to its node); the session only calls
-`run()` and `run_all()`. DuckDB is driven through its CLI for the same
-reason (no `duckdb` Python package); `rocepond/duck.py` is that one layer.
+| | |
+|---|---|
+| `sp.read_parquet([...])` | one entry (path, glob, or list) per partition |
+| `sp.read_csv(name, [[files], ...], columns, delim, trailing_delimiter)` | one list of files per partition |
+| `sp.generate(name, sql, splits)` | `sql` in `splits` tasks (`{split}`, `{nsplits}`), a Parquet file each |
+| `df.repartition(P, hash_by="cols")` / `(P, by="expr")` | the shuffle into P partitions; `max_fanout=1024`, see below |
+| `df.broadcast()` | read whole by every task (the small side of a join) |
+| `sp.partition_sql(sql, *dfs, name=, fmt=)` | `sql` per partition; `{0}`, `{1}` = partition i of each DataFrame (same P), or the whole of a broadcast one. Results: a DataFrame |
+| `df.map_partitions(sql, name=, fmt="parquet" or "lines")` | `partition_sql` over one DataFrame |
+| `sp.sql(sql, *dfs)` | one task over whole DataFrames; returns the rows |
+| `df.write_parquet(name)`, `df.count()`, `df.take(n)` | |
+| `df.as_table("orders")` | SQL may then say `orders` instead of `{0}` |
+| `sp.drop(df)`, `sp.drop_tmp()` | remove what the session wrote |
+| `sp.stats`, `ex.stats` | per stage: tasks, seconds, retries, tasks/s, worker utilization |
 
-## The 11 TPC-H queries
+DataFrames repartitioned to the same P on their join key are co-partitioned:
+`partition_sql` joins partition i with partition i. As in smallpond, the user
+chooses the partitioning and writes the per-partition and the merging SQL;
+nothing rewrites a query automatically.
+
+**The shuffle** is DuckDB's partitioned write (`COPY ... PARTITION_BY`), as in
+smallpond: a task per input partition writes its rows into P directories on
+rocepool. A partitioned write holds buffers for every partition (measured:
+~370 MiB per task writing 100 MiB into 4096 partitions), so above
+`max_fanout` partitions it takes two passes -- into groups of `max_fanout`
+neighbouring partitions, then a task per group. More I/O, bounded memory;
+raise `max_fanout` on nodes with memory to spare.
+
+## Scheduling
+
+A task is a small JSON-able dict that names every file it reads and writes
+(`rocepond/task.py`). Workers keep nothing between tasks, so any worker on
+any node can run any task; the scheduler needs free workers, not data
+locality. Two schedulers, one interface (`run_all(tasks) -> results`), the
+same guarantees:
+
+- thousands of tasks per call: queued, run as workers free up
+- a failed task -- an error, a worker process that died, a task over
+  `task_timeout` -- runs again on any worker, up to `max_retries` (3) times;
+  a retried shuffle task first removes what its failed attempt wrote
+- a task that fails every time fails the call at once, with every attempt's
+  error; tasks not yet started are dropped
+- every DuckDB gets a memory limit (a host's memory less a third, divided
+  among the workers on it) instead of each assuming 80% of the host
+
+**`rocepond.ProcessExecutor`** (no dependencies): `slots_per_node` worker
+processes on every node, each a long-lived DuckDB, fed from one queue.
+Started through tools/cluster.py (a namespace when simulated, ssh on real
+hosts); a dead worker is restarted.
+
+**`rocepond.RayExecutor`**: every task is a Ray task; Ray queues and places
+them over the cluster's CPUs.
+
+```python
+rocepond.RayExecutor(address="auto",            # the running cluster; None: a local Ray
+                     threads=4,                 # CPUs (and DuckDB threads) per task
+                     memory=8 << 30,            # Ray's memory reservation per task (also DuckDB's limit)
+                     resources={"nvme": 1},     # custom Ray resources per task
+                     scheduling_strategy="SPREAD",   # or NodeAffinitySchedulingStrategy(...), a placement group
+                     max_retries=3, task_timeout=3600)
+```
+
+The rocepond package is shipped to the Ray workers (`runtime_env`), so the
+nodes need `pip install ray duckdb` and rocepool mounted, nothing else.
+Retries are rocepond's (resubmission), not Ray's `max_retries`, so both
+schedulers behave the same and every attempt's error is reported.
+
+DuckDB is used through its Python package where installed, else through
+the DuckDB CLI (`rocepond/duck.py`); the same tests run on both.
+
+### Verified
+
+`tests/test_rocepond.py`, the same cases against both schedulers (CI job
+`rocepond` installs Ray and DuckDB and runs them, then the sort below on a
+simulated 2-node rocepool cluster with each scheduler):
+
+- 5,000 tasks in one call, results in order, spread over the workers
+  (ProcessExecutor here: ~4,200 tasks/s on 4 workers)
+- injected failures and worker processes killed mid-task: retried, counted,
+  the executor whole afterwards
+- an always-failing task: the call fails with all attempts' errors
+- a task over its time limit: stopped, retried, reported
+- a shuffle task that fails after writing its files: no duplicate rows
+- shuffle + co-partitioned join + merge equal to the single-task answer;
+  partitions without rows; one- and two-pass shuffles give equal partitions
+- GraySort-style sort into 1,024 partitions: valid, globally ordered
+
+## GraySort-style sort: thousands of tasks on rocepool
+
+    sudo python3 tools/rocepond_sort.py [--gib 1] [--partitions 4096] [--executor process|ray] [--slots N]
+    python3 -m rocepond.sort --root /mnt/rocepool/rocepond --gib 100 --partitions 4096 --executor ray   # on a Ray node
+
+smallpond's own benchmark (`benchmarks/gray_sort_benchmark.py`): 100-byte
+records with a 10-byte key, range-partitioned by key through the file system,
+every partition sorted. In rocepond (`rocepond/sort.py`):
+
+```python
+records = sp.generate("sort_input", "SELECT left(a, 10) AS keys, ... AS records FROM range(...)", splits)
+buckets = records.repartition(P, by=f"(('0x' || left(keys, 8))::BIGINT * {P}) >> 32")
+result  = buckets.map_partitions("SELECT records FROM {0} ORDER BY keys", name="sort_output", fmt="lines")
+```
+
+Validation, also as tasks: every output file in key order, partition ranges
+in order, record count and a checksum of all records equal to the input's.
+
+2026-11-14, simulated 2-node cluster (one host, 2 cores, 8 GiB RAM, emulated
+RDMA, OST data in RAM), ProcessExecutor with 2 slots per node, 1 GiB in
+4,096 partitions (`docs/reports/rocepond_sched_sort_sim2.json`), valid:
+
+| stage | tasks | seconds | retries |
+|---|---|---|---|
+| shuffle, pass 1 (16 input files -> 4 groups) | 16 | 6.6 | 0 |
+| shuffle, pass 2 (groups -> 4,096 partitions) | 4 | 20.7 | 0 |
+| sort | 4,096 | 23.6 (173 tasks/s) | 0 |
+| validate output | 4,096 | 7.9 (521 tasks/s) | 0 |
+
+What it says: 8,000+ tasks through rocepool, scheduled and validated, on two
+cores. What it does not: throughput -- 1 GiB in 4,096 partitions is 256 KiB
+per partition, so the time is per-file overhead (65,536 shuffle files) and
+the second shuffle pass, not data: 9.7 MiB/s per core here, against 45
+MiB/s per core for the same 1 GiB in 16 partitions (11.4 s). Partition
+counts in the thousands belong to data in the hundreds of GiB.
+
+## The 11 TPC-H queries (first prototype)
 
     sudo python3 tools/rocepond_tpch.py --rapidsse <RapidsSE tree | auto> --duckdb <DuckDB CLI | auto>
+
+The numbers in this and the next section were measured with the first
+prototype (one worker per node, one partition per node; PRs #69, #70) and
+are kept as measured. `rocepond/tpch.py` and the tool now run on the task
+model above (lineitem and orders in `--partitions` partitions; answers
+checked against the plan's SQL run as one task), but TPC-H is not where this
+work is going.
 
 rocepool up on a 2-node cluster, TPC-H data generated into it (the same data
 as tools/rapidsse_tpch.py), lineitem and orders repartitioned by order key,
@@ -91,21 +205,13 @@ What the numbers say, and do not say:
   that is the emulated RDMA and FUSE on 2 busy cores, i.e. this is the mode
   where rocepool's real bandwidth will show on hardware.
 
-## A first comparison with smallpond: GraySort
-
-    sudo python3 tools/rocepond_sort.py --duckdb <DuckDB CLI | auto> [--gib 1] [--partitions 16]
+## A first comparison with smallpond (first prototype)
 
 smallpond's own benchmark, and the one DeepSeek published a result for, is
 GraySort (`benchmarks/gray_sort_benchmark.py`): 100-byte records with a
 10-byte key; shuffle them by key prefix into P partitions through the file
 system, then sort every partition. `rocepond/sort.py` is the same pipeline
 in rocepond's Python API:
-
-```python
-records = sp.generate("sort_input", "SELECT left(a, 10) AS keys, ... AS records FROM range(...)")
-buckets = records.repartition(16, by="('0x' || left(keys, 1))::INTEGER")       # shuffle through rocepool
-result  = buckets.map_partitions("SELECT records FROM {0} ORDER BY keys", name="sort_output", fmt="lines")
-```
 
 The shuffle is DuckDB's partitioned write (`COPY ... PARTITION_BY`), as in
 smallpond's ShuffleNode with the DuckDB engine; every byte of shuffle and
@@ -159,11 +265,25 @@ refused. Error paths only. (A directory another node created is otherwise
 visible after at most the TTL, as before; `tests/test_native_fuse.py` has
 both.)
 
+A program that writes a file and stats it before closing saw a size short
+by the tail still in the client's write buffer (the MDT learns the size at
+the flush). The current DuckDB Python package checks every file it writes
+this way and failed with "File size mismatch" on files over the 64 MiB
+buffer. Fixed in `rocepool_fs.c` (`fs_stat`, used by the FUSE client's
+lookup/getattr and the intercept library's stat): the reported size counts
+the client's own buffered writes. `tests/test_native_fuse.py`:
+`test_stat_counts_writes_still_buffered`.
+
 ## Limits
 
-- A prototype: SQL split by hand per query, one partition per node, no
-  retry of failed tasks, no spilling of large partial results beyond what
-  DuckDB does itself.
-- Simulated cluster only so far; real hosts go through the same
-  tools/cluster.py layer.
-- rocepool has no rename: DuckDB writes Parquet with `USE_TMP_FILE false`.
+- The SQL is split by hand (per-partition part and merge), as in smallpond.
+- Operations run eagerly, one stage at a time; there is no lazy plan, and
+  no speculative re-execution of slow tasks (a time limit and retry only).
+- Many small files cost: a P-way shuffle of M inputs writes up to M x P
+  files, and rocepool pays per file. Choose P for partitions of hundreds of
+  MiB, not for the task count.
+- RayExecutor is verified on a local Ray and on a 2-node Ray cluster over
+  the simulated rocepool cluster in CI; not yet on real hosts.
+- rocepool has no rename: DuckDB writes with `USE_TMP_FILE false`, so a
+  reader could see a file being written; stages do not overlap, and a retry
+  rewrites its own files.

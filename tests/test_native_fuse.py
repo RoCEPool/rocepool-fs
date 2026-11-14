@@ -434,6 +434,32 @@ class NativeFuseClientTests(unittest.TestCase):
         finally:
             os.close(fd)
 
+    def test_stat_counts_writes_still_buffered(self):
+        """A program that writes and stats before closing (DuckDB verifies a
+        written file's size this way) must see every byte it wrote, although
+        the client buffers writes and the MDT learns the size at the flush."""
+        path = os.path.join(self.mnt, "stat_while_writing.bin")
+        fd = os.open(path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o644)
+        try:
+            total = 0
+            for n in (1, 4096, 1 << 20, 3_000_001, 70 << 20, 12345):  # under and over the buffer's cap
+                done = 0
+                while done < n:
+                    done += os.write(fd, b"\xa5" * min(n - done, 8 << 20))
+                total += n
+                self.assertEqual(os.stat(path).st_size, total)
+                self.assertEqual(os.fstat(fd).st_size, total)
+            os.ftruncate(fd, 10)
+            self.assertEqual(os.stat(path).st_size, 10)
+            os.pwrite(fd, b"tail", 10)
+            self.assertEqual(os.stat(path).st_size, 14)
+        finally:
+            os.close(fd)
+        self.assertEqual(os.stat(path).st_size, 14)
+        with open(path, "rb") as f:
+            self.assertEqual(f.read(), b"\xa5" * 10 + b"tail")
+        os.unlink(path)
+
     def test_directory_made_by_another_client_after_a_miss(self):
         """Two clients (two nodes) create the same tree, as `mkdir -p` on
         every node of a cluster does: client B looked the directory up before

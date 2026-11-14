@@ -45,6 +45,55 @@ jobs:
           echo "$r -- $v" >> "$GITHUB_STEP_SUMMARY"
           grep -E '^(FAIL|ERROR):' unittest.log | head -20 | sed 's/^/::error title=test::/' || true
 
+  rocepond:
+    # rocepond's schedulers with the real packages (Ray, DuckDB): the tests on
+    # a local Ray, then the sort -- thousands of tasks -- on a simulated
+    # 2-node rocepool cluster, once per scheduler (a 2-node Ray cluster for Ray)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - name: packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ make cmake pkg-config autoconf automake libtool fuse3 iproute2 \
+            libibverbs-dev librdmacm-dev python3-venv
+          sudo modprobe fuse || true
+          # a virtual environment: the system's Python packages are apt's to manage
+          python3 -m venv "$HOME/rp"
+          "$HOME/rp/bin/pip" install --quiet duckdb ray
+          echo "RP_PY=$HOME/rp/bin/python3" >> "$GITHUB_ENV"
+      - name: tests (ProcessExecutor and RayExecutor)
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          sudo -E env "PATH=$PATH" "$RP_PY" -m unittest -v tests.test_rocepond 2>&1 | tee rocepond.log
+      - name: sort on rocepool, ProcessExecutor (2048 partitions)
+        run: |
+          set -o pipefail
+          sudo -E env "PATH=$PATH" "$RP_PY" tools/rocepond_sort.py --gib 0.25 --partitions 2048 --slots 2 \
+            --report sort_process.json 2>&1 | tee sort_process.log
+      - name: sort on rocepool, RayExecutor on a 2-node Ray cluster (2048 partitions)
+        run: |
+          set -o pipefail
+          sudo -E env "PATH=$PATH" "$RP_PY" tools/rocepond_sort.py --gib 0.25 --partitions 2048 --slots 2 \
+            --executor ray --report sort_ray.json 2>&1 | tee sort_ray.log
+      - name: summary
+        if: always()
+        run: |
+          # result lines as annotations (readable through the API without the raw log)
+          r=$(grep -E '^Ran [0-9]+ tests' rocepond.log | tail -1); v=$(grep -E '^(OK|FAILED)' rocepond.log | tail -1)
+          echo "::notice title=rocepond tests::$r -- $v"
+          grep -E 'tasks/s on' rocepond.log | sed 's/^ */::notice title=scheduler::/' || true
+          grep -E '^(FAIL|ERROR):' rocepond.log | head -20 | sed 's/^/::error title=test::/' || true
+          grep -E '^(\w+Error|AssertionError)' rocepond.log | head -10 | sed 's/^/::error title=test detail::/' || true
+          for k in process ray; do
+            [ -f sort_$k.log ] || continue
+            grep -E '^== (validation|shuffle \+ sort|Ray up|scheduler|ERROR)' sort_$k.log | cut -c1-900 \
+              | sed "s/^/::notice title=sort ($k)::/" || true
+            grep -E 'partition_sql -> sort_output' sort_$k.log | sed "s/^ */::notice title=sort ($k) tasks::/" || true
+          done
+
   image:
     # the container image builds, and its emulator self-test passes
     runs-on: ubuntu-24.04
