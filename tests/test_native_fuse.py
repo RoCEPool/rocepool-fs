@@ -434,6 +434,51 @@ class NativeFuseClientTests(unittest.TestCase):
         finally:
             os.close(fd)
 
+    def test_directory_made_by_another_client_after_a_miss(self):
+        """Two clients (two nodes) create the same tree, as `mkdir -p` on
+        every node of a cluster does: client B looked the directory up before
+        client A created it, so B holds a cached "not there". B's own mkdir
+        then gets EEXIST, and B must be able to create inside the directory at
+        once -- not ENOENT until the attribute cache's TTL has passed."""
+        mnt2 = os.path.join(self.tmp, "mnt2")
+        os.makedirs(mnt2, exist_ok=True)
+        fuse2 = subprocess.Popen([self.bin, "--mount", mnt2, "--mdts", self.mdts, "--osts", self.osts,
+                                  "--attr-ttl", "3", "--uring", "1" if self.uring else "0"],
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=self.env)
+        try:
+            line = fuse2.stdout.readline()
+            self.assertTrue(line.startswith("READY"), line)
+            a, b = self.mnt, mnt2
+            self.assertFalse(os.path.exists(f"{b}/shared_tree"))      # B caches the miss
+            os.mkdir(f"{a}/shared_tree")                               # A creates it
+            with self.assertRaises(FileExistsError):
+                os.mkdir(f"{b}/shared_tree")                           # B: it exists
+            os.mkdir(f"{b}/shared_tree/from_b")                        # ... and is usable at once
+            self.assertTrue(os.path.isdir(f"{a}/shared_tree/from_b"))
+
+            # Without that EEXIST, B's cached miss stands until the attribute
+            # cache's TTL (3 s here) has passed -- the price of not asking the
+            # MDT on every miss -- and then B sees A's directory.
+            self.assertFalse(os.path.exists(f"{b}/shared_tree2"))     # B caches the miss
+            os.mkdir(f"{a}/shared_tree2")
+            deadline = time.monotonic() + 6
+            while not os.path.isdir(f"{b}/shared_tree2"):
+                self.assertLess(time.monotonic(), deadline, "A's directory never became visible to B")
+                time.sleep(0.2)
+            with open(f"{b}/shared_tree2/file", "wb") as f:
+                f.write(b"x" * 10)
+            self.assertEqual(open(f"{a}/shared_tree2/file", "rb").read(), b"x" * 10)
+            self.assertFalse(os.path.exists(f"{b}/really_missing"))
+            with self.assertRaises(FileNotFoundError):                 # a directory that is really not there
+                os.mkdir(f"{b}/really_missing/x")
+        finally:
+            subprocess.run(["umount", "-l", mnt2], capture_output=True)
+            fuse2.terminate()
+            try:
+                fuse2.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                fuse2.kill()
+
     def test_concurrent_writers_across_the_spill_through_the_kernel(self):
         for rnd in range(4):
             path = self.p(f"spillrace{rnd}.bin")

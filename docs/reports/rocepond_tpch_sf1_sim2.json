@@ -1,0 +1,485 @@
+{
+ "what": "rocepond (DuckDB per node, data and shuffle on rocepool): 11 TPC-H queries",
+ "nodes": 2,
+ "sf": "1",
+ "loops": 3,
+ "threads_per_worker": 1,
+ "reference_threads": 2,
+ "scheduler": "rocepond.ProcessExecutor (one worker process per node; not Ray)",
+ "rocepool": {
+  "mdts": "10.99.1.1:19901,10.99.1.2:19901",
+  "osts": "10.99.1.1:19951,10.99.1.2:19951",
+  "mount": "/mnt/rocepool_rocepond",
+  "client": "native FUSE (rocepool-fuse)",
+  "ost_data": "RAM"
+ },
+ "data": {
+  "raw_bytes": 1100695743,
+  "generate_s": 31.6
+ },
+ "duckdb": "v1.5.6",
+ "prepare": {
+  "seconds": 7.14,
+  "parquet_bytes": 321113644,
+  "steps": [
+   {
+    "what": "broadcast nation",
+    "wall_s": 0.005,
+    "duck_s": {
+     "w0": 0.004
+    }
+   },
+   {
+    "what": "broadcast region",
+    "wall_s": 0.002,
+    "duck_s": {
+     "w0": 0.001
+    }
+   },
+   {
+    "what": "broadcast part",
+    "wall_s": 0.151,
+    "duck_s": {
+     "w0": 0.15,
+     "w1": 0.149
+    }
+   },
+   {
+    "what": "broadcast supplier",
+    "wall_s": 0.025,
+    "duck_s": {
+     "w0": 0.024,
+     "w1": 0.018
+    }
+   },
+   {
+    "what": "broadcast partsupp",
+    "wall_s": 0.523,
+    "duck_s": {
+     "w0": 0.458,
+     "w1": 0.522
+    }
+   },
+   {
+    "what": "broadcast customer",
+    "wall_s": 0.118,
+    "duck_s": {
+     "w0": 0.117,
+     "w1": 0.11
+    }
+   },
+   {
+    "what": "repartition orders by o_orderkey",
+    "wall_s": 1.022,
+    "duck_s": {
+     "w0": 1.018,
+     "w1": 0.957
+    }
+   },
+   {
+    "what": "repartition lineitem by l_orderkey",
+    "wall_s": 5.267,
+    "duck_s": {
+     "w0": 5.026,
+     "w1": 5.262
+    }
+   }
+  ]
+ },
+ "modes": {
+  "rocepool": {
+   "queries": {
+    "q1": {
+     "rocepond_ms": [
+      269,
+      294,
+      243
+     ],
+     "single_ms": [
+      349,
+      326,
+      338
+     ],
+     "rocepond_median_ms": 269,
+     "single_median_ms": 338,
+     "rows": 4,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q3": {
+     "rocepond_ms": [
+      305,
+      297,
+      297
+     ],
+     "single_ms": [
+      361,
+      383,
+      367
+     ],
+     "rocepond_median_ms": 297,
+     "single_median_ms": 367,
+     "rows": 10,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q4": {
+     "rocepond_ms": [
+      202,
+      231,
+      236
+     ],
+     "single_ms": [
+      290,
+      285,
+      298
+     ],
+     "rocepond_median_ms": 231,
+     "single_median_ms": 290,
+     "rows": 5,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q6": {
+     "rocepond_ms": [
+      218,
+      216,
+      226
+     ],
+     "single_ms": [
+      253,
+      248,
+      271
+     ],
+     "rocepond_median_ms": 218,
+     "single_median_ms": 253,
+     "rows": 1,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q7": {
+     "rocepond_ms": [
+      309,
+      315,
+      345
+     ],
+     "single_ms": [
+      363,
+      395,
+      401
+     ],
+     "rocepond_median_ms": 315,
+     "single_median_ms": 395,
+     "rows": 4,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q8": {
+     "rocepond_ms": [
+      338,
+      335,
+      400
+     ],
+     "single_ms": [
+      378,
+      381,
+      380
+     ],
+     "rocepond_median_ms": 338,
+     "single_median_ms": 380,
+     "rows": 2,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q9": {
+     "rocepond_ms": [
+      509,
+      479,
+      469
+     ],
+     "single_ms": [
+      516,
+      482,
+      514
+     ],
+     "rocepond_median_ms": 479,
+     "single_median_ms": 514,
+     "rows": 175,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q10": {
+     "rocepond_ms": [
+      410,
+      394,
+      425
+     ],
+     "single_ms": [
+      411,
+      417,
+      413
+     ],
+     "rocepond_median_ms": 410,
+     "single_median_ms": 413,
+     "rows": 20,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q11": {
+     "rocepond_ms": [
+      103,
+      117,
+      96
+     ],
+     "single_ms": [
+      99,
+      93,
+      82
+     ],
+     "rocepond_median_ms": 103,
+     "single_median_ms": 93,
+     "rows": 1048,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q12": {
+     "rocepond_ms": [
+      271,
+      288,
+      271
+     ],
+     "single_ms": [
+      382,
+      368,
+      322
+     ],
+     "rocepond_median_ms": 271,
+     "single_median_ms": 368,
+     "rows": 2,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q14": {
+     "rocepond_ms": [
+      218,
+      240,
+      223
+     ],
+     "single_ms": [
+      253,
+      289,
+      294
+     ],
+     "rocepond_median_ms": 223,
+     "single_median_ms": 289,
+     "rows": 1,
+     "same_answer": true,
+     "check": "identical"
+    }
+   },
+   "load_into_memory_s": null,
+   "rocepond_total_ms": 3154,
+   "single_total_ms": 3700,
+   "answers_same": 11
+  },
+  "memory": {
+   "queries": {
+    "q1": {
+     "rocepond_ms": [
+      120,
+      113,
+      111
+     ],
+     "single_ms": [
+      131,
+      110,
+      110
+     ],
+     "rocepond_median_ms": 113,
+     "single_median_ms": 110,
+     "rows": 4,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q3": {
+     "rocepond_ms": [
+      49,
+      43,
+      40
+     ],
+     "single_ms": [
+      43,
+      41,
+      38
+     ],
+     "rocepond_median_ms": 43,
+     "single_median_ms": 41,
+     "rows": 10,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q4": {
+     "rocepond_ms": [
+      46,
+      43,
+      43
+     ],
+     "single_ms": [
+      45,
+      41,
+      42
+     ],
+     "rocepond_median_ms": 43,
+     "single_median_ms": 42,
+     "rows": 5,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q6": {
+     "rocepond_ms": [
+      24,
+      23,
+      21
+     ],
+     "single_ms": [
+      17,
+      17,
+      17
+     ],
+     "rocepond_median_ms": 23,
+     "single_median_ms": 17,
+     "rows": 1,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q7": {
+     "rocepond_ms": [
+      45,
+      51,
+      41
+     ],
+     "single_ms": [
+      44,
+      45,
+      41
+     ],
+     "rocepond_median_ms": 45,
+     "single_median_ms": 44,
+     "rows": 4,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q8": {
+     "rocepond_ms": [
+      32,
+      30,
+      35
+     ],
+     "single_ms": [
+      28,
+      27,
+      30
+     ],
+     "rocepond_median_ms": 32,
+     "single_median_ms": 28,
+     "rows": 2,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q9": {
+     "rocepond_ms": [
+      218,
+      156,
+      134
+     ],
+     "single_ms": [
+      156,
+      154,
+      143
+     ],
+     "rocepond_median_ms": 156,
+     "single_median_ms": 154,
+     "rows": 175,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q10": {
+     "rocepond_ms": [
+      148,
+      142,
+      183
+     ],
+     "single_ms": [
+      120,
+      121,
+      103
+     ],
+     "rocepond_median_ms": 148,
+     "single_median_ms": 120,
+     "rows": 20,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q11": {
+     "rocepond_ms": [
+      12,
+      15,
+      12
+     ],
+     "single_ms": [
+      11,
+      13,
+      9
+     ],
+     "rocepond_median_ms": 12,
+     "single_median_ms": 11,
+     "rows": 1048,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q12": {
+     "rocepond_ms": [
+      70,
+      77,
+      63
+     ],
+     "single_ms": [
+      68,
+      60,
+      60
+     ],
+     "rocepond_median_ms": 70,
+     "single_median_ms": 60,
+     "rows": 2,
+     "same_answer": true,
+     "check": "identical"
+    },
+    "q14": {
+     "rocepond_ms": [
+      46,
+      38,
+      44
+     ],
+     "single_ms": [
+      37,
+      35,
+      33
+     ],
+     "rocepond_median_ms": 44,
+     "single_median_ms": 35,
+     "rows": 1,
+     "same_answer": true,
+     "check": "identical"
+    }
+   },
+   "load_into_memory_s": {
+    "rocepond": 2.14,
+    "single": 2.27
+   },
+   "rocepond_total_ms": 729,
+   "single_total_ms": 662,
+   "answers_same": 11
+  }
+ },
+ "passed": true
+}

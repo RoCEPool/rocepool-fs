@@ -45,6 +45,8 @@ def main() -> int:
     gen_s = write_s = 0.0
     written = 0
     os.makedirs(a.scratch, exist_ok=True)
+    for path in a.paths:  # before anything is generated: the small tables go straight into the first one
+        os.makedirs(path, exist_ok=True)
 
     def dbgen(table_code: str, chunk: int | None, cwd: str) -> None:
         argv = [a.dbgen, "-b", dists, "-f", "-q", "-s", str(a.sf), "-T", table_code]
