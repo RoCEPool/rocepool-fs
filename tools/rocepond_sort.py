@@ -113,6 +113,9 @@ def main() -> int:
             res["executor"], res["stages"] = ex.info, ex.stats
         report["scheduler"] = res.pop("executor")
         report["stages"] = res.pop("stages")
+        log(f"== scheduler: {json.dumps(report['scheduler'])}")
+        if args.executor == "ray" and report["scheduler"]["nodes"] != n:
+            raise RuntimeError(f"Ray sees {report['scheduler']['nodes']} nodes, the cluster has {n}")
         report["sort"] = res
         v = res["validation"]
         log(f"== {res['bytes'] / 2**30:.2f} GiB ({res['records']:,} records) in {res['partitions']} partitions: "
