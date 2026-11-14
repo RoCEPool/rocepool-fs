@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -46,11 +47,19 @@ class RayOnCluster:
     def start(self) -> None:
         self.started = True
         for i, node in enumerate(self.cluster.nodes):
-            # socket names per node: simulated nodes share one /tmp
+            if not self.cluster.real:
+                # simulated nodes are one host and would share /tmp/ray (the raylets'
+                # sockets): each node's mount namespace gets its own
+                own = f"/var/tmp/rocepond_ray/n{i}"
+                shutil.rmtree(own, ignore_errors=True)
+                os.makedirs(own)
+                os.makedirs("/tmp/ray", exist_ok=True)
+                r = self.cluster.run(i, ["mount", "--bind", own, "/tmp/ray"], self.env, net=False,
+                                     capture_output=True, text=True)
+                if r.returncode:
+                    raise RuntimeError(f"node {i}: private /tmp/ray: {r.stderr[-500:]}")
             common = ["--node-ip-address", node.ip, "--num-cpus", str(self.cpus), "--disable-usage-stats",
-                      "--object-store-memory", str(256 << 20),
-                      "--plasma-store-socket-name", f"/tmp/rocepond_ray_plasma_{i}",
-                      "--raylet-socket-name", f"/tmp/rocepond_ray_raylet_{i}"]
+                      "--object-store-memory", str(256 << 20)]
             if i == 0:
                 self._ray(i, ["start", "--head", "--port", str(self.PORT), "--include-dashboard=false"] + common)
             else:
@@ -70,3 +79,5 @@ class RayOnCluster:
         if self.started:
             for i in reversed(range(len(self.cluster.nodes))):
                 self._ray(i, ["stop", "--force"], check=False)
+                if not self.cluster.real:
+                    self.cluster.run(i, ["umount", "-l", "/tmp/ray"], self.env, net=False, capture_output=True)
