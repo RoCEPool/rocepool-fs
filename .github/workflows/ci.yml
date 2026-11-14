@@ -89,7 +89,7 @@ jobs:
           grep -E '^(\w+Error|AssertionError)' rocepond.log | head -10 | sed 's/^/::error title=test detail::/' || true
           for k in process ray; do
             [ -f sort_$k.log ] || continue
-            grep -E '^== (validation|shuffle \+ sort|Ray up|ERROR)' sort_$k.log | cut -c1-900 \
+            grep -E '^== (validation|shuffle \+ sort|Ray up|scheduler|ERROR)' sort_$k.log | cut -c1-900 \
               | sed "s/^/::notice title=sort ($k)::/" || true
             grep -E 'partition_sql -> sort_output' sort_$k.log | sed "s/^ */::notice title=sort ($k) tasks::/" || true
           done
