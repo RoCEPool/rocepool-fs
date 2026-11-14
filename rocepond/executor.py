@@ -114,10 +114,12 @@ class _Slot:
     def _readline(self, timeout: float | None) -> bytes | None:
         """One line from the worker; None if it exited or `timeout` passed."""
         fd = self.proc.stdout.fileno()
+        self._timed_out = False
         deadline = None if timeout is None else time.monotonic() + timeout
         while b"\n" not in self.buf:
             wait = None if deadline is None else max(0.0, deadline - time.monotonic())
             if not select.select([fd], [], [], wait)[0]:
+                self._timed_out = True
                 return None
             chunk = os.read(fd, 1 << 20)
             if not chunk:
@@ -136,9 +138,14 @@ class _Slot:
             data = data[os.write(fd, data):]
         line = self._readline(timeout)
         if line is None:
-            alive = self.proc.poll() is None
-            raise OSError(f"no answer in {timeout:.0f} s (time limit)" if alive else
-                          f"worker process exited ({self.proc.returncode})")
+            try:  # end of its output: it is exiting; give the exit status a moment to arrive
+                self.proc.wait(timeout=0 if self._timed_out else 5)
+            except Exception:  # noqa: BLE001
+                pass
+            if self.proc.poll() is None:
+                raise OSError(f"no answer in {timeout:.0f} s (time limit)" if self._timed_out
+                              else "worker process closed its output")
+            raise OSError(f"worker process exited ({self.proc.returncode})")
         return json.loads(line)
 
     def close(self) -> None:
@@ -203,6 +210,15 @@ class ProcessExecutor(Executor):
                 todo.put(None)
 
         def work(slot: _Slot) -> None:
+            try:
+                loop(slot)
+            except BaseException as exc:  # noqa: BLE001  a fault of the scheduler itself: fail the call, never hang it
+                with lock:
+                    if not state["failure"]:
+                        state["failure"] = TaskError(f"scheduler error on {slot.name}: {type(exc).__name__}: {exc}")
+                    stop_all()
+
+        def loop(slot: _Slot) -> None:
             while True:
                 item = todo.get()
                 if item is None:

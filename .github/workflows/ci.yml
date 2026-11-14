@@ -64,6 +64,7 @@ jobs:
           "$HOME/rp/bin/pip" install --quiet duckdb ray
           echo "RP_PY=$HOME/rp/bin/python3" >> "$GITHUB_ENV"
       - name: tests (ProcessExecutor and RayExecutor)
+        timeout-minutes: 20
         run: |
           set -o pipefail
           sudo -E env "PATH=$PATH" "$RP_PY" -m unittest -v tests.test_rocepond 2>&1 | tee rocepond.log
