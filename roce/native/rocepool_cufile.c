@@ -32,6 +32,11 @@
 #include "rocepool_fs.h"
 #include "rocepool_devmem.h"
 
+/* rocepool_fs.c: why device reads bounced */
+const char *fs_dev_why(void);
+void fs_dev_why_set(const char *fmt, ...);
+const char *roce_last_error(void);
+
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -218,6 +223,10 @@ static dbuf_t *buf_for(const void *p, int explicit_reg) {
     d->explicit_reg = explicit_reg;
     /* the NIC registration (lazy, per device, at first transfer) */
     d->b.mem = fd == -2 || getenv("ROCEPOOL_GDS_BOUNCE") ? NULL : roce_mem_register_device(base, size, fd, off, dev);
+    if (!d->b.mem)
+        fs_dev_why_set("device memory not registered with the NIC: %s",
+                       fd == -2 ? "the runtime gives no dma-buf / peer handle for it"
+                       : getenv("ROCEPOOL_GDS_BOUNCE") ? "ROCEPOOL_GDS_BOUNCE is set" : roce_last_error());
     d->next = g_bufs;
     g_bufs = d;
     pthread_mutex_unlock(&g_buf_lk);
@@ -527,6 +536,7 @@ API void cuFileBatchIODestroy(CUfileBatchHandle_t bh) {
 }
 
 /* ---- rocepool extras: what went where (benchmarks, tests, on-site report) */
+API const char *rp_cufile_dev_why(void) { return fs_dev_why(); }
 API void rp_cufile_stats(uint64_t *direct, uint64_t *bounced, uint64_t *posix) {
     fs_dev_stats(direct, bounced);
     *posix = atomic_load(&g_posix_bytes);

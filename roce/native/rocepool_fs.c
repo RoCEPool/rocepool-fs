@@ -1870,7 +1870,22 @@ static int ra_read(handle_t *h, const attr_t *a, uint64_t off, size_t len, uint8
  * files (bytes in the MDT entry), an OST without leases, a buffer the NIC
  * could not register -- bounces through host memory with the runtime's
  * copy (cuMemcpy), counted separately so a benchmark shows which it got. */
+const char *roce_last_error(void);
 static atomic_ullong g_dev_direct, g_dev_bounced;
+/* the first reason a device read went through host memory: "L2, not L3" is
+ * otherwise a silent fallback (GPUDirect hardware, every read bounced,
+ * nothing said why) */
+static char g_dev_why[512];
+static atomic_int g_dev_why_once;
+const char *fs_dev_why(void) { return g_dev_why; }
+void fs_dev_why_set(const char *fmt, ...) {
+    int no = 0;
+    if (!atomic_compare_exchange_strong(&g_dev_why_once, &no, 1)) return;
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(g_dev_why, sizeof(g_dev_why), fmt, ap);
+    va_end(ap);
+}
 void fs_dev_stats(uint64_t *direct, uint64_t *bounced) {
     *direct = atomic_load(&g_dev_direct);
     *bounced = atomic_load(&g_dev_bounced);
@@ -1896,6 +1911,11 @@ static void dev_read_task(void *arg) {
     if (t->b->mem) {
         rc = direct_read_mem(peer, key, t->lo, want, dst, t->b->mem, &got);
         if (rc == 0) atomic_fetch_add(&g_dev_direct, got);
+        else if (rc == -EAGAIN)
+            fs_dev_why_set("direct read into device memory failed: %s",
+                           !cfg.direct_read ? "direct reads are off"
+                           : atomic_load(&peer->no_lease) ? "the OST grants no leases"
+                           : (roce_last_error()[0] ? roce_last_error() : "no reason given by the transport"));
     }
     if (rc == -EAGAIN) {
         rp_resp_t r;

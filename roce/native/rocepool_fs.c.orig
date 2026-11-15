@@ -1,0 +1,2647 @@
+/* rocepool_fs.c -- the native client's file-system core, shared by the
+ * kernel FUSE daemon (rocepool_fuse.c) and the interception library
+ * (rocepool_intercept.c): MDT/OST operations, the TTL attribute cache,
+ * layout, Data-on-MDT, striped reads/writes with the stripe cache,
+ * buffered write handles. Same wire formats and layout rules as the Python
+ * client (fs/posix_api.py), so files written by one are read by the other.
+ * No kernel interface here: the callers map FUSE requests or libc calls
+ * onto rpfs_* / fs_* calls.
+ */
+#define _GNU_SOURCE
+#include "rocepool_fs.h"
+
+#include <errno.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdarg.h>
+#include <stdatomic.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
+#define CAS_MAX_ATTEMPTS 1000
+#define DIRTY_CAP_DEFAULT_MIB 16  /* buffered writes per open file before a flush (env ROCEPOOL_DIRTY_CAP_MIB) */
+size_t g_dirty_cap = (size_t)DIRTY_CAP_DEFAULT_MIB << 20;
+/* env ROCEPOOL_WRITE_BEHIND=1: a full buffer is sent by a background thread.
+ * Off by default: measured no faster for IOR, whose writes are only copies
+ * into the buffer -- the writer is back waiting on the batch at once, so the
+ * in-flight requests (cfg.io_threads) decide, not the overlap */
+int g_write_behind = 0;
+
+/* ---------------------------------------------------------------- utils */
+void die(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+    exit(2);
+}
+
+double mono_s(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec + ts.tv_nsec / 1e9;
+}
+
+double wall_s(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return ts.tv_sec + ts.tv_nsec / 1e9;
+}
+
+void *xmalloc(size_t n) {
+    void *p = malloc(n ? n : 1);
+    if (!p) die("out of memory (%zu bytes)", n);
+    return p;
+}
+
+void *xrealloc(void *old, size_t n) {
+    void *p = realloc(old, n ? n : 1);
+    if (!p) die("out of memory (%zu bytes)", n);
+    return p;
+}
+
+char *xstrdup(const char *s) {
+    char *p = strdup(s);
+    if (!p) die("out of memory");
+    return p;
+}
+
+/* ---------------------------------------------------------------- config */
+rpfs_cfg_t cfg = {.attr_ttl = 3.0, .threads = 16, .io_threads = 32, .stripe_size = 1u << 20, .kernel_cache_s = 1,
+                  .direct_read = 1,
+         .readahead = -1, .inline_ok = 1, .dir_stripe = 1, .uring = 0, .uring_entries = 8};
+
+/* ---------------------------------------------------------------- RPC / OST
+ * The pooled RPC layer and the OST operations live in rocepool_client.c
+ * (shared with the KV library, rocepool_kv.c). */
+#define rpc rp_rpc
+#define ost_put rp_ost_put
+#define ost_get rp_ost_get
+#define ost_stat_version rp_ost_stat_version
+#define ost_delete rp_ost_delete
+#define peer_init rp_peer_init
+#define OP_MDT RP_MDT
+#define OP_MDT_OK RP_MDT_OK
+#define OP_ERROR RP_ERROR
+
+peer_t g_mdts[MAX_PEERS], g_osts[MAX_PEERS];
+
+/* ---------------------------------------------------------------- MDT commit
+ * As Lustre's clients do: with ROCEPOOL_MDT_ASYNC=1 every MDT request is
+ * flagged RP_RQF_ASYNC and the MDT answers RP_MDT_OK_TX -- its epoch (one
+ * per server life), the change's transno, how far its log is committed.
+ * A file's create or unlink is answered before its log record is durable;
+ * this process keeps a copy of each such request until a later reply
+ * says it is committed. When the MDT restarts it first spends a recovery
+ * window collecting what clients replay (it answers RECOVERING to
+ * everything else); this process then sends what it kept, in transno
+ * order, and retries. Data never goes this way: a write into an entry, a
+ * size, a spill -- and so a close of a file that was written -- is
+ * replied to only once durable, and the log's order makes the file's
+ * create durable with it. rpfs_commit (fsync, rmdir, exit) is a barrier. */
+typedef struct { uint64_t epoch, transno; char *key; uint8_t *val; uint32_t vl; int replayed; } pend_t;
+static struct mdt_track {
+    pthread_mutex_t lk;
+    uint64_t epoch;
+    pend_t *p;
+    size_t n, cap;
+} g_mt[MAX_PEERS];
+static pthread_once_t g_mt_once = PTHREAD_ONCE_INIT;
+static void *mt_pinger(void *arg);
+static void mt_init(void) {
+    for (int i = 0; i < MAX_PEERS; i++) pthread_mutex_init(&g_mt[i].lk, NULL);
+    /* like Lustre's pinger: an MDT this process has changes pending on
+     * hears from it twice a second -- a barrier, which commits them, or
+     * after a restart meets the recovery and replays them, whether or not
+     * the program sends that MDT anything (the window is 10 s) */
+    pthread_t t;
+    pthread_attr_t at;
+    pthread_attr_init(&at);
+    pthread_attr_setdetachstate(&at, PTHREAD_CREATE_DETACHED);
+    if (pthread_create(&t, &at, mt_pinger, NULL)) fprintf(stderr, "rocepool: no MDT pinger thread\n");
+    pthread_attr_destroy(&at);
+}
+static _Atomic unsigned long long g_mt_lost, g_mt_replayed;
+
+static void pend_free(pend_t *e) { free(e->key); free(e->val); }
+
+/* a TX reply: forget what it says is committed, keep this change if not */
+static void mt_note(struct mdt_track *t, const uint8_t *v, const char *key, const void *v1, size_t n1,
+                    const void *v2, size_t n2) {
+    uint64_t ep, tn, cm;
+    memcpy(&ep, v, 8);
+    memcpy(&tn, v + 8, 8);
+    memcpy(&cm, v + 16, 8);
+    pthread_mutex_lock(&t->lk);
+    size_t k = 0;
+    for (size_t i = 0; i < t->n; i++) {
+        pend_t *e = &t->p[i];
+        int drop = e->epoch == ep ? e->transno <= cm : 1;  /* an earlier life: replayed, or lost */
+        if (drop && e->epoch != ep && !e->replayed) {
+            static _Atomic int said;
+            if (atomic_fetch_add(&said, 1) < 5)
+                fprintf(stderr, "rocepool: an MDT restarted and ended its recovery before this process replayed "
+                                "to it: an uncommitted change is lost\n");
+            atomic_fetch_add(&g_mt_lost, 1);
+        }
+        if (drop) pend_free(e);
+        else t->p[k++] = *e;
+    }
+    t->n = k;
+    t->epoch = ep;
+    if (tn > cm) {
+        if (t->n == t->cap) {
+            size_t nc = t->cap ? 2 * t->cap : 256;
+            pend_t *np = realloc(t->p, nc * sizeof(*np));
+            if (!np) die("out of memory");
+            t->p = np;
+            t->cap = nc;
+        }
+        pend_t *e = &t->p[t->n++];
+        e->epoch = ep;
+        e->transno = tn;
+        e->key = xstrdup(key);
+        e->vl = (uint32_t)(n1 + n2);
+        e->val = xmalloc(e->vl ? e->vl : 1);
+        if (n1) memcpy(e->val, v1, n1);
+        if (n2) memcpy(e->val + n1, v2, n2);
+        e->replayed = 0;
+    }
+    pthread_mutex_unlock(&t->lk);
+}
+
+static int pend_cmp(const void *a, const void *b) {
+    const pend_t *x = a, *y = b;
+    return x->transno < y->transno ? -1 : x->transno > y->transno;
+}
+
+/* the MDT is recovering: send it what this process kept, in transno order */
+static void mt_replay(peer_t *p, struct mdt_track *t) {
+    pthread_mutex_lock(&t->lk);
+    qsort(t->p, t->n, sizeof(pend_t), pend_cmp);
+    for (size_t i = 0; i < t->n; i++) {
+        pend_t *e = &t->p[i];
+        if (e->replayed) continue;
+        uint8_t *buf = xmalloc(16 + e->vl);
+        memcpy(buf, &e->epoch, 8);
+        memcpy(buf + 8, &e->transno, 8);
+        memcpy(buf + 16, e->val, e->vl);
+        resp_t r;
+        rp_next_flags = RP_RQF_REPLAY;
+        int rc = rpc(p, OP_MDT, e->key, buf, 16 + e->vl, NULL, 0, &r);
+        free(buf);
+        if (rc) break;  /* not reachable now: again with the next RECOVERING */
+        if (r.op == OP_MDT_OK) { e->replayed = 1; atomic_fetch_add(&g_mt_replayed, 1); }
+        else if (r.op == OP_ERROR && !strcmp(r.code, "REPLAY_LATE")) e->replayed = 1;  /* lost: counted at drop */
+        resp_free(&r);
+    }
+    pthread_mutex_unlock(&t->lk);
+}
+
+/* every MDT request: plain, or (mdt_async) as described above. once: a
+ * RECOVERING MDT gets this process's replays and the call returns -EAGAIN
+ * instead of waiting the window out (the pinger: every MDT must hear in time) */
+static int mdt_rpc_x(peer_t *p, const char *key, const void *v1, size_t n1, const void *v2, size_t n2, resp_t *out,
+                     int once);
+static int mdt_rpc(peer_t *p, const char *key, const void *v1, size_t n1, const void *v2, size_t n2, resp_t *out) {
+    return mdt_rpc_x(p, key, v1, n1, v2, n2, out, 0);
+}
+static int mdt_rpc_x(peer_t *p, const char *key, const void *v1, size_t n1, const void *v2, size_t n2, resp_t *out,
+                     int once) {
+    if (!cfg.mdt_async) return rpc(p, OP_MDT, key, v1, n1, v2, n2, out);
+    pthread_once(&g_mt_once, mt_init);
+    struct mdt_track *t = &g_mt[p - g_mdts];
+    double until = 0;
+    for (;;) {
+        rp_next_flags = RP_RQF_ASYNC;
+        int rc = rpc(p, OP_MDT, key, v1, n1, v2, n2, out);
+        if (rc) return rc;
+        if (out->op == RP_MDT_OK_TX && out->vlen >= 24) {
+            mt_note(t, out->val, key, v1, n1, v2, n2);
+            out->op = OP_MDT_OK;
+            out->val += 24;
+            out->vlen -= 24;
+            return 0;
+        }
+        if (out->op != OP_ERROR || strcmp(out->code, "RECOVERING")) return 0;
+        resp_free(out);
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        double now = (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+        if (!until) until = now + 600;  /* the MDT's window is ROCEPOOL_MDT_RECOVERY_S (10 s) */
+        else if (now > until) return -EIO;
+        mt_replay(p, t);
+        if (once) return -EAGAIN;
+        struct timespec nap = {0, 20 * 1000000L};
+        nanosleep(&nap, NULL);
+    }
+}
+
+static int mt_barrier(int i, int once) {
+    uint8_t req[1] = {20};  /* MDT_OP_COMMIT */
+    resp_t r;
+    int rc = mdt_rpc_x(&g_mdts[i], "", req, 1, NULL, 0, &r, once);
+    if (!rc) {
+        if (r.op != OP_MDT_OK) rc = -EIO;
+        resp_free(&r);
+    }
+    return rc;
+}
+
+static void *mt_pinger(void *arg) {
+    (void)arg;
+    pthread_setname_np(pthread_self(), "rp-mdt-ping");
+    for (;;) {
+        struct timespec nap = {0, 500 * 1000000L};
+        nanosleep(&nap, NULL);
+        for (int i = 0; i < cfg.nmdt; i++) {
+            pthread_mutex_lock(&g_mt[i].lk);
+            size_t n = g_mt[i].n;
+            pthread_mutex_unlock(&g_mt[i].lk);
+            if (n) mt_barrier(i, 1);
+        }
+    }
+    return NULL;
+}
+
+int rpfs_commit(void) {
+    if (!cfg.mdt_async) return 0;
+    pthread_once(&g_mt_once, mt_init);
+    int err = 0;
+    for (int i = 0; i < cfg.nmdt; i++) {
+        pthread_mutex_lock(&g_mt[i].lk);
+        size_t n = g_mt[i].n;
+        pthread_mutex_unlock(&g_mt[i].lk);
+        if (!n) continue;
+        int rc = mt_barrier(i, 0);
+        if (rc && !err) err = rc;
+    }
+    return err;
+}
+
+/* A barrier on EVERY MDT, whether or not this process has changes pending
+ * there: MDT_OP_COMMIT is replied to once everything that MDT appended so far
+ * -- every client's -- is durable. For sync()/syncfs(): mdtest -Y ends each
+ * phase, inside its timing, with system("sync") -- a separate process, with
+ * nothing pending of its own -- and that must make the ranks' creates and
+ * unlinks durable within the measured time (IO500 rule 6), not the pinger
+ * up to 0.5 s later. */
+int rpfs_commit_all(void) {
+    if (!cfg.mdt_async) return 0;
+    pthread_once(&g_mt_once, mt_init);
+    int err = 0;
+    for (int i = 0; i < cfg.nmdt; i++) {
+        int rc = mt_barrier(i, 0);
+        if (rc && !err) err = rc;
+    }
+    return err;
+}
+
+void rpfs_commit_stats(unsigned long long *pending, unsigned long long *replayed, unsigned long long *lost) {
+    pthread_once(&g_mt_once, mt_init);
+    unsigned long long n = 0;
+    for (int i = 0; i < cfg.nmdt; i++) {
+        pthread_mutex_lock(&g_mt[i].lk);
+        n += g_mt[i].n;
+        pthread_mutex_unlock(&g_mt[i].lk);
+    }
+    *pending = n;
+    *replayed = atomic_load(&g_mt_replayed);
+    *lost = atomic_load(&g_mt_lost);
+}
+
+/* ---------------------------------------------------------------- MDT ops
+ * fs/mdt_wire.py. The entry owning `path` lives on the MDT chosen by
+ * hashing its PARENT (fs/namespace_shard.py). */
+
+
+static const char *parent_of(const char *path, char *buf, size_t n) {
+    const char *slash = strrchr(path, '/');
+    size_t len = slash ? (size_t)(slash - path) : 0;
+    if (len >= n) len = n - 1;
+    memcpy(buf, path, len);
+    buf[len] = 0;
+    return buf;
+}
+
+static peer_t *mdt_pick(const char *s) { return &g_mdts[sha256_u64(s) % (uint64_t)cfg.nmdt]; }
+
+/* the MDT holding path's own entry (placement rule: fs/namespace_shard.py) */
+static peer_t *mdt_for(const char *path) {
+    if (cfg.dir_stripe) return mdt_pick(path);
+    char par[4096];
+    return mdt_pick(parent_of(path, par, sizeof(par)));
+}
+
+/* the MDTs holding entries inside dir: every one (striped) or the one hash(dir) names */
+static int mdts_for_children(const char *dir, peer_t **out) {
+    if (!cfg.dir_stripe) { out[0] = mdt_pick(dir); return 1; }
+    for (int i = 0; i < cfg.nmdt; i++) out[i] = &g_mdts[i];
+    return cfg.nmdt;
+}
+
+static size_t decode_entry(const uint8_t *b, size_t n, attr_t *a) {
+    if (n < 26) return 0;
+    a->is_dir = b[0];
+    a->has_layout = b[1] & 1;
+    a->inl = (b[1] & 2) != 0;
+    a->frozen = (b[1] & 4) != 0;
+    memcpy(&a->size, b + 2, 8);
+    memcpy(&a->mtime, b + 10, 8);
+    memcpy(&a->ctime, b + 18, 8);
+    size_t off = 26;
+    a->sc = a->so = 0;
+    a->ss = 0;
+    if (a->has_layout) {
+        if (n < 42) return 0;
+        memcpy(&a->sc, b + 26, 4);
+        memcpy(&a->ss, b + 30, 8);
+        memcpy(&a->so, b + 38, 4);
+        off = 42;
+    }
+    return off;
+}
+
+/* maps MDT error codes to errno */
+static int mdt_errno(const char *code) {
+    if (!strcmp(code, "NOT_FOUND")) return -ENOENT;
+    if (!strcmp(code, "NO_SPACE")) return -ENOSPC;  /* the server's log (or tier) is full */
+    if (!strcmp(code, "EXISTS")) return -EEXIST;
+    if (!strcmp(code, "IS_DIR")) return -EISDIR;
+    if (!strcmp(code, "NOT_DIR")) return -ENOTDIR;
+    if (!strcmp(code, "NOT_INLINE")) return E_NOT_INLINE;
+    if (!strcmp(code, "INLINE_FULL")) return E_INLINE_FULL;
+    if (!strcmp(code, "FROZEN")) return E_FROZEN;
+    if (!strcmp(code, "INLINE")) return E_INLINE;
+    {   /* anything else is an I/O error to the program: say which, a few times */
+        static _Atomic int said;
+        if (atomic_fetch_add(&said, 1) < 5) fprintf(stderr, "rocepool: MDT error %s\n", code);
+    }
+    return -EIO;
+}
+
+static int mdt_entry_call(const char *path, const uint8_t *req, size_t rlen, attr_t *a) {
+    resp_t r;
+    int rc = mdt_rpc(mdt_for(path), path, req, rlen, NULL, 0, &r);
+    if (rc) return rc;
+    if (r.op == OP_MDT_OK) rc = decode_entry(r.val, r.vlen, a) ? 0 : -EIO;
+    else rc = r.op == OP_ERROR ? mdt_errno(r.code) : -EIO;
+    resp_free(&r);
+    return rc;
+}
+
+/* ---- one-sided lookups (the MDT's slot table, rocepool_servers.c) ---- */
+typedef struct { uint64_t addr, nslots; uint32_t rkey; int state; pthread_mutex_t lk; } mdt_tab_t;  /* state: 0 unknown, 1 ok, -1 none */
+static mdt_tab_t g_mdt_tab[MAX_PEERS];
+static atomic_ullong g_direct_lookups, g_direct_lookup_misses;
+#define MD_SLOT 256
+#define MD_PROBE 8
+#define MD_SLOT_TAIL (MD_SLOT - 8)
+
+static uint64_t fnv1a64(const char *s, size_t n) {
+    uint64_t h = 1469598103934665603ULL;
+    for (size_t i = 0; i < n; i++) { h ^= (uint8_t)s[i]; h *= 1099511628211ULL; }
+    return h;
+}
+
+void rp_lookup_stats(uint64_t *direct, uint64_t *misses) {
+    *direct = atomic_load(&g_direct_lookups);
+    *misses = atomic_load(&g_direct_lookup_misses);
+}
+
+static mdt_tab_t *mdt_table(peer_t *p) {
+    mdt_tab_t *t = &g_mdt_tab[p - g_mdts];
+    if (t->state) return t;
+    static pthread_mutex_t once_lk = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&once_lk);
+    if (!t->state) {
+        uint8_t req[1] = {12};
+        resp_t r;
+        int rc = mdt_rpc(p, "", req, 1, NULL, 0, &r);
+        if (rc == 0 && r.op == OP_MDT_OK && r.vlen >= 20) {
+            memcpy(&t->addr, r.val, 8);
+            memcpy(&t->nslots, r.val + 8, 8);
+            memcpy(&t->rkey, r.val + 16, 4);
+            t->state = 1;
+        } else {
+            t->state = -1;  /* a Python MDT, or no table: RPC lookups */
+        }
+        if (rc == 0) resp_free(&r);
+    }
+    pthread_mutex_unlock(&once_lk);
+    return t;
+}
+
+static __thread uint8_t *tl_slots;  /* MD_PROBE slots + 1 slot + 8 B of registered scratch */
+
+/* One-sided lookups: -1 auto (on where the transport executes a read's
+ * bytes in order -- RC; off on unordered ones -- EFA's SRD, where a
+ * consistent lookup takes three round trips and loses to the RPC),
+ * ROCEPOOL_DIRECT_LOOKUP=1/0 forces. */
+static int g_direct_lookup = -1;
+
+/* Unordered transports: the slot's bytes may have been fetched in any
+ * order within the probe. Re-read the slot (after the probe completed),
+ * then its seq (after that completed): the probe's seq precedes the
+ * re-read, the last seq follows it, seqs never repeat, so equal seqs
+ * mean nothing was written in between. */
+static int slot_confirm(peer_t *p, const mdt_tab_t *t, uint64_t idx, uint64_t seq, uint8_t *buf, roce_mem_t *mem) {
+    uint8_t *sl = buf + MD_PROBE * MD_SLOT, *s2 = sl + MD_SLOT;
+    rp_read_t rd = { t->addr + idx * MD_SLOT, t->rkey, MD_SLOT, mem, sl };
+    if (rp_rdma_read(p, &rd, 1)) return -1;
+    rp_read_t rs = { t->addr + idx * MD_SLOT, t->rkey, 8, mem, s2 };
+    if (rp_rdma_read(p, &rs, 1)) return -1;
+    uint64_t a, b;
+    memcpy(&a, sl, 8);
+    memcpy(&b, s2, 8);
+    return a == seq && b == seq ? 0 : -1;
+}
+
+/* 0 / -ENOENT from the table; -EAGAIN: ask the MDT */
+static int mdt_lookup_direct(peer_t *p, const char *path, attr_t *a) {
+    if (!cfg.direct_read) return -EAGAIN;
+    if (g_direct_lookup < 0) g_direct_lookup = roce_transport_reads_ordered();
+    if (!g_direct_lookup) return -EAGAIN;
+    int ordered = roce_transport_reads_ordered();
+    mdt_tab_t *t = mdt_table(p);
+    if (t->state != 1) return -EAGAIN;
+    uint64_t h = fnv1a64(path, strlen(path));
+    uint64_t start = h % t->nslots;
+    if (start + MD_PROBE > t->nslots) return -EAGAIN;  /* a wrapping run: rare, the RPC handles it */
+    size_t scratch = (MD_PROBE + 1) * MD_SLOT + 64;
+    if (!tl_slots) { tl_slots = rp_bulk_alloc(scratch); if (!tl_slots) return -EAGAIN; }
+    roce_mem_t *mem = rp_bulk_mem(tl_slots, scratch);
+    rp_read_t rd = { t->addr + start * MD_SLOT, t->rkey, MD_PROBE * MD_SLOT, mem, tl_slots };
+    if (rp_rdma_read(p, &rd, 1)) return -EAGAIN;
+    for (int i = 0; i < MD_PROBE; i++) {
+        const uint8_t *sl = tl_slots + (size_t)i * MD_SLOT;
+        uint64_t seq, ph, tail;
+        uint32_t elen;
+        memcpy(&seq, sl, 8);
+        if (seq == 0) { atomic_fetch_add(&g_direct_lookups, 1); return -ENOENT; }
+        memcpy(&ph, sl + 8, 8);
+        if (ph != h) continue;
+        if (!ordered && !(seq & 1)) {
+            if (slot_confirm(p, t, start + i, seq, tl_slots, mem)) {
+                atomic_fetch_add(&g_direct_lookup_misses, 1);
+                return -EAGAIN;
+            }
+            sl = tl_slots + MD_PROBE * MD_SLOT;  /* the bracketed copy */
+        }
+        memcpy(&tail, sl + MD_SLOT_TAIL, 8);
+        memcpy(&elen, sl + 16, 4);
+        if ((seq & 1) || tail != seq || elen > MD_SLOT_TAIL - 24 || !decode_entry(sl + 24, elen, a)) {
+            atomic_fetch_add(&g_direct_lookup_misses, 1);
+            return -EAGAIN;  /* mid-write or a tombstone: the MDT says */
+        }
+        atomic_fetch_add(&g_direct_lookups, 1);
+        return 0;
+    }
+    atomic_fetch_add(&g_direct_lookup_misses, 1);
+    return -EAGAIN;  /* the run is full and not ours */
+}
+
+static int mdt_lookup(const char *path, attr_t *a) {
+    int rc = mdt_lookup_direct(mdt_for(path), path, a);
+    if (rc != -EAGAIN) return rc;
+    uint8_t req[1] = {1};
+    return mdt_entry_call(path, req, 1, a);
+}
+
+static int mdt_create(const char *path, int is_dir, int exclusive, const attr_t *lay, attr_t *a) {
+    uint8_t req[20] = {2, (uint8_t)(is_dir ? 1 : 0), (uint8_t)(exclusive ? 1 : 0),
+                       (uint8_t)((lay ? 1 : 0) | (!is_dir && cfg.inline_ok ? 2 : 0))};
+    size_t n = 4;
+    if (lay) {
+        memcpy(req + 4, &lay->sc, 4);
+        memcpy(req + 8, &lay->ss, 8);
+        memcpy(req + 16, &lay->so, 4);
+        n = 20;
+    }
+    return mdt_entry_call(path, req, n, a);
+}
+
+/* Data-on-MDT (fs/mdt_wire.py) */
+static int mdt_write_inline(const char *path, uint64_t off, const uint8_t *data, size_t len, attr_t *a) {
+    uint8_t hdr[9] = {7};
+    memcpy(hdr + 1, &off, 8);
+    resp_t r;
+    int rc = mdt_rpc(mdt_for(path), path, hdr, 9, data, len, &r);
+    if (rc) return rc;
+    if (r.op == OP_MDT_OK) rc = decode_entry(r.val, r.vlen, a) ? 0 : -EIO;
+    else rc = r.op == OP_ERROR ? mdt_errno(r.code) : -EIO;
+    resp_free(&r);
+    return rc;
+}
+
+/* read_inline (op 8, off/len) or freeze (op 9): reply u64 iver + entry +
+ * bytes. On success *out holds the frame; data and dlen point into it. */
+int mdt_inline_read(const char *path, int freeze, uint64_t off, uint32_t len, attr_t *a, resp_t *out,
+                           const uint8_t **data, size_t *dlen) {
+    uint8_t req[13] = {(uint8_t)(freeze ? 9 : 8)};
+    memcpy(req + 1, &off, 8);
+    memcpy(req + 9, &len, 4);
+    int rc = mdt_rpc(mdt_for(path), path, req, freeze ? 1 : 13, NULL, 0, out);
+    if (rc) return rc;
+    if (out->op != OP_MDT_OK || out->vlen < 8) {
+        rc = out->op == OP_ERROR ? mdt_errno(out->code) : -EIO;
+        resp_free(out);
+        return rc;
+    }
+    size_t used = decode_entry(out->val + 8, out->vlen - 8, a);
+    if (!used) { resp_free(out); return -EIO; }
+    *data = out->val + 8 + used;
+    *dlen = out->vlen - 8 - used;
+    return 0;
+}
+
+static int mdt_spill_commit(const char *path, attr_t *a) {
+    uint8_t req[1] = {10};
+    return mdt_entry_call(path, req, 1, a);
+}
+
+int mdt_set_size(const char *path, uint64_t size, int exact, attr_t *a) {
+    uint8_t req[10] = {3, (uint8_t)(exact ? 1 : 0)};
+    memcpy(req + 2, &size, 8);
+    return mdt_entry_call(path, req, 10, a);
+}
+
+static int mdt_unlink(const char *path, int is_dir, attr_t *a) {
+    uint8_t req[2] = {4, (uint8_t)(is_dir ? 1 : 0)};
+    return mdt_entry_call(path, req, 2, a);
+}
+
+static int mdt_child_count_one(peer_t *p, const char *dir, uint64_t *n) {
+    uint8_t req[1] = {6};
+    resp_t r;
+    int rc = mdt_rpc(p, dir, req, 1, NULL, 0, &r);
+    if (rc) return rc;
+    if (r.op == OP_MDT_OK && r.vlen >= 8) { memcpy(n, r.val, 8); rc = 0; }
+    else rc = r.op == OP_ERROR ? mdt_errno(r.code) : -EIO;
+    resp_free(&r);
+    return rc;
+}
+
+
+/* One MDT's entries of dir, page by page (a page at most half a frame):
+ * a directory of millions of entries does not fit one reply. Each page
+ * asks for the names after the last one received. */
+static int mdt_readdir_one(peer_t *p, const char *dir, dirent_t **out, size_t *count) {
+    size_t cap = 0, i = 0;
+    dirent_t *v = NULL;
+    char last[4096];
+    size_t last_len = 0;
+    uint32_t budget = (uint32_t)(rp_frame_bytes / 2 > 0xffffffffu ? 0xffffffffu : rp_frame_bytes / 2);
+    for (;;) {
+        uint8_t req[7 + sizeof(last)];
+        req[0] = 5;
+        memcpy(req + 1, &budget, 4);
+        req[5] = (uint8_t)(last_len & 0xff);
+        req[6] = (uint8_t)(last_len >> 8);
+        memcpy(req + 7, last, last_len);
+        resp_t r;
+        int rc = mdt_rpc(p, dir, req, 7 + last_len, NULL, 0, &r);
+        if (rc == 0 && (r.op != OP_MDT_OK || r.vlen < 4)) {
+            rc = r.op == OP_ERROR ? mdt_errno(r.code) : -EIO;
+            resp_free(&r);
+        }
+        if (rc) {
+            for (size_t k = 0; k < i; k++) free(v[k].name);
+            free(v);
+            return rc;
+        }
+        uint32_t n;
+        memcpy(&n, r.val, 4);
+        int more = (n & 0x80000000u) != 0;
+        n &= 0x7fffffffu;
+        if (i + n > cap) {
+            cap = (i + n) * 2 + 16;
+            v = xrealloc(v, cap * sizeof(*v));
+        }
+        size_t off = 4, got = 0;
+        for (; got < n; got++) {
+            dirent_t *d = &v[i + got];
+            if (off + 2 > r.vlen) break;
+            uint16_t ln;
+            memcpy(&ln, r.val + off, 2);
+            off += 2;
+            if (off + ln > r.vlen) break;
+            d->name = xmalloc(ln + 1u);
+            memcpy(d->name, r.val + off, ln);
+            d->name[ln] = 0;
+            off += ln;
+            size_t used = decode_entry(r.val + off, r.vlen - off, &d->a);
+            if (!used) { free(d->name); break; }
+            off += used;
+        }
+        resp_free(&r);
+        i += got;
+        if (!more || !got) break;  /* (a server without paging sends everything, top bit clear) */
+        last_len = strlen(v[i - 1].name);
+        if (last_len > sizeof(last)) last_len = sizeof(last);
+        memcpy(last, v[i - 1].name, last_len);
+    }
+    *out = v ? v : calloc(1, sizeof(*v));
+    *count = i;
+    return 0;
+}
+
+/* A striped directory spans every MDT: readdir / child_count go to all of
+ * them in parallel and merge (the by-parent rule: one MDT, one RPC). The
+ * fan-out helpers live after the thread pool below. */
+int mdt_readdir(const char *dir, dirent_t **out, size_t *count);
+static int mdt_child_count(const char *dir, uint64_t *n);
+
+/* ---------------------------------------------------------------- attr cache
+ * fs/attr_cache.py: path -> (expires, attr | negative). Own mutations update
+ * it immediately; other clients' changes show within attr_ttl. */
+#define AC_BUCKETS 65536
+typedef struct ac_ent {
+    struct ac_ent *next;
+    char *path;
+    double expires;
+    int negative;
+    attr_t a;
+} ac_ent;
+
+static ac_ent *g_ac[AC_BUCKETS];
+static pthread_mutex_t g_ac_lk = PTHREAD_MUTEX_INITIALIZER;
+static size_t g_ac_n;
+
+uint32_t strhash(const char *s) {
+    uint32_t h = 2166136261u;
+    for (; *s; s++) h = (h ^ (uint8_t)*s) * 16777619u;
+    return h;
+}
+
+static void ac_clear_locked(void) {
+    for (int i = 0; i < AC_BUCKETS; i++) {
+        ac_ent *e = g_ac[i];
+        while (e) { ac_ent *n = e->next; free(e->path); free(e); e = n; }
+        g_ac[i] = NULL;
+    }
+    g_ac_n = 0;
+}
+
+/* 1 = hit (a filled or *negative set), 0 = miss */
+int ac_get(const char *path, attr_t *a, int *negative) {
+    if (cfg.attr_ttl <= 0) return 0;
+    uint32_t b = strhash(path) % AC_BUCKETS;
+    int hit = 0;
+    double now = mono_s();
+    pthread_mutex_lock(&g_ac_lk);
+    for (ac_ent **pp = &g_ac[b]; *pp; pp = &(*pp)->next) {
+        ac_ent *e = *pp;
+        if (strcmp(e->path, path)) continue;
+        if (e->expires > now) {
+            hit = 1;
+            *negative = e->negative;
+            if (!e->negative) *a = e->a;
+        } else {
+            *pp = e->next;
+            free(e->path);
+            free(e);
+            g_ac_n--;
+        }
+        break;
+    }
+    pthread_mutex_unlock(&g_ac_lk);
+    return hit;
+}
+
+void ac_put(const char *path, const attr_t *a) {  /* a == NULL: negative entry */
+    if (cfg.attr_ttl <= 0) return;
+    uint32_t b = strhash(path) % AC_BUCKETS;
+    pthread_mutex_lock(&g_ac_lk);
+    ac_ent *e;
+    for (e = g_ac[b]; e; e = e->next)
+        if (!strcmp(e->path, path)) break;
+    if (!e) {
+        if (g_ac_n >= 100000) ac_clear_locked();
+        e = calloc(1, sizeof(*e));
+        e->path = xstrdup(path);
+        e->next = g_ac[b];
+        g_ac[b] = e;
+        g_ac_n++;
+    }
+    e->expires = mono_s() + cfg.attr_ttl;
+    e->negative = a == NULL;
+    if (a) e->a = *a;
+    pthread_mutex_unlock(&g_ac_lk);
+}
+
+/* exact = truncate. Otherwise a write's size update only ever grows the
+ * cached size: two flushes can get their MDT set_size(max) replies back in
+ * either order, and letting the older, smaller one land last made stat and
+ * read see a truncated file (IOR, 8 ranks writing one shared file). */
+void ac_del(const char *path) {
+    uint32_t b = strhash(path) % AC_BUCKETS;
+    pthread_mutex_lock(&g_ac_lk);
+    for (ac_ent **pp = &g_ac[b]; *pp; pp = &(*pp)->next)
+        if (!strcmp((*pp)->path, path)) {
+            ac_ent *e = *pp;
+            *pp = e->next;
+            free(e->path);
+            free(e);
+            g_ac_n--;
+            break;
+        }
+    pthread_mutex_unlock(&g_ac_lk);
+}
+
+void ac_update_size(const char *path, uint64_t size, int exact) {
+    uint32_t b = strhash(path) % AC_BUCKETS;
+    pthread_mutex_lock(&g_ac_lk);
+    for (ac_ent *e = g_ac[b]; e; e = e->next)
+        if (!strcmp(e->path, path)) {
+            if (!e->negative) {
+                if (exact || size > e->a.size) e->a.size = size;
+                e->a.mtime = wall_s();
+            }
+            break;
+        }
+    pthread_mutex_unlock(&g_ac_lk);
+}
+
+/* ---------------------------------------------------------------- task pool
+ * Stripe RPCs fan out across OSTs concurrently. FUSE threads only wait on
+ * tasks; tasks never wait on other tasks, so a fixed pool cannot deadlock. */
+typedef struct task {
+    void (*fn)(void *);
+    void *arg;
+    struct task *next;
+} task_t;
+
+static struct {
+    pthread_mutex_t lk;
+    pthread_cond_t cv;
+    task_t *head, *tail;
+} g_pool = {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, NULL, NULL};
+
+void *pool_worker(void *arg) {
+    pthread_setname_np(pthread_self(), "fuse-io");
+    (void)arg;
+    for (;;) {
+        pthread_mutex_lock(&g_pool.lk);
+        while (!g_pool.head) pthread_cond_wait(&g_pool.cv, &g_pool.lk);
+        task_t *t = g_pool.head;
+        g_pool.head = t->next;
+        if (!g_pool.head) g_pool.tail = NULL;
+        pthread_mutex_unlock(&g_pool.lk);
+        t->fn(t->arg);
+        free(t);
+    }
+    return NULL;
+}
+
+void pool_submit(void (*fn)(void *), void *arg) {
+    task_t *t = xmalloc(sizeof(*t));
+    t->fn = fn;
+    t->arg = arg;
+    t->next = NULL;
+    pthread_mutex_lock(&g_pool.lk);
+    if (g_pool.tail) g_pool.tail->next = t; else g_pool.head = t;
+    g_pool.tail = t;
+    pthread_cond_signal(&g_pool.cv);
+    pthread_mutex_unlock(&g_pool.lk);
+}
+
+typedef struct {
+    pthread_mutex_t lk;
+    pthread_cond_t cv;
+    int remaining;
+    int err;
+} group_t;
+
+static void group_init(group_t *g, int n) {
+    pthread_mutex_init(&g->lk, NULL);
+    pthread_cond_init(&g->cv, NULL);
+    g->remaining = n;
+    g->err = 0;
+}
+
+static void group_done(group_t *g, int err) {
+    pthread_mutex_lock(&g->lk);
+    if (err && !g->err) g->err = err;
+    if (--g->remaining == 0) pthread_cond_broadcast(&g->cv);
+    pthread_mutex_unlock(&g->lk);
+}
+
+static int group_wait(group_t *g) {
+    pthread_mutex_lock(&g->lk);
+    while (g->remaining > 0) pthread_cond_wait(&g->cv, &g->lk);
+    int e = g->err;
+    pthread_mutex_unlock(&g->lk);
+    pthread_mutex_destroy(&g->lk);
+    pthread_cond_destroy(&g->cv);
+    return e;
+}
+
+/* run fn over n args: n-1 on the pool, the last inline, then wait */
+static int run_all(void (*fn)(void *), void **args, int n, group_t *g) {
+    for (int i = 0; i < n - 1; i++) pool_submit(fn, args[i]);
+    if (n > 0) fn(args[n - 1]);
+    return group_wait(g);
+}
+
+/* ---- directory fan-out (striped directories, fs/namespace_shard.py) ---- */
+typedef struct {
+    group_t *g;
+    peer_t *p;
+    const char *dir;
+    dirent_t *ents;
+    size_t n;
+    uint64_t count;
+} dir_task_t;
+
+static void readdir_task(void *arg) {
+    dir_task_t *t = arg;
+    group_done(t->g, mdt_readdir_one(t->p, t->dir, &t->ents, &t->n));
+}
+
+static void child_count_task(void *arg) {
+    dir_task_t *t = arg;
+    group_done(t->g, mdt_child_count_one(t->p, t->dir, &t->count));
+}
+
+static int cmp_dirent(const void *a, const void *b) {
+    return strcmp(((const dirent_t *)a)->name, ((const dirent_t *)b)->name);
+}
+
+static int mdt_fan_out(const char *dir, void (*fn)(void *), dir_task_t *tasks, int *nmdt) {
+    peer_t *peers[MAX_PEERS];
+    int n = mdts_for_children(dir, peers);
+    void *args[MAX_PEERS];
+    group_t g;
+    group_init(&g, n);
+    for (int i = 0; i < n; i++) { tasks[i] = (dir_task_t){&g, peers[i], dir, NULL, 0, 0}; args[i] = &tasks[i]; }
+    *nmdt = n;
+    return run_all(fn, args, n, &g);
+}
+
+int mdt_readdir(const char *dir, dirent_t **out, size_t *count) {
+    dir_task_t tasks[MAX_PEERS];
+    int n;
+    int rc = mdt_fan_out(dir, readdir_task, tasks, &n);
+    size_t total = 0;
+    for (int i = 0; i < n; i++) total += tasks[i].n;
+    if (rc) {
+        for (int i = 0; i < n; i++) { for (size_t k = 0; k < tasks[i].n; k++) free(tasks[i].ents[k].name); free(tasks[i].ents); }
+        return rc;
+    }
+    if (n == 1) { *out = tasks[0].ents; *count = tasks[0].n; return 0; }
+    dirent_t *all = calloc(total ? total : 1, sizeof(*all));
+    size_t w = 0;
+    for (int i = 0; i < n; i++) {
+        if (tasks[i].n) memcpy(all + w, tasks[i].ents, tasks[i].n * sizeof(*all));
+        w += tasks[i].n;
+        free(tasks[i].ents);
+    }
+    qsort(all, total, sizeof(*all), cmp_dirent);
+    *out = all;
+    *count = total;
+    return 0;
+}
+
+/* ---- positional listing (MDT op 13) ----
+ * A directory read as the concatenation of its MDTs' listings (MDT 0's
+ * entries, then MDT 1's, ...), each in its snapshot's name order, fetched
+ * a page at a time from any index. Every reader of the same unchanged
+ * directory sees the same order and indices, so separate readers can split
+ * it by index (IO500 find's pfind -H 1). */
+int mdt_dir_nmdts(const char *dir) {
+    peer_t *peers[MAX_PEERS];
+    return mdts_for_children(dir, peers);
+}
+
+static int mdt_readdir_at_one(peer_t *p, const char *dir, uint64_t at, uint32_t budget,
+                              dirent_t **out, size_t *count, uint64_t *total, int *more) {
+    if (budget > rp_frame_bytes / 2) budget = (uint32_t)(rp_frame_bytes / 2);  /* the reply must fit our frame */
+    uint8_t req[13];
+    req[0] = 13;
+    memcpy(req + 1, &budget, 4);
+    memcpy(req + 5, &at, 8);
+    resp_t r;
+    int rc = mdt_rpc(p, dir, req, sizeof(req), NULL, 0, &r);
+    if (rc) return rc;
+    if (r.op != OP_MDT_OK || r.vlen < 12) {
+        rc = r.op == OP_ERROR && !strcmp(r.code, "UNSUPPORTED_OP") ? -EOPNOTSUPP
+           : r.op == OP_ERROR ? mdt_errno(r.code) : -EIO;
+        resp_free(&r);
+        return rc;
+    }
+    uint32_t n;
+    memcpy(total, r.val, 8);
+    memcpy(&n, r.val + 8, 4);
+    *more = (n & 0x80000000u) != 0;
+    n &= 0x7fffffffu;
+    dirent_t *v = xmalloc((n ? n : 1) * sizeof(*v));
+    size_t off = 12, got = 0;
+    for (; got < n; got++) {
+        dirent_t *d = &v[got];
+        if (off + 2 > r.vlen) break;
+        uint16_t ln;
+        memcpy(&ln, r.val + off, 2);
+        off += 2;
+        if (off + ln > r.vlen) break;
+        d->name = xmalloc(ln + 1u);
+        memcpy(d->name, r.val + off, ln);
+        d->name[ln] = 0;
+        off += ln;
+        size_t used = decode_entry(r.val + off, r.vlen - off, &d->a);
+        if (!used) { free(d->name); break; }
+        off += used;
+    }
+    resp_free(&r);
+    if (got < n) *more = 0;
+    *out = v;
+    *count = got;
+    return 0;
+}
+
+/* entries of dir on its k-th MDT (mdts_for_children order) from index `at`,
+ * at most about `budget` bytes of them; *total = that MDT's entry count */
+int mdt_readdir_at(const char *dir, int k, uint64_t at, uint32_t budget,
+                   dirent_t **out, size_t *count, uint64_t *total, int *more) {
+    peer_t *peers[MAX_PEERS];
+    int n = mdts_for_children(dir, peers);
+    if (k < 0 || k >= n) return -EINVAL;
+    return mdt_readdir_at_one(peers[k], dir, at, budget, out, count, total, more);
+}
+
+typedef struct {
+    group_t *g;
+    peer_t *p;
+    const char *dir;
+    uint32_t budget;
+    dirent_t *ents;
+    size_t n;
+    uint64_t total;
+    int more;
+} at_task_t;
+
+static void readdir_at_task(void *arg) {
+    at_task_t *t = arg;
+    group_done(t->g, mdt_readdir_at_one(t->p, t->dir, 0, t->budget, &t->ents, &t->n, &t->total, &t->more));
+}
+
+/* the first page of every MDT in parallel (with each MDT's count): one
+ * round trip says how big the directory is, and for a small one it is the
+ * whole listing. ents[k]/n[k]/total[k]/more[k] per MDT; returns the MDT
+ * count, or -errno (the pages fetched so far are freed). */
+int mdt_readdir_first(const char *dir, uint32_t budget, dirent_t **ents, size_t *n,
+                      uint64_t *total, int *more) {
+    peer_t *peers[MAX_PEERS];
+    int k = mdts_for_children(dir, peers);
+    at_task_t tasks[MAX_PEERS];
+    void *args[MAX_PEERS];
+    group_t g;
+    group_init(&g, k);
+    for (int i = 0; i < k; i++) {
+        tasks[i] = (at_task_t){&g, peers[i], dir, budget, NULL, 0, 0, 0};
+        args[i] = &tasks[i];
+    }
+    int rc = run_all(readdir_at_task, args, k, &g);
+    for (int i = 0; i < k; i++) {
+        if (rc) {
+            for (size_t j = 0; j < tasks[i].n; j++) free(tasks[i].ents[j].name);
+            free(tasks[i].ents);
+            continue;
+        }
+        ents[i] = tasks[i].ents;
+        n[i] = tasks[i].n;
+        total[i] = tasks[i].total;
+        more[i] = tasks[i].more;
+    }
+    return rc ? rc : k;
+}
+
+static int mdt_child_count(const char *dir, uint64_t *n) {
+    dir_task_t tasks[MAX_PEERS];
+    int k;
+    int rc = mdt_fan_out(dir, child_count_task, tasks, &k);
+    if (rc) return rc;
+    uint64_t total = 0;
+    for (int i = 0; i < k; i++) total += tasks[i].count;
+    *n = total;
+    return 0;
+}
+
+/* ---------------------------------------------------------------- layout */
+int ost_for_stripe(const attr_t *a, uint64_t idx) {
+    uint64_t obj = idx % a->sc;
+    return (int)((a->so + obj) % (uint64_t)cfg.nost);
+}
+
+void stripe_key(char *out, size_t n, const char *path, uint64_t idx) {
+    snprintf(out, n, "%s.stripe.%08llu", path, (unsigned long long)idx);
+}
+
+static void choose_layout(const char *path, attr_t *lay) {
+    memset(lay, 0, sizeof(*lay));
+    int count = cfg.stripe_count <= 0 ? cfg.nost : (cfg.stripe_count > cfg.nost ? cfg.nost : cfg.stripe_count);
+    lay->has_layout = 1;
+    lay->sc = (uint32_t)count;
+    lay->ss = cfg.stripe_size;
+    lay->so = (uint32_t)(sha256_u64(path) % (uint64_t)cfg.nost);
+}
+
+/* ---------------------------------------------------------------- namespace */
+int fs_getattr(const char *path, attr_t *a) {
+    if (!*path) {
+        memset(a, 0, sizeof(*a));
+        a->is_dir = 1;
+        return 0;
+    }
+    int neg = 0;
+    if (ac_get(path, a, &neg)) return neg ? -ENOENT : 0;
+    int rc = mdt_lookup(path, a);
+    if (rc == 0) ac_put(path, a);
+    else if (rc == -ENOENT) ac_put(path, NULL);
+    return rc;
+}
+
+static int require_parent_dir(const char *path) {
+    char par[4096];
+    attr_t pa;
+    int rc = fs_getattr(parent_of(path, par, sizeof(par)), &pa);
+    if (rc == -ENOENT) {
+        /* maybe only this client's cached "not there": another client can
+         * have created the directory since (two nodes doing mkdir -p of the
+         * same tree). Ask the MDT before refusing. */
+        ac_del(par);
+        rc = fs_getattr(par, &pa);
+    }
+    if (rc) return rc;
+    return pa.is_dir ? 0 : -ENOTDIR;
+}
+
+int fs_mkdir(const char *path, attr_t *a) {
+    int rc = require_parent_dir(path);
+    if (rc) return rc;
+    rc = mdt_create(path, 1, 1, NULL, a);
+    if (rc == 0) ac_put(path, a);
+    else if (rc == -EEXIST) ac_del(path);  /* the MDT says it exists: a cached "not there" is stale */
+    return rc;
+}
+
+int fs_create_file_excl(const char *path, int exclusive, attr_t *a) {
+    int rc = require_parent_dir(path);
+    if (rc) return rc;
+    attr_t lay;
+    choose_layout(path, &lay);
+    rc = mdt_create(path, 0, exclusive, &lay, a);
+    if (rc == -EEXIST) ac_del(path);  /* it exists: a cached "not there" is stale */
+    if (rc == -EEXIST && !exclusive) return -EISDIR;  /* exists as a directory */
+    if (rc == 0) ac_put(path, a);
+    return rc;
+}
+
+int fs_create_file(const char *path, attr_t *a) { return fs_create_file_excl(path, 0, a); }
+
+int fs_rmdir(const char *path) {
+    /* its children's unlinks (on every MDT) durable before the directory's */
+    int rc = rpfs_commit();
+    if (rc) return rc;
+    attr_t a;
+    rc = fs_getattr(path, &a);
+    if (rc) return rc;
+    if (!a.is_dir) return -ENOTDIR;
+    uint64_t n = 0;
+    rc = mdt_child_count(path, &n);
+    if (rc) return rc;
+    if (n) return -ENOTEMPTY;
+    rc = mdt_unlink(path, 1, &a);
+    if (rc == 0 || rc == -ENOENT) ac_put(path, NULL);
+    return rc;
+}
+
+/* ---------------------------------------------------------------- striped data
+ * A write is a list of segments, contiguous in file order: the kernel's
+ * WRITE requests as they sit in their arena buffers (rocepool_client.h
+ * rp_bulk_*), so a stripe assembled from up to 4 of them goes out with no
+ * copy at all -- the OST RDMA READs each segment where it is. More pieces
+ * than that (ior-hard: 22 x 47 KB per stripe) are gathered once into an
+ * arena buffer, which is still read in place by the OST. */
+#define WSEG_MAX 4
+typedef struct { const uint8_t *data; size_t len; roce_mem_t *mem; } wseg_t;  /* mem: device memory, else NULL */
+
+typedef struct {
+    group_t *g;
+    const char *path;
+    const attr_t *a;
+    uint64_t idx;
+    uint64_t lo, hi;       /* within the stripe */
+    rp_seg_t seg[WSEG_MAX];
+    int nseg;
+    uint8_t *gathered;     /* arena copy when the stripe had more than WSEG_MAX pieces */
+} stripe_io_t;
+
+static void stripe_write_task(void *arg) {
+    stripe_io_t *t = arg;
+    char key[4200];
+    stripe_key(key, sizeof(key), t->path, t->idx);
+    peer_t *p = &g_osts[ost_for_stripe(t->a, t->idx)];
+    int rc;
+    if (t->lo == 0 && t->hi == t->a->ss)
+        rc = rp_ost_put_v(p, key, t->seg, t->nseg, -1, NULL);  /* whole stripe: blind PUT */
+    else  /* one atomic WRITE_AT (was: stat/get/stat + CAS put, retried) */
+        rc = rp_ost_write_at_v(p, key, t->lo, t->seg, t->nseg, NULL, NULL);
+    rp_bulk_free(t->gathered);
+    group_done(t->g, rc);
+}
+
+/* the segments of a stripe's [lo, hi) (file offsets) out of the write's
+ * segment list; gathers into arena memory when there are too many */
+static void stripe_segments(stripe_io_t *t, uint64_t s_lo, uint64_t s_hi, const wseg_t *segs, int nsegs,
+                            uint64_t off) {
+    uint64_t pos = off;
+    int n = 0, over = 0;
+    for (int i = 0; i < nsegs; i++) {
+        uint64_t a = pos, b = pos + segs[i].len;
+        pos = b;
+        if (b <= s_lo || a >= s_hi) continue;
+        uint64_t lo = a > s_lo ? a : s_lo, hi = b < s_hi ? b : s_hi;
+        if (n == WSEG_MAX) { over = 1; break; }
+        t->seg[n++] = (rp_seg_t){ segs[i].data + (lo - a), (size_t)(hi - lo), segs[i].mem };
+    }
+    if (!over) { t->nseg = n; return; }
+    size_t total = (size_t)(s_hi - s_lo);
+    t->gathered = rp_bulk_alloc(total);
+    if (!t->gathered) t->gathered = xmalloc(total);
+    pos = off;
+    for (int i = 0; i < nsegs; i++) {
+        uint64_t a = pos, b = pos + segs[i].len;
+        pos = b;
+        if (b <= s_lo || a >= s_hi) continue;
+        uint64_t lo = a > s_lo ? a : s_lo, hi = b < s_hi ? b : s_hi;
+        memcpy(t->gathered + (lo - s_lo), segs[i].data + (lo - a), (size_t)(hi - lo));
+    }
+    t->seg[0] = (rp_seg_t){ t->gathered, total, NULL };
+    t->nseg = 1;
+}
+
+/* One BATCH frame per OST, all OSTs in parallel. ok_missing: NOT_FOUND
+ * sub-replies are fine (holes). */
+typedef struct {
+    group_t *g;
+    int ost;
+    rp_batch_t *b;
+    int ok_missing;
+} batch_task_t;
+
+static void batch_task(void *arg) {
+    batch_task_t *t = arg;
+    /* A huge file's truncate/unlink can list more stripes than fit in one
+     * frame: send the items in chunks of at most half a frame each. */
+    size_t limit = rp_frame_bytes / 2, off = 4;
+    int rc = 0;
+    while (off < t->b->len && !rc) {
+        rp_batch_t c;
+        rp_batch_init(&c);
+        while (off < t->b->len) {
+            uint32_t kl, vl;
+            memcpy(&kl, t->b->buf + off + 1, 4);
+            memcpy(&vl, t->b->buf + off + 5, 4);
+            size_t item = 9 + (size_t)kl + vl;
+            if (c.n && c.len + item > limit) break;
+            if (c.len + item > c.cap) {
+                while (c.cap < c.len + item) c.cap *= 2;
+                c.buf = xrealloc(c.buf, c.cap);
+            }
+            memcpy(c.buf + c.len, t->b->buf + off, item);
+            c.len += item;
+            c.n++;
+            off += item;
+        }
+        rp_resp_t r;
+        rc = rp_batch_send(&g_osts[t->ost], &c, &r);
+        rp_batch_free(&c);
+        if (rc) break;
+        size_t pos = 0;
+        uint8_t op;
+        const uint8_t *v;
+        uint32_t vl;
+        char code[32];
+        while (rp_batch_next(&r, &pos, &op, &v, &vl, code, sizeof(code)) == 0)
+            if (op == RP_ERROR && !(t->ok_missing && !strcmp(code, "NOT_FOUND"))) {
+                rc = !strcmp(code, "NO_SPACE") ? -ENOSPC : -EIO;  /* a full tier is ENOSPC, as on a disk */
+                break;
+            }
+        rp_resp_free(&r);
+    }
+    group_done(t->g, rc);
+}
+
+static int run_batches(rp_batch_t *per_ost, int ok_missing) {
+    batch_task_t *tasks = calloc((size_t)cfg.nost, sizeof(*tasks));
+    void **args = xmalloc((size_t)cfg.nost * sizeof(void *));
+    int n = 0;
+    group_t g;
+    for (int i = 0; i < cfg.nost; i++)
+        if (per_ost[i].n) { tasks[n] = (batch_task_t){&g, i, &per_ost[i], ok_missing}; args[n] = &tasks[n]; n++; }
+    int rc = 0;
+    if (n) {
+        group_init(&g, n);
+        rc = run_all(batch_task, args, n, &g);
+    }
+    free(tasks);
+    free(args);
+    return rc;
+}
+
+static uint64_t inline_hint(const attr_t *a) {
+    static long lim = -1;
+    if (lim < 0) {
+        const char *v = getenv("ROCEPOOL_INLINE_MAX");
+        lim = v && *v ? atol(v) : 32768;
+        if (lim < 0) lim = 0;
+    }
+    return a->ss && a->ss < (uint64_t)lim ? a->ss : (uint64_t)lim;
+}
+
+/* Move an inline file to its stripes (protocol: fs/mdt_wire.py). Any number
+ * of clients may run this at once, or finish a spill another one began. */
+int fs_spill(const char *path) {
+    int done = 0;
+    for (int i = 0; i < CAS_MAX_ATTEMPTS && !done; i++) {
+        attr_t a;
+        resp_t r;
+        const uint8_t *d;
+        size_t n;
+        int rc = mdt_inline_read(path, 1, 0, 0, &a, &r, &d, &n);
+        if (rc) return rc;
+        resp_free(&r);
+        if (!a.inl) { done = 1; break; }  /* someone committed already */
+        char key[4200];
+        stripe_key(key, sizeof(key), path, 0);
+        peer_t *p = &g_osts[ost_for_stripe(&a, 0)];
+        /* a version TOKEN, not "expected 0 = absent": a plain CAS could land
+         * after this file was truncated/unlinked (stripe deleted -> absent
+         * again) and recreated in between -- ABA */
+        uint64_t v0 = 0;
+        rc = rp_ost_vtoken(p, key, &v0);
+        if (rc) return rc;
+        rc = mdt_inline_read(path, 1, 0, 0, &a, &r, &d, &n);  /* still frozen AFTER reading v0? */
+        if (rc) return rc;
+        if (!a.inl) { resp_free(&r); done = 1; break; }
+        rc = rp_ost_put_token(p, key, d, n, v0, NULL);
+        resp_free(&r);
+        if (rc == 0) done = 1;
+        else if (rc != -EAGAIN) return rc;
+    }
+    /* Never commit without our PUT (or someone's commit) behind it: that
+     * would publish a striped file whose stripe 0 lacks the inline bytes. */
+    if (!done) return -EIO;
+    attr_t a;
+    int rc = mdt_spill_commit(path, &a);
+    if (rc == 0) ac_put(path, &a);
+    return rc;
+}
+
+static int fs_write_segs(const char *path, uint64_t off, const wseg_t *segs, int nsegs) {
+    size_t len = 0;
+    for (int i = 0; i < nsegs; i++) len += segs[i].len;
+    if (!len) return 0;
+    attr_t a;
+    int rc = fs_getattr(path, &a);
+    if (rc == -ENOENT) rc = fs_create_file(path, &a);
+    if (rc) return rc;
+    if (a.is_dir) return -EISDIR;
+    while (a.inl) {  /* one MDT round trip, no OST at all */
+        attr_t na;
+        /* Only offer the MDT what could fit: a write ending past the inline
+         * limit (same ROCEPOOL_INLINE_MAX rule as the servers, never more
+         * than a stripe) spills first instead of shipping the data to the
+         * MDT just to hear INLINE_FULL -- that doubled the bytes of every
+         * new large file, and a run over one frame failed with EFBIG. */
+        int device = 0;
+        for (int i = 0; i < nsegs; i++) if (segs[i].mem && roce_mem_is_device(segs[i].mem)) device = 1;
+        if (off + len > inline_hint(&a) || device) {  /* device memory: never through the CPU */
+            rc = E_INLINE_FULL;
+        } else if (nsegs == 1) {
+            rc = mdt_write_inline(path, off, segs[0].data, len, &na);
+        } else {  /* small (inline-sized): gather */
+            uint8_t *tmp = xmalloc(len);
+            size_t o = 0;
+            for (int i = 0; i < nsegs; i++) { memcpy(tmp + o, segs[i].data, segs[i].len); o += segs[i].len; }
+            rc = mdt_write_inline(path, off, tmp, len, &na);
+            free(tmp);
+        }
+        if (rc == 0) { ac_put(path, &na); return 0; }
+        if (rc == E_INLINE_FULL || rc == E_FROZEN) {
+            rc = fs_spill(path);
+            if (rc) return rc;
+        } else if (rc != E_NOT_INLINE) {
+            return rc;
+        }
+        ac_del(path);
+        rc = fs_getattr(path, &a);
+        if (rc) return rc;
+    }
+    if (!a.has_layout || !a.sc || !a.ss) return -EIO;
+    uint64_t end = off + len, first = off / a.ss, last = (end - 1) / a.ss;
+    int n = (int)(last - first + 1);
+    stripe_io_t *tasks = calloc((size_t)n, sizeof(*tasks));
+    void **args = xmalloc((size_t)n * sizeof(void *));
+    group_t g;
+    group_init(&g, n);
+    for (int i = 0; i < n; i++) {
+        uint64_t idx = first + (uint64_t)i, s0 = idx * a.ss;
+        uint64_t lo = off > s0 ? off : s0, hi = end < s0 + a.ss ? end : s0 + a.ss;
+        tasks[i] = (stripe_io_t){.g = &g, .path = path, .a = &a, .idx = idx, .lo = lo - s0, .hi = hi - s0};
+        stripe_segments(&tasks[i], lo, hi, segs, nsegs, off);
+        args[i] = &tasks[i];
+    }
+    rc = run_all(stripe_write_task, args, n, &g);
+    free(tasks);
+    free(args);
+    if (rc) return rc;
+    if (end > a.size) {
+        attr_t na;
+        rc = mdt_set_size(path, end, 0, &na);
+        if (rc == E_INLINE || rc == E_FROZEN) {
+            /* cached attributes said "striped" but the file is inline
+             * (recreated by another client) or mid-spill: finish any spill,
+             * then redo the write where the file now lives */
+            if (rc == E_FROZEN && (rc = fs_spill(path)) != 0) return rc;
+            ac_del(path);
+            return fs_write_segs(path, off, segs, nsegs);
+        }
+        if (rc == 0) ac_update_size(path, na.size, 0);
+    }
+    return rc;
+}
+
+/* Several non-overlapping runs of one file in one go: every run's stripe
+ * writes in flight together, then one MDT size update for the furthest
+ * end. A flush of strided writes (IOR hard: 47008-byte pieces, nranks
+ * apart, so every piece is its own run) used to send them one at a time,
+ * each a WRITE_AT plus an MDT set-size round trip: 0.68 GiB/s on 2 EFA
+ * hosts whose network and NVMe did 5-8 GiB/s (2026-10-25). An inline file
+ * (or one that turns out inline / mid-spill) goes run by run as before. */
+typedef struct { uint64_t off; const wseg_t *segs; int nsegs; } wrun_t;
+#define WRUNS_INFLIGHT 256  /* stripe writes per wave */
+
+static int fs_write_runs(const char *path, const wrun_t *runs, int nruns) {
+    if (nruns <= 0) return 0;
+    if (nruns == 1) return fs_write_segs(path, runs[0].off, runs[0].segs, runs[0].nsegs);
+    attr_t a;
+    int rc = fs_getattr(path, &a);
+    if (rc == 0 && !a.is_dir && a.inl) {
+        /* a new (inline) file: the first run decides -- it stays inline, or
+         * spills to stripes and the rest go together */
+        if ((rc = fs_write_segs(path, runs[0].off, runs[0].segs, runs[0].nsegs)) != 0) return rc;
+        rc = fs_getattr(path, &a);
+        if (rc == 0 && !a.inl) return fs_write_runs(path, runs + 1, nruns - 1);
+        runs++;
+        nruns--;
+    }
+    int seq = rc != 0 || a.is_dir || a.inl || !a.has_layout || !a.sc || !a.ss;
+    for (int r = 0; !seq && r < nruns; r++)
+        for (int i = 0; i < runs[r].nsegs; i++)
+            if (runs[r].segs[i].mem && roce_mem_is_device(runs[r].segs[i].mem)) seq = 1;
+    if (seq) {
+        for (int r = 0; r < nruns; r++)
+            if ((rc = fs_write_segs(path, runs[r].off, runs[r].segs, runs[r].nsegs)) != 0) return rc;
+        return 0;
+    }
+    size_t ntask = 0;
+    uint64_t max_end = 0;
+    for (int r = 0; r < nruns; r++) {
+        size_t len = 0;
+        for (int i = 0; i < runs[r].nsegs; i++) len += runs[r].segs[i].len;
+        if (!len) continue;
+        uint64_t end = runs[r].off + len;
+        ntask += (size_t)((end - 1) / a.ss - runs[r].off / a.ss + 1);
+        if (end > max_end) max_end = end;
+    }
+    stripe_io_t *tasks = calloc(ntask ? ntask : 1, sizeof(*tasks));
+    if (!tasks) return -ENOMEM;
+    size_t k = 0;
+    for (int r = 0; r < nruns; r++) {
+        size_t len = 0;
+        for (int i = 0; i < runs[r].nsegs; i++) len += runs[r].segs[i].len;
+        if (!len) continue;
+        uint64_t off = runs[r].off, end = off + len;
+        for (uint64_t idx = off / a.ss; idx <= (end - 1) / a.ss; idx++) {
+            uint64_t s0 = idx * a.ss, lo = off > s0 ? off : s0, hi = end < s0 + a.ss ? end : s0 + a.ss;
+            tasks[k] = (stripe_io_t){.path = path, .a = &a, .idx = idx, .lo = lo - s0, .hi = hi - s0};
+            stripe_segments(&tasks[k], lo, hi, runs[r].segs, runs[r].nsegs, off);
+            k++;
+        }
+    }
+    void **args = xmalloc((ntask ? ntask : 1) * sizeof(void *));
+    size_t ran = 0;  /* tasks handed out (each frees its own gather copy) */
+    while (ran < ntask && rc == 0) {
+        int n = (int)(ntask - ran < WRUNS_INFLIGHT ? ntask - ran : WRUNS_INFLIGHT);
+        group_t g;
+        group_init(&g, n);
+        for (int i = 0; i < n; i++) { tasks[ran + i].g = &g; args[i] = &tasks[ran + i]; }
+        rc = run_all(stripe_write_task, args, n, &g);
+        ran += (size_t)n;
+    }
+    for (; ran < ntask; ran++) rp_bulk_free(tasks[ran].gathered);
+    free(args);
+    free(tasks);
+    if (rc) return rc;
+    if (max_end > a.size) {
+        attr_t na;
+        rc = mdt_set_size(path, max_end, 0, &na);
+        if (rc == E_INLINE || rc == E_FROZEN) {  /* not striped after all: as fs_write_segs does */
+            if (rc == E_FROZEN && (rc = fs_spill(path)) != 0) return rc;
+            ac_del(path);
+            for (int r = 0; r < nruns; r++)
+                if ((rc = fs_write_segs(path, runs[r].off, runs[r].segs, runs[r].nsegs)) != 0) return rc;
+            return 0;
+        }
+        if (rc == 0) ac_update_size(path, na.size, 0);
+    }
+    return rc;
+}
+
+/* how much of an inline file an open for reading fetches with it */
+#define OPEN_PREFETCH 8192
+
+int fs_open_read(const char *path, attr_t *a, uint8_t **data, size_t *dlen) {
+    *data = NULL;
+    *dlen = 0;
+    resp_t r;
+    const uint8_t *d;
+    size_t n;
+    int rc = mdt_inline_read(path, 0, 0, OPEN_PREFETCH, a, &r, &d, &n);
+    if (rc) return rc;
+    ac_put(path, a);
+    if (a->inl && n == a->size && n <= OPEN_PREFETCH) {
+        *data = xmalloc(n ? n : 1);
+        memcpy(*data, d, n);
+        *dlen = n;
+    }
+    resp_free(&r);
+    return 0;
+}
+
+int fs_write_range(const char *path, uint64_t off, const uint8_t *data, size_t len) {
+    wseg_t seg = { data, len, NULL };
+    return fs_write_segs(path, off, &seg, 1);
+}
+
+int fs_truncate(const char *path, uint64_t size) {
+    attr_t a;
+    int rc = fs_getattr(path, &a);
+    if (rc) return rc;
+    if (a.is_dir) return -EISDIR;
+    while (a.inl) {
+        attr_t na;
+        rc = mdt_set_size(path, size, 1, &na);  /* resizes the inline bytes */
+        if (rc == 0) { ac_put(path, &na); return 0; }
+        if (rc == E_INLINE_FULL || rc == E_FROZEN) {
+            rc = fs_spill(path);
+            if (rc) return rc;
+        } else if (rc != E_NOT_INLINE) {
+            return rc;
+        }
+        ac_del(path);
+        rc = fs_getattr(path, &a);
+        if (rc) return rc;
+    }
+    if (size < a.size && a.has_layout && a.ss) {
+        uint64_t ss = a.ss, last_old = (a.size - 1) / ss, first_gone = (size + ss - 1) / ss;
+        uint64_t start = size % ss ? size / ss : first_gone;
+        rp_batch_t *per = calloc((size_t)cfg.nost, sizeof(*per));
+        for (int i = 0; i < cfg.nost; i++) rp_batch_init(&per[i]);
+        for (uint64_t idx = start; idx <= last_old; idx++) {
+            char key[4200];
+            stripe_key(key, sizeof(key), path, idx);
+            rp_batch_t *b = &per[ost_for_stripe(&a, idx)];
+            if (idx >= first_gone) {
+                rp_batch_add(b, RP_DELETE, key, NULL, 0, NULL, 0);
+            } else {
+                uint64_t keep = size - idx * ss;  /* server-side trim: no read-modify-write */
+                rp_batch_add(b, RP_TRUNCATE, key, &keep, 8, NULL, 0);
+            }
+        }
+        rc = run_batches(per, 1);
+        for (int i = 0; i < cfg.nost; i++) rp_batch_free(&per[i]);
+        free(per);
+        if (rc) return rc;
+    }
+    attr_t na;
+    rc = mdt_set_size(path, size, 1, &na);
+    if (rc == 0) ac_update_size(path, na.size, 1);
+    return rc;
+}
+
+int fs_remove_file(const char *path) {
+    /* No lookup first: the MDT's unlink answers NOT_FOUND / IS_DIR itself
+     * and returns the entry (layout, size) the stripes are deleted by. The
+     * lookup made every delete two MDT round trips -- mdtest's delete
+     * phases ran at half the MDTs' request rate (2 x i3en, 2026-10-25). */
+    attr_t e;
+    int rc = mdt_unlink(path, 0, &e);
+    if (rc == 0 || rc == -ENOENT) ac_put(path, NULL);
+    if (rc) return rc;
+    if (e.inl && !e.frozen) return 0;  /* the bytes went away with the MDT entry */
+    if ((e.size > 0 || e.frozen) && e.has_layout && e.ss) {
+        uint64_t n = (e.size + e.ss - 1) / e.ss;
+        if (!n) n = 1;
+        rp_batch_t *per = calloc((size_t)cfg.nost, sizeof(*per));
+        for (int i = 0; i < cfg.nost; i++) rp_batch_init(&per[i]);
+        for (uint64_t idx = 0; idx < n; idx++) {  /* one BATCH per OST, not one request per stripe */
+            char key[4200];
+            stripe_key(key, sizeof(key), path, idx);
+            rp_batch_add(&per[ost_for_stripe(&e, idx)], RP_DELETE, key, NULL, 0, NULL, 0);
+        }
+        rc = run_batches(per, 1);
+        for (int i = 0; i < cfg.nost; i++) rp_batch_free(&per[i]);
+        free(per);
+    }
+    return rc;
+}
+
+/* ---- one-sided reads ----
+ * A lease (rp_lease_t) per stripe object, in a direct-mapped cache keyed
+ * by the stripe key; a read RDMA READs the bytes straight out of the OST's
+ * registered copy and validates its seqlock. Anything stale (the object
+ * rewritten, truncated, deleted, evicted) fails validation, the lease is
+ * dropped and taken again once, then the read goes by RPC. The OST's CPU
+ * sees one small LEASE request per stripe instead of every read. */
+#define LEASE_SLOTS 65536
+typedef struct { char *key; rp_lease_t l; } lease_slot_t;
+static lease_slot_t g_lease[LEASE_SLOTS];
+static pthread_mutex_t g_lease_lk[256];
+static pthread_once_t g_lease_once = PTHREAD_ONCE_INIT;
+static void lease_init(void) { for (int i = 0; i < 256; i++) pthread_mutex_init(&g_lease_lk[i], NULL); }
+static uint32_t lease_idx(const char *key) { return strhash(key) & (LEASE_SLOTS - 1); }
+
+static int lease_get(const char *key, rp_lease_t *out) {
+    uint32_t i = lease_idx(key);
+    pthread_mutex_lock(&g_lease_lk[i & 255]);
+    int ok = g_lease[i].key && !strcmp(g_lease[i].key, key);
+    if (ok) *out = g_lease[i].l;
+    pthread_mutex_unlock(&g_lease_lk[i & 255]);
+    return ok ? 0 : -ENOENT;
+}
+static void lease_put(const char *key, const rp_lease_t *l) {
+    uint32_t i = lease_idx(key);
+    pthread_mutex_lock(&g_lease_lk[i & 255]);
+    if (!g_lease[i].key || strcmp(g_lease[i].key, key)) { free(g_lease[i].key); g_lease[i].key = xstrdup(key); }
+    g_lease[i].l = *l;
+    pthread_mutex_unlock(&g_lease_lk[i & 255]);
+}
+static void lease_drop(const char *key) {
+    uint32_t i = lease_idx(key);
+    pthread_mutex_lock(&g_lease_lk[i & 255]);
+    if (g_lease[i].key && !strcmp(g_lease[i].key, key)) { free(g_lease[i].key); g_lease[i].key = NULL; }
+    pthread_mutex_unlock(&g_lease_lk[i & 255]);
+}
+
+/* bytes [off, off+len) of the object into dst (arena memory): 0 and *got
+ * (short at the object's end), -ENOENT (no such object), or -EAGAIN: no
+ * one-sided path for this read, use the RPC */
+static int direct_read_mem(rp_peer_t *p, const char *key, uint64_t off, size_t len, uint8_t *dst, roce_mem_t *dmem,
+                           size_t *got);
+static int direct_read(rp_peer_t *p, const char *key, uint64_t off, size_t len, uint8_t *dst, size_t *got) {
+    return direct_read_mem(p, key, off, len, dst, NULL, got);
+}
+static int direct_read_mem(rp_peer_t *p, const char *key, uint64_t off, size_t len, uint8_t *dst, roce_mem_t *dmem,
+                           size_t *got) {
+    if (!cfg.direct_read || atomic_load(&p->no_lease)) return -EAGAIN;
+    pthread_once(&g_lease_once, lease_init);
+    rp_lease_t l;
+    int have = lease_get(key, &l) == 0;
+    for (int attempt = 0; attempt < 2; attempt++) {
+        if (!have) {
+            int rc = rp_ost_lease(p, key, &l);
+            if (rc == -ENOTSUP) { atomic_store(&p->no_lease, 1); return -EAGAIN; }
+            if (rc == -ENOENT) return -ENOENT;
+            if (rc) return -EAGAIN;
+            lease_put(key, &l);
+            have = 1;
+        }
+        size_t n = off >= l.size ? 0 : (size_t)(l.size - off < len ? l.size - off : len);
+        int rc = rp_ost_read_direct_mem(p, &l, off, n, dst, dmem);
+        if (rc == 0) { *got = n; return 0; }
+        if (rc != -EAGAIN) return -EAGAIN;
+        lease_drop(key);
+        have = 0;
+    }
+    return -EAGAIN;
+}
+
+/* Exact-range reads for non-sequential access (ior-hard: 47008-byte pieces
+ * all over a shared file): READ_AT moves only the bytes asked for, instead
+ * of whole 1 MiB stripes into a cache that the next read will not use. */
+typedef struct {
+    group_t *g;
+    const char *path;
+    const attr_t *a;
+    uint64_t idx, lo, hi;
+    uint8_t *dst;
+} range_read_t;
+
+static void range_read_task(void *arg) {
+    range_read_t *t = arg;
+    char key[4200];
+    stripe_key(key, sizeof(key), t->path, t->idx);
+    rp_resp_t r;
+    uint64_t ver;
+    size_t want = (size_t)(t->hi - t->lo), got = 0;
+    rp_peer_t *peer = &g_osts[ost_for_stripe(t->a, t->idx)];
+    int rc = -EAGAIN;
+    uint8_t *tmp = cfg.direct_read ? rp_bulk_alloc(want) : NULL;
+    if (tmp) {
+        rc = direct_read(peer, key, t->lo, want, tmp, &got);
+        if (rc == 0) memcpy(t->dst, tmp, got);
+        rp_bulk_free(tmp);
+    }
+    if (rc == -EAGAIN) {
+        got = 0;
+        rc = rp_ost_read_at(peer, key, t->lo, (uint32_t)want, 0, &ver, &r);
+        if (rc == 0) {
+            got = r.vlen - 8 < want ? r.vlen - 8 : want;
+            memcpy(t->dst, r.val + 8, got);
+            rp_resp_free(&r);
+        }
+    }
+    if (rc == -ENOENT) rc = 0;  /* a hole */
+    if (got < want) memset(t->dst + got, 0, want - got);
+    group_done(t->g, rc);
+}
+
+int fs_read_direct(const char *path, const attr_t *a, uint64_t off, size_t len, uint8_t *out) {
+    uint64_t end = off + len, first = off / a->ss, last = (end - 1) / a->ss;
+    int n = (int)(last - first + 1);
+    range_read_t *tasks = calloc((size_t)n, sizeof(*tasks));
+    void **args = xmalloc((size_t)n * sizeof(void *));
+    group_t g;
+    group_init(&g, n);
+    for (int i = 0; i < n; i++) {
+        uint64_t idx = first + (uint64_t)i, s0 = idx * a->ss;
+        uint64_t lo = off > s0 ? off : s0, hi = end < s0 + a->ss ? end : s0 + a->ss;
+        tasks[i] = (range_read_t){&g, path, a, idx, lo - s0, hi - s0, out + (lo - off)};
+        args[i] = &tasks[i];
+    }
+    int rc = run_all(range_read_task, args, n, &g);
+    free(tasks);
+    free(args);
+    return rc;
+}
+
+/* ---- stride readahead (Lustre's "stride read-ahead") ----
+ * A reader that steps through a file in equal pieces at a constant stride
+ * (IOR hard: 47008 bytes every nranks * 47008) asked for one piece at a time
+ * and waited each one out: one request in flight per rank, so its rate was
+ * one over the latency -- half of it when the pieces sit on the NVMe tier
+ * instead of in OST memory. Once two steps in a row have the same stride
+ * and length, the next g_stride_ra pieces are read by the pool while the
+ * program copies the current one. Nothing is kept beyond the open file: the
+ * pieces are read from the OSTs after the open, a write or truncate through
+ * this fd (or any on this client) drops them, and a broken pattern ends it. */
+#define RA_SLOTS 64
+int g_stride_ra = 16;  /* env ROCEPOOL_STRIDE_RA: pieces read ahead, 0 = off */
+static atomic_ullong g_ra_issued, g_ra_hits, g_ra_wasted;
+
+typedef struct stride_ra stride_ra_t;
+typedef struct {
+    stride_ra_t *ra;
+    const char *path;
+    attr_t a;
+    uint64_t off;
+    size_t len, cap;
+    uint8_t *buf;
+    int busy, done, rc;
+    unsigned gen;
+} ra_slot_t;
+
+struct stride_ra {
+    pthread_mutex_t lk;
+    pthread_cond_t cv;
+    unsigned gen;
+    int inflight;
+    uint64_t last_off, next;
+    size_t last_len;
+    int64_t stride;
+    int hits;
+    ra_slot_t s[RA_SLOTS];
+};
+
+static void ra_task(void *arg) {
+    ra_slot_t *s = arg;
+    uint64_t end = s->off + s->len, first = s->off / s->a.ss, last = (end - 1) / s->a.ss;
+    group_t g;
+    group_init(&g, (int)(last - first + 1));
+    /* the stripes one after another, here: a pool task must not wait on
+     * tasks queued behind it */
+    for (uint64_t idx = first; idx <= last; idx++) {
+        uint64_t s0 = idx * s->a.ss, lo = s->off > s0 ? s->off : s0, hi = end < s0 + s->a.ss ? end : s0 + s->a.ss;
+        range_read_t t = {&g, s->path, &s->a, idx, lo - s0, hi - s0, s->buf + (lo - s->off)};
+        range_read_task(&t);
+    }
+    int rc = group_wait(&g);
+    stride_ra_t *ra = s->ra;
+    pthread_mutex_lock(&ra->lk);
+    s->rc = rc;
+    s->done = 1;
+    ra->inflight--;
+    pthread_cond_broadcast(&ra->cv);
+    pthread_mutex_unlock(&ra->lk);
+}
+
+/* every piece read so far is forgotten (a write, a truncate, a new pattern) */
+static void ra_drop(stride_ra_t *ra) {
+    if (!ra) return;
+    pthread_mutex_lock(&ra->lk);
+    ra->gen++;
+    ra->hits = 0;
+    ra->stride = 0;
+    ra->last_len = 0;
+    pthread_mutex_unlock(&ra->lk);
+}
+
+static void ra_free(stride_ra_t *ra) {
+    if (!ra) return;
+    pthread_mutex_lock(&ra->lk);
+    while (ra->inflight) pthread_cond_wait(&ra->cv, &ra->lk);
+    pthread_mutex_unlock(&ra->lk);
+    for (int i = 0; i < RA_SLOTS; i++) {
+        if (ra->s[i].busy && ra->s[i].gen == ra->gen) atomic_fetch_add(&g_ra_wasted, 1);
+        free(ra->s[i].buf);
+    }
+    pthread_mutex_destroy(&ra->lk);
+    pthread_cond_destroy(&ra->cv);
+    free(ra);
+}
+
+void rp_stride_ra_stats(uint64_t *issued, uint64_t *hits, uint64_t *wasted) {
+    *issued = atomic_load(&g_ra_issued);
+    *hits = atomic_load(&g_ra_hits);
+    *wasted = atomic_load(&g_ra_wasted);
+}
+
+/* caller holds h->lk; a is the file's current attributes, off + len <= a->size */
+static int ra_read(handle_t *h, const attr_t *a, uint64_t off, size_t len, uint8_t *out) {
+    if (g_stride_ra <= 0) return fs_read_direct(h->path, a, off, len, out);
+    if (!h->ra) {
+        stride_ra_t *n = calloc(1, sizeof(*n));
+        if (!n) return fs_read_direct(h->path, a, off, len, out);
+        pthread_mutex_init(&n->lk, NULL);
+        pthread_cond_init(&n->cv, NULL);
+        for (int i = 0; i < RA_SLOTS; i++) n->s[i].ra = n;
+        h->ra = n;
+    }
+    stride_ra_t *ra = h->ra;
+    int depth = g_stride_ra < RA_SLOTS ? g_stride_ra : RA_SLOTS;
+    pthread_mutex_lock(&ra->lk);
+    int64_t st = (int64_t)(off - ra->last_off);
+    if (ra->last_len == len && st == ra->stride && st >= (int64_t)len) {
+        ra->hits++;
+    } else {
+        if (ra->hits) ra->gen++;  /* a pattern ended: what it read ahead is not wanted */
+        ra->hits = 0;
+        ra->stride = ra->last_len == len && st >= (int64_t)len ? st : 0;
+        ra->next = 0;
+    }
+    ra->last_off = off;
+    ra->last_len = len;
+    ra_slot_t *m = NULL;
+    for (int i = 0; i < RA_SLOTS && !m; i++) {
+        ra_slot_t *s = &ra->s[i];
+        if (s->busy && s->gen == ra->gen && s->off == off && s->len >= len) m = s;
+    }
+    if (ra->hits >= 1) {
+        uint64_t from = off + (uint64_t)ra->stride, lim = off + (uint64_t)depth * (uint64_t)ra->stride;
+        if (ra->next < from) ra->next = from;
+        for (int i = 0; i < RA_SLOTS; i++) {  /* pieces behind us, or of an old pattern, once their reads are back */
+            ra_slot_t *s = &ra->s[i];
+            if (s->busy && s != m && s->done && (s->gen != ra->gen || s->off <= off)) {
+                if (s->gen == ra->gen) atomic_fetch_add(&g_ra_wasted, 1);
+                s->busy = 0;
+            }
+        }
+        for (int i = 0; i < RA_SLOTS && ra->next <= lim && ra->next < a->size; i++) {
+            ra_slot_t *s = &ra->s[i];
+            if (s->busy) continue;
+            size_t n = a->size - ra->next < len ? (size_t)(a->size - ra->next) : len;
+            if (s->cap < n) {
+                uint8_t *b = realloc(s->buf, n);
+                if (!b) break;
+                s->buf = b;
+                s->cap = n;
+            }
+            s->path = h->path;
+            s->a = *a;
+            s->off = ra->next;
+            s->len = n;
+            s->busy = 1;
+            s->done = 0;
+            s->rc = 0;
+            s->gen = ra->gen;
+            ra->inflight++;
+            ra->next += (uint64_t)ra->stride;
+            atomic_fetch_add(&g_ra_issued, 1);
+            pool_submit(ra_task, s);
+        }
+    }
+    if (m) {
+        while (!m->done) pthread_cond_wait(&ra->cv, &ra->lk);
+        int rc = m->rc;
+        if (!rc) memcpy(out, m->buf, len);
+        m->busy = 0;
+        pthread_mutex_unlock(&ra->lk);
+        if (!rc) { atomic_fetch_add(&g_ra_hits, 1); return 0; }
+        return fs_read_direct(h->path, a, off, len, out);  /* its error is this read's, read again */
+    }
+    pthread_mutex_unlock(&ra->lk);
+    return fs_read_direct(h->path, a, off, len, out);
+}
+
+/* ---------------------------------------------------------------- device (GPU) memory
+ * GPUDirect-Storage-style I/O: a file range straight into / out of device
+ * memory. Every stripe goes one-sided (an OST lease + an RDMA READ that
+ * lands in the GPU; the OST RDMA READs a write's data out of the GPU), all
+ * stripes in parallel across the OSTs. What cannot go that way -- inline
+ * files (bytes in the MDT entry), an OST without leases, a buffer the NIC
+ * could not register -- bounces through host memory with the runtime's
+ * copy (cuMemcpy), counted separately so a benchmark shows which it got. */
+static atomic_ullong g_dev_direct, g_dev_bounced;
+void fs_dev_stats(uint64_t *direct, uint64_t *bounced) {
+    *direct = atomic_load(&g_dev_direct);
+    *bounced = atomic_load(&g_dev_bounced);
+}
+
+typedef struct {
+    group_t *g;
+    const char *path;
+    const attr_t *a;
+    uint64_t idx, lo, hi;
+    const rp_devbuf_t *b;
+    size_t boff;
+} dev_read_t;
+
+static void dev_read_task(void *arg) {
+    dev_read_t *t = arg;
+    char key[4200];
+    stripe_key(key, sizeof(key), t->path, t->idx);
+    rp_peer_t *peer = &g_osts[ost_for_stripe(t->a, t->idx)];
+    size_t want = (size_t)(t->hi - t->lo), got = 0;
+    uint8_t *dst = (uint8_t *)t->b->dev + t->boff;
+    int rc = -EAGAIN;
+    if (t->b->mem) {
+        rc = direct_read_mem(peer, key, t->lo, want, dst, t->b->mem, &got);
+        if (rc == 0) atomic_fetch_add(&g_dev_direct, got);
+    }
+    if (rc == -EAGAIN) {
+        rp_resp_t r;
+        uint64_t ver;
+        got = 0;
+        rc = rp_ost_read_at(peer, key, t->lo, (uint32_t)want, 0, &ver, &r);
+        if (rc == 0) {
+            got = r.vlen - 8 < want ? r.vlen - 8 : want;
+            if (got) rc = t->b->ops->to_dev(dst, r.val + 8, got, t->b->ops->ctx);
+            rp_resp_free(&r);
+            atomic_fetch_add(&g_dev_bounced, got);
+        }
+    }
+    if (rc == -ENOENT) rc = 0;  /* a hole */
+    if (rc == 0 && got < want) rc = t->b->ops->zero(dst + got, want - got, t->b->ops->ctx);
+    group_done(t->g, rc);
+}
+
+ssize_t fs_read_dev(const char *path, uint64_t off, size_t len, const rp_devbuf_t *b, size_t boff) {
+    if (boff > b->len || len > b->len - boff) return -EINVAL;
+    attr_t a;
+    int rc = fs_getattr(path, &a);
+    if (rc) return rc;
+    if (a.is_dir) return -EISDIR;
+    if (off >= a.size || !len) return 0;
+    if (len > a.size - off) len = (size_t)(a.size - off);
+    if (a.inl) {  /* Data-on-MDT: the bytes come with the entry, into host memory */
+        rp_resp_t r;
+        const uint8_t *d;
+        size_t n;
+        rc = mdt_inline_read(path, 0, off, (uint32_t)(len > UINT32_MAX ? UINT32_MAX : len), &a, &r, &d, &n);
+        if (rc) return rc;
+        if (a.inl) {
+            if (n > len) n = len;
+            rc = n ? b->ops->to_dev((uint8_t *)b->dev + boff, d, n, b->ops->ctx) : 0;
+            rp_resp_free(&r);
+            atomic_fetch_add(&g_dev_bounced, n);
+            return rc ? rc : (ssize_t)n;
+        }
+        rp_resp_free(&r);  /* spilled meanwhile: read the stripes */
+        ac_del(path);
+        if ((rc = fs_getattr(path, &a)) != 0) return rc;
+        if (off >= a.size) return 0;
+        if (len > a.size - off) len = (size_t)(a.size - off);
+    }
+    if (!a.has_layout || !a.ss) return -EIO;
+    uint64_t end = off + len, first = off / a.ss, last = (end - 1) / a.ss;
+    int n = (int)(last - first + 1);
+    dev_read_t *tasks = calloc((size_t)n, sizeof(*tasks));
+    void **args = xmalloc((size_t)n * sizeof(void *));
+    group_t g;
+    group_init(&g, n);
+    for (int i = 0; i < n; i++) {
+        uint64_t idx = first + (uint64_t)i, s0 = idx * a.ss;
+        uint64_t lo = off > s0 ? off : s0, hi = end < s0 + a.ss ? end : s0 + a.ss;
+        tasks[i] = (dev_read_t){&g, path, &a, idx, lo - s0, hi - s0, b, boff + (size_t)(lo - off)};
+        args[i] = &tasks[i];
+    }
+    rc = run_all(dev_read_task, args, n, &g);
+    free(tasks);
+    free(args);
+    return rc ? rc : (ssize_t)len;
+}
+
+/* through host memory: the device range copied out in pieces, written as usual */
+static ssize_t write_dev_bounced(const char *path, uint64_t off, size_t len, const rp_devbuf_t *b, size_t boff) {
+    size_t chunk = 16u << 20, done = 0;
+    uint8_t *tmp = rp_bulk_alloc(len < chunk ? len : chunk);
+    if (!tmp) return -ENOMEM;
+    int rc = 0;
+    while (done < len && !rc) {
+        size_t n = len - done < chunk ? len - done : chunk;
+        rc = b->ops->from_dev(tmp, (const uint8_t *)b->dev + boff + done, n, b->ops->ctx);
+        if (!rc) rc = fs_write_range(path, off + done, tmp, n);
+        if (!rc) { done += n; atomic_fetch_add(&g_dev_bounced, n); }
+    }
+    rp_bulk_free(tmp);
+    return rc ? rc : (ssize_t)len;
+}
+
+ssize_t fs_write_dev(const char *path, uint64_t off, size_t len, const rp_devbuf_t *b, size_t boff) {
+    if (boff > b->len || len > b->len - boff) return -EINVAL;
+    if (!len) return 0;
+    attr_t a;
+    int rc = fs_getattr(path, &a);
+    if (rc == -ENOENT) rc = fs_create_file(path, &a);
+    if (rc) return rc;
+    if (a.is_dir) return -EISDIR;
+    if (!b->mem || (a.inl && off + len <= inline_hint(&a)))
+        return write_dev_bounced(path, off, len, b, boff);  /* small: into the MDT entry */
+    /* striped: one segment per stripe, read by each OST out of the device
+     * (fs_write_segs spills an inline file first: device bytes never go
+     * through the CPU) */
+    wseg_t seg = { (const uint8_t *)b->dev + boff, len, b->mem };
+    rc = fs_write_segs(path, off, &seg, 1);
+    if (rc == 0) { atomic_fetch_add(&g_dev_direct, len); return (ssize_t)len; }
+    /* the NIC could not reach the device memory (its registration failed on
+     * this host): the same bytes again through host memory -- rewriting the
+     * range is idempotent */
+    if (rc == -EIO || rc == -EFAULT) return write_dev_bounced(path, off, len, b, boff);
+    return rc;
+}
+
+/* ---------------------------------------------------------------- stripe read cache
+ * Per open file (fs/posix_api.py StripeReadCache): whole stripes, LRU, with
+ * readahead into the stripes that follow. Refcounted: readahead tasks may
+ * outlive the handle. clear() bumps the generation so in-flight fetches
+ * from before a write are dropped. */
+
+scache_t *sc_new(const char *path, const attr_t *a) {
+    scache_t *c = calloc(1, sizeof(*c));
+    pthread_mutex_init(&c->lk, NULL);
+    pthread_cond_init(&c->cv, NULL);
+    atomic_init(&c->refs, 1);
+    c->n = cfg.scache_slots > 0 ? cfg.scache_slots : SCACHE_SLOTS;
+    c->s = xmalloc(sizeof(sc_slot) * (size_t)c->n);
+    memset(c->s, 0, sizeof(sc_slot) * (size_t)c->n);
+    for (int i = 0; i < c->n; i++) c->s[i].idx = -1;
+    c->path = xstrdup(path);
+    c->a = *a;
+    return c;
+}
+
+void sc_unref(scache_t *c) {
+    if (atomic_fetch_sub(&c->refs, 1) != 1) return;
+    for (int i = 0; i < c->n; i++) rp_bulk_free(c->s[i].data);
+    free(c->s);
+    free(c->path);
+    pthread_mutex_destroy(&c->lk);
+    pthread_cond_destroy(&c->cv);
+    free(c);
+}
+
+void sc_clear(scache_t *c) {
+    pthread_mutex_lock(&c->lk);
+    c->gen++;
+    for (int i = 0; i < c->n; i++) {
+        rp_bulk_free(c->s[i].data);
+        c->s[i].data = NULL;
+        c->s[i].idx = -1;
+        c->s[i].state = 0;
+    }
+    pthread_cond_broadcast(&c->cv);
+    pthread_mutex_unlock(&c->lk);
+}
+
+static sc_slot *sc_find(scache_t *c, int64_t idx) {
+    for (int i = 0; i < c->n; i++)
+        if (c->s[i].idx == idx) return &c->s[i];
+    return NULL;
+}
+
+/* caller holds lk: a slot to mark in flight for idx, evicting the LRU ready
+ * one; NULL if every slot is in flight (then fetch without caching) */
+static sc_slot *sc_claim(scache_t *c, int64_t idx) {
+    sc_slot *victim = NULL;
+    for (int i = 0; i < c->n; i++) {
+        sc_slot *s = &c->s[i];
+        if (s->idx == -1) { victim = s; break; }
+        if (s->state == 2 && (!victim || s->lru < victim->lru)) victim = s;
+    }
+    if (!victim) return NULL;
+    rp_bulk_free(victim->data);
+    victim->data = NULL;
+    victim->len = 0;
+    victim->idx = idx;
+    victim->state = 1;
+    victim->gen = c->gen;
+    return victim;
+}
+
+/* fetch stripe idx of path (hole -> empty) */
+static int fetch_stripe(const char *path, const attr_t *a, uint64_t idx, uint8_t **data, size_t *len) {
+    char key[4200];
+    stripe_key(key, sizeof(key), path, idx);
+    rp_peer_t *peer = &g_osts[ost_for_stripe(a, idx)];
+    if (cfg.direct_read && !atomic_load(&peer->no_lease)) {
+        /* whole object, one-sided: the lease says how big it is */
+        uint8_t *buf = rp_bulk_alloc(a->ss);
+        if (buf) {
+            size_t got = 0;
+            int rc = direct_read(peer, key, 0, (size_t)a->ss, buf, &got);
+            if (rc == 0) { *data = buf; *len = got; return 0; }
+            rp_bulk_free(buf);
+            if (rc == -ENOENT) { *data = NULL; *len = 0; return 0; }
+        }
+    }
+    resp_t r;
+    int rc = ost_get(peer, key, &r);
+    if (rc == -ENOENT) { *data = NULL; *len = 0; return 0; }
+    if (rc) return rc;
+    *data = xmalloc(r.vlen);
+    memcpy(*data, r.val, r.vlen);
+    *len = r.vlen;
+    resp_free(&r);
+    return 0;
+}
+
+static void sc_store(scache_t *c, int64_t idx, uint64_t gen, uint8_t *data, size_t len, int ok) {
+    pthread_mutex_lock(&c->lk);
+    sc_slot *s = sc_find(c, idx);
+    if (s && s->state == 1 && s->gen == gen && gen == c->gen) {
+        if (ok) {
+            s->data = data;
+            s->len = len;
+            s->state = 2;
+            s->lru = ++c->tick;
+            data = NULL;
+        } else {
+            s->idx = -1;  /* failed: let a reader retry and see the error */
+            s->state = 0;
+        }
+    }
+    pthread_cond_broadcast(&c->cv);
+    pthread_mutex_unlock(&c->lk);
+    rp_bulk_free(data);
+}
+
+typedef struct {
+    scache_t *c;
+    int64_t idx;
+    uint64_t gen;
+    group_t *g;   /* NULL for readahead */
+} sc_fetch_t;
+
+static void sc_fetch_task(void *arg) {
+    sc_fetch_t *f = arg;
+    uint8_t *d = NULL;
+    size_t n = 0;
+    pthread_mutex_lock(&f->c->lk);
+    attr_t a = f->c->a;  /* the layout never changes; the size may */
+    pthread_mutex_unlock(&f->c->lk);
+    int rc = fetch_stripe(f->c->path, &a, (uint64_t)f->idx, &d, &n);
+    sc_store(f->c, f->idx, f->gen, d, n, rc == 0);
+    if (f->g) {
+        group_done(f->g, rc);
+    } else {
+        sc_unref(f->c);
+        free(f);
+    }
+}
+
+/* Serve [off, off+len) of the file into out (len already clamped to size). */
+int sc_read(scache_t *c, const attr_t *a, uint64_t off, size_t len, uint8_t *out) {
+    uint64_t end = off + len, first = off / a->ss, last = (end - 1) / a->ss;
+    int n = (int)(last - first + 1);
+    sc_fetch_t *fs = calloc((size_t)n, sizeof(*fs));
+    void **args = xmalloc((size_t)n * sizeof(void *));
+    uint8_t **direct = calloc((size_t)n, sizeof(uint8_t *));  /* uncached fetches */
+    size_t *dlen = calloc((size_t)n, sizeof(size_t));
+    int nfetch = 0, rc = 0;
+    group_t g;
+    /* 1. claim what is missing */
+    pthread_mutex_lock(&c->lk);
+    for (int i = 0; i < n; i++) {
+        int64_t idx = (int64_t)(first + (uint64_t)i);
+        sc_slot *s = sc_find(c, idx);
+        if (s) continue;
+        s = sc_claim(c, idx);
+        if (!s) continue;  /* every slot busy: step 3 fetches it directly */
+        fs[nfetch] = (sc_fetch_t){c, idx, c->gen, &g};
+        args[nfetch] = &fs[nfetch];
+        nfetch++;
+    }
+    pthread_mutex_unlock(&c->lk);
+    /* 2. fetch them in parallel */
+    if (nfetch) {
+        group_init(&g, nfetch);
+        rc = run_all(sc_fetch_task, args, nfetch, &g);
+    }
+    /* 3. assemble, waiting for stripes someone else (readahead) is fetching */
+    for (int i = 0; i < n && rc == 0; i++) {
+        uint64_t idx = first + (uint64_t)i, s0 = idx * a->ss;
+        uint64_t lo = off > s0 ? off : s0, hi = end < s0 + a->ss ? end : s0 + a->ss;
+        uint8_t *dst = out + (lo - off);
+        pthread_mutex_lock(&c->lk);
+        sc_slot *s;
+        for (;;) {
+            s = sc_find(c, (int64_t)idx);
+            if (!s || s->state == 2) break;
+            pthread_cond_wait(&c->cv, &c->lk);
+        }
+        if (s) {
+            s->lru = ++c->tick;
+            size_t have = s->len > lo - s0 ? s->len - (lo - s0) : 0;
+            size_t want = hi - lo, take = have < want ? have : want;
+            if (take) memcpy(dst, s->data + (lo - s0), take);
+            if (take < want) memset(dst + take, 0, want - take);
+            pthread_mutex_unlock(&c->lk);
+            continue;
+        }
+        pthread_mutex_unlock(&c->lk);
+        /* not cacheable (all slots busy) or dropped by a clear: fetch directly */
+        rc = fetch_stripe(c->path, a, idx, &direct[i], &dlen[i]);
+        if (rc) break;
+        size_t have = dlen[i] > lo - s0 ? dlen[i] - (lo - s0) : 0;
+        size_t want = hi - lo, take = have < want ? have : want;
+        if (take) memcpy(dst, direct[i] + (lo - s0), take);
+        if (take < want) memset(dst + take, 0, want - take);
+    }
+    for (int i = 0; i < n; i++) rp_bulk_free(direct[i]);
+    free(direct);
+    free(dlen);
+    free(fs);
+    free(args);
+    if (rc) return rc;
+    /* 4. readahead the following stripes (they live on other OSTs) */
+    int ra = cfg.readahead < 0 ? 2 * cfg.nost : cfg.readahead;
+    if (ra > c->n - 1) ra = c->n - 1;  /* never more in flight than the cache can hold */
+    if (ra > 0 && a->size) {
+        uint64_t last_stripe = (a->size - 1) / a->ss;
+        pthread_mutex_lock(&c->lk);
+        for (uint64_t idx = last + 1; idx <= last_stripe && idx <= last + (uint64_t)ra; idx++) {
+            if (sc_find(c, (int64_t)idx)) continue;
+            sc_slot *s = sc_claim(c, (int64_t)idx);
+            if (!s) break;
+            sc_fetch_t *f = xmalloc(sizeof(*f));
+            *f = (sc_fetch_t){c, (int64_t)idx, c->gen, NULL};
+            atomic_fetch_add(&c->refs, 1);
+            pool_submit(sc_fetch_task, f);
+        }
+        pthread_mutex_unlock(&c->lk);
+    }
+    return 0;
+}
+
+/* ---------------------------------------------------------------- handles */
+
+/* open file handles, so a truncate through any path/fd drops every open
+ * handle's cached stripes of that file */
+static handle_t **g_open;
+static size_t g_nopen, g_capopen;
+static pthread_mutex_t g_open_lk = PTHREAD_MUTEX_INITIALIZER;
+
+void open_register(handle_t *h) {
+    pthread_mutex_lock(&g_open_lk);
+    if (g_nopen == g_capopen) {
+        g_capopen = g_capopen ? 2 * g_capopen : 256;
+        g_open = realloc(g_open, g_capopen * sizeof(*g_open));
+    }
+    g_open[g_nopen++] = h;
+    pthread_mutex_unlock(&g_open_lk);
+}
+
+static void open_unregister(handle_t *h) {
+    pthread_mutex_lock(&g_open_lk);
+    for (size_t i = 0; i < g_nopen; i++)
+        if (g_open[i] == h) { g_open[i] = g_open[--g_nopen]; break; }
+    pthread_mutex_unlock(&g_open_lk);
+}
+
+void invalidate_open_caches(const char *path) {
+    pthread_mutex_lock(&g_open_lk);
+    for (size_t i = 0; i < g_nopen; i++)
+        if (g_open[i]->sc && !strcmp(g_open[i]->path, path)) {
+            sc_clear(g_open[i]->sc);
+            g_open[i]->pre_ok = 0;
+            g_open[i]->wr_end = 0;  /* a truncate: the size is the MDT's again */
+            ra_drop(g_open[i]->ra);
+        }
+    pthread_mutex_unlock(&g_open_lk);
+}
+
+/* What stat() must report on the client that is writing: a handle buffers
+ * writes (up to DIRTY_CAP, then write-behind), and the MDT learns the new
+ * size when they are flushed. A program that writes and then stats before
+ * closing (DuckDB checks a written file's size this way) would otherwise see
+ * a size short by the buffered tail. */
+int fs_stat(const char *path, attr_t *a) {
+    int rc = fs_getattr(path, a);
+    if (rc || a->is_dir) return rc;
+    pthread_mutex_lock(&g_open_lk);
+    for (size_t i = 0; i < g_nopen; i++)
+        if (g_open[i]->wr_end > a->size && !strcmp(g_open[i]->path, path)) a->size = g_open[i]->wr_end;
+    pthread_mutex_unlock(&g_open_lk);
+    return 0;
+}
+
+handle_t *handle_new(const char *path, int is_dir) {
+    handle_t *h = calloc(1, sizeof(*h));
+    h->is_dir = is_dir;
+    h->path = xstrdup(path);
+    pthread_mutex_init(&h->lk, NULL);
+    return h;
+}
+
+static int wb_wait(handle_t *h);
+
+void handle_free(handle_t *h) {
+    wb_wait(h);  /* a release always flushes first; this covers the paths that do not */
+    if (h->sc) open_unregister(h);
+    ra_free(h->ra);
+    for (size_t i = 0; i < h->ndirty; i++) rp_bulk_free(h->dirty[i].base ? h->dirty[i].base : h->dirty[i].data);
+    free(h->dirty);
+    for (size_t i = 0; i < h->ndents; i++) free(h->dents[i].name);
+    free(h->dents);
+    if (h->sc) sc_unref(h->sc);
+    free(h->pre);
+    free(h->path);
+    pthread_mutex_destroy(&h->lk);
+    free(h);
+}
+
+/* caller holds h->lk. Coalesce this fd's writes into runs (in write order
+ * for overlaps: later writes win) and send each run with one striped
+ * write_range, like fs/fuse_lowlevel.py _flush_handle. */
+static int flush_now(handle_t *h) {
+    if (!h->ndirty) return 0;
+    dirty_t *v = h->dirty;
+    size_t n = h->ndirty;
+    /* stable merge sort of indices by offset */
+    size_t *order = xmalloc(n * sizeof(size_t));
+    for (size_t i = 0; i < n; i++) order[i] = i;
+    /* simple stable merge sort on indices */
+    size_t *tmp = xmalloc(n * sizeof(size_t));
+    for (size_t w = 1; w < n; w *= 2)
+        for (size_t lo = 0; lo < n; lo += 2 * w) {
+            size_t mid = lo + w < n ? lo + w : n, hi = lo + 2 * w < n ? lo + 2 * w : n;
+            size_t i = lo, j = mid, k = lo;
+            while (i < mid && j < hi) tmp[k++] = v[order[j]].off < v[order[i]].off ? order[j++] : order[i++];
+            while (i < mid) tmp[k++] = order[i++];
+            while (j < hi) tmp[k++] = order[j++];
+            memcpy(order + lo, tmp + lo, (hi - lo) * sizeof(size_t));
+        }
+    free(tmp);
+    int rc = 0;
+    size_t i = 0;
+    {   /* every run clean (no overlaps): all of them at once */
+        size_t nr = 0, cap = 16;
+        wrun_t *runs = xmalloc(cap * sizeof(*runs));
+        wseg_t *segs = xmalloc(n * sizeof(*segs));
+        int clean = 1;
+        for (size_t a = 0; a < n && clean; a++) {
+            dirty_t *d = &v[order[a]];
+            segs[a] = (wseg_t){ d->data, d->len, NULL };
+            if (a && d->off < v[order[a - 1]].off + v[order[a - 1]].len) { clean = 0; break; }
+            if (a && d->off == v[order[a - 1]].off + v[order[a - 1]].len && runs[nr - 1].nsegs < 1 << 20) {
+                runs[nr - 1].nsegs++;
+                continue;
+            }
+            if (nr == cap) { cap *= 2; runs = xrealloc(runs, cap * sizeof(*runs)); }
+            runs[nr++] = (wrun_t){ d->off, &segs[a], 1 };
+        }
+        if (clean && nr > 1) {
+            rc = fs_write_runs(h->path, runs, (int)nr);
+            if (rc == 0) i = n;
+        }
+        free(runs);
+        free(segs);
+        if (clean && nr > 1 && rc) {  /* nothing known written: all of it stays buffered */
+            free(order);
+            if (h->sc) sc_clear(h->sc);
+            return rc;
+        }
+    }
+    while (i < n && rc == 0) {
+        uint64_t run_start = v[order[i]].off, run_end = run_start + v[order[i]].len;
+        size_t j = i + 1;
+        while (j < n && v[order[j]].off <= run_end) {
+            uint64_t e = v[order[j]].off + v[order[j]].len;
+            if (e > run_end) run_end = e;
+            j++;
+        }
+        size_t rl = (size_t)(run_end - run_start);
+        size_t cnt = j - i;
+        int clean = 1;  /* pieces exactly adjacent, no overlap: send them where they are */
+        for (size_t a = i + 1; a < j && clean; a++)
+            if (v[order[a]].off != v[order[a - 1]].off + v[order[a - 1]].len) clean = 0;
+        if (clean) {
+            wseg_t *segs = xmalloc(cnt * sizeof(*segs));
+            for (size_t a = 0; a < cnt; a++) segs[a] = (wseg_t){ v[order[i + a]].data, v[order[i + a]].len, NULL };
+            rc = fs_write_segs(h->path, run_start, segs, (int)cnt);
+            free(segs);
+        } else {
+            /* overlapping writes: apply in original order so a later one
+             * wins, into arena memory (read in place by the OSTs) */
+            uint8_t *run = rp_bulk_alloc(rl);
+            if (!run) run = xmalloc(rl);
+            memset(run, 0, rl);
+            size_t *byorig = xmalloc(cnt * sizeof(size_t));
+            memcpy(byorig, order + i, cnt * sizeof(size_t));
+            for (size_t a = 1; a < cnt; a++) {  /* sort the run's members by original index */
+                size_t x = byorig[a], b = a;
+                while (b > 0 && byorig[b - 1] > x) { byorig[b] = byorig[b - 1]; b--; }
+                byorig[b] = x;
+            }
+            for (size_t a = 0; a < cnt; a++) {
+                dirty_t *d = &v[byorig[a]];
+                memcpy(run + (d->off - run_start), d->data, d->len);
+            }
+            free(byorig);
+            rc = fs_write_range(h->path, run_start, run, rl);
+            rp_bulk_free(run);
+        }
+        if (rc == 0) i = j;
+    }
+    /* Runs order[0..i) were written; anything from the failed run on stays
+     * buffered (in original order), so FLUSH/RELEASE retries it and reports
+     * the error at close instead of the data vanishing silently. */
+    uint8_t *keep = calloc(n, 1);
+    for (size_t k = i; k < n; k++) keep[order[k]] = 1;
+    free(order);
+    size_t w = 0;
+    h->dirty_bytes = 0;
+    for (size_t k = 0; k < n; k++) {
+        if (keep[k]) { v[w++] = v[k]; h->dirty_bytes += v[k].len; }
+        else rp_bulk_free(v[k].base ? v[k].base : v[k].data);
+    }
+    free(keep);
+    h->ndirty = w;
+    if (h->sc) sc_clear(h->sc);
+    return rc;
+}
+
+
+/* ---- write-behind ----
+ * handle_write hands a full buffer to a thread of its own and goes on
+ * buffering; one batch is in flight per handle, so batches reach the OSTs
+ * in write order (a later overlapping write still wins). Every explicit
+ * flush -- fsync, close, a read or stat or truncate through the fd -- first
+ * waits for the batch, so nothing is acknowledged durable before it is. */
+static void *wb_main(void *arg) {
+    handle_t *h = arg, t;
+    memset(&t, 0, sizeof(t));
+    t.path = h->path;
+    t.dirty = h->wb_dirty;
+    t.ndirty = h->wb_n;
+    t.capdirty = h->wb_cap;
+    h->wb_rc = flush_now(&t);
+    h->wb_dirty = t.dirty;  /* what is left of it (a failed run on) */
+    h->wb_n = t.ndirty;
+    return NULL;
+}
+
+/* caller holds h->lk */
+static int wb_wait(handle_t *h) {
+    if (!h->wb_on) return 0;
+    pthread_join(h->wb_thr, NULL);
+    h->wb_on = 0;
+    int rc = h->wb_rc;
+    if (h->wb_n) {  /* not written: back in front of the newer writes, retried by the next flush */
+        size_t n = h->wb_n + h->ndirty;
+        dirty_t *v = xmalloc((n ? n : 1) * sizeof(*v));
+        memcpy(v, h->wb_dirty, h->wb_n * sizeof(*v));
+        if (h->ndirty) memcpy(v + h->wb_n, h->dirty, h->ndirty * sizeof(*v));
+        for (size_t i = 0; i < h->wb_n; i++) h->dirty_bytes += h->wb_dirty[i].len;
+        free(h->dirty);
+        h->dirty = v;
+        h->ndirty = h->capdirty = n;
+    }
+    free(h->wb_dirty);
+    h->wb_dirty = NULL;
+    h->wb_n = h->wb_cap = 0;
+    if (h->sc) sc_clear(h->sc);
+    return rc;
+}
+
+static int wb_start(handle_t *h) {
+    int rc = wb_wait(h);
+    if (rc) return rc;  /* reported to this write; the data stays buffered */
+    h->wb_dirty = h->dirty;
+    h->wb_n = h->ndirty;
+    h->wb_cap = h->capdirty;
+    h->wb_rc = 0;
+    h->dirty = NULL;
+    h->ndirty = h->capdirty = h->dirty_bytes = 0;
+    if (pthread_create(&h->wb_thr, NULL, wb_main, h) == 0) { h->wb_on = 1; return 0; }
+    h->dirty = h->wb_dirty;  /* no thread: as before, the writer flushes */
+    h->ndirty = h->wb_n;
+    h->capdirty = h->wb_cap;
+    for (size_t i = 0; i < h->ndirty; i++) h->dirty_bytes += h->dirty[i].len;
+    h->wb_dirty = NULL;
+    h->wb_n = h->wb_cap = 0;
+    return flush_now(h);
+}
+
+int handle_flush(handle_t *h) {
+    int rc = wb_wait(h);
+    int rc2 = flush_now(h);  /* retries what a failed batch left too */
+    return rc2 ? rc2 : (h->ndirty ? rc : 0);
+}
+
+/* ---------------------------------------------------------------- handle I/O
+ * The library's own read/write through a handle (the interception library
+ * uses these; the FUSE daemon has zero-copy variants of the same logic). */
+int handle_write(handle_t *h, uint64_t off, const uint8_t *data, size_t len, uint8_t *base) {
+    ra_drop(h->ra);  /* this fd's reads ahead may predate this write */
+    if (off + len > h->wr_end) h->wr_end = off + len;
+    if (h->ndirty == h->capdirty) {
+        h->capdirty = h->capdirty ? 2 * h->capdirty : 64;
+        h->dirty = xrealloc(h->dirty, h->capdirty * sizeof(dirty_t));
+    }
+    dirty_t *d = &h->dirty[h->ndirty++];
+    d->off = off;
+    d->len = len;
+    if (base && len >= FUSE_BUF_SIZE / 2) {
+        d->data = (uint8_t *)data;
+        d->base = base;
+    } else {
+        d->data = rp_bulk_alloc(len);
+        if (!d->data) d->data = xmalloc(len);
+        memcpy(d->data, data, len);
+        d->base = NULL;
+        if (base) rp_bulk_free(base);
+    }
+    h->dirty_bytes += len;
+    if (h->dirty_bytes < DIRTY_CAP) return 0;  /* bound memory per handle: two buffers with write-behind */
+    return g_write_behind ? wb_start(h) : handle_flush(h);
+}
+
+ssize_t handle_read(handle_t *h, uint64_t off, uint8_t *out, size_t len) {
+    if (h->pre_ok && !h->ndirty && !h->wb_on) {  /* the content the open fetched */
+        if (off >= h->pre_len) return 0;
+        size_t n = h->pre_len - (size_t)off < len ? h->pre_len - (size_t)off : len;
+        memcpy(out, h->pre + off, n);
+        h->next_off = off + n;
+        return (ssize_t)n;
+    }
+    int rc = handle_flush(h);  /* same-fd read-after-write */
+    attr_t a;
+    if (!rc) rc = fs_getattr(h->path, &a);
+    if (!rc && a.is_dir) rc = -EISDIR;
+    if (rc) return rc;
+    if (a.inl) {  /* Data-on-MDT: one MDT round trip, which also says if it is still inline */
+        resp_t r;
+        const uint8_t *d;
+        size_t n;
+        rc = mdt_inline_read(h->path, 0, off, (uint32_t)(len > UINT32_MAX ? UINT32_MAX : len), &a, &r, &d, &n);
+        if (rc) return rc;
+        ac_put(h->path, &a);
+        if (a.inl) {
+            if (n > len) n = len;
+            memcpy(out, d, n);
+            resp_free(&r);
+            h->next_off = off + n;
+            return (ssize_t)n;
+        }
+        resp_free(&r);  /* spilled meanwhile: read the stripes */
+    }
+    if (off >= a.size) return 0;
+    if (off + len > a.size) len = (size_t)(a.size - off);
+    if (!a.has_layout || !a.ss) return -EIO;
+    if (off != h->next_off && len < a.ss) {
+        rc = ra_read(h, &a, off, len, out);  /* random/strided: exact bytes only (and stride readahead) */
+    } else {  /* sequential: whole-stripe cache + readahead */
+        if (!h->sc) h->sc = sc_new(h->path, &a);
+        pthread_mutex_lock(&h->sc->lk);
+        h->sc->a = a;
+        pthread_mutex_unlock(&h->sc->lk);
+        rc = sc_read(h->sc, &a, off, len, out);
+    }
+    if (rc) return rc;
+    h->next_off = off + len;
+    return (ssize_t)len;
+}
+
+/* ---------------------------------------------------------------- statfs
+ * Summed from the servers' STATS (an OST's tier_capacity / tier_used, an
+ * MDT's table_slots / table_used): IOR and mdtest print it as "FS: ... Used
+ * FS: ..." -- a fixed 1 TiB / 50% there made a 6.8 TB write look larger than
+ * the file system. */
+static uint64_t json_u64(const char *j, size_t n, const char *key, int *found) {
+    char pat[64];
+    snprintf(pat, sizeof(pat), "\"%s\": ", key);
+    size_t pl = strlen(pat);
+    for (size_t i = 0; i + pl < n; i++)
+        if (!memcmp(j + i, pat, pl)) { *found = 1; return strtoull(j + i + pl, NULL, 10); }
+    *found = 0;
+    return 0;
+}
+
+static pthread_mutex_t g_statfs_lk = PTHREAD_MUTEX_INITIALIZER;
+static double g_statfs_at;
+static uint64_t g_statfs_v[4];
+static int g_statfs_rc = -1;
+
+int fs_statfs(uint64_t *bt, uint64_t *bu, uint64_t *ft, uint64_t *fu) {
+    pthread_mutex_lock(&g_statfs_lk);
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    double now = ts.tv_sec + ts.tv_nsec / 1e9;
+    if (g_statfs_rc < 0 || now - g_statfs_at > 10) {
+        uint64_t v[4] = {0, 0, 0, 0};
+        int got = 0;
+        for (int k = 0; k < 2; k++) {
+            int n = k ? cfg.nmdt : cfg.nost;
+            for (int i = 0; i < n; i++) {
+                rp_resp_t r;
+                if (rp_rpc(k ? &g_mdts[i] : &g_osts[i], RP_STATS, "", NULL, 0, NULL, 0, &r)) continue;
+                if (r.op == RP_STATS_OK) {
+                    int f1, f2;
+                    uint64_t a = json_u64((const char *)r.val, r.vlen, k ? "table_slots" : "tier_capacity", &f1);
+                    uint64_t b = json_u64((const char *)r.val, r.vlen, k ? "table_used" : "tier_used", &f2);
+                    if (f1 && f2) { v[2 * k] += a; v[2 * k + 1] += b; if (!k) got = 1; }
+                }
+                rp_resp_free(&r);
+            }
+        }
+        memcpy(g_statfs_v, v, sizeof(v));
+        g_statfs_rc = got ? 0 : 1;
+        g_statfs_at = now;
+    }
+    *bt = g_statfs_v[0]; *bu = g_statfs_v[1]; *ft = g_statfs_v[2]; *fu = g_statfs_v[3];
+    int rc = g_statfs_rc;
+    pthread_mutex_unlock(&g_statfs_lk);
+    return rc;
+}
+
+/* ---------------------------------------------------------------- init */
+int rpfs_init(void) {
+    const char *ie = getenv("ROCEPOOL_CLIENT_INLINE");
+    if (ie && !strcmp(ie, "0")) cfg.inline_ok = 0;
+    const char *dc = getenv("ROCEPOOL_DIRTY_CAP_MIB");
+    if (dc && atol(dc) > 0) g_dirty_cap = (size_t)atol(dc) << 20;
+    const char *sra = getenv("ROCEPOOL_STRIDE_RA");
+    if (sra && *sra) g_stride_ra = atoi(sra);
+    const char *wbe = getenv("ROCEPOOL_WRITE_BEHIND");
+    if (wbe && *wbe) g_write_behind = atoi(wbe) != 0;
+    const char *ds = getenv("ROCEPOOL_DIR_STRIPE");
+    if (ds && (!strcmp(ds, "0") || !strcmp(ds, "false") || !strcmp(ds, "no") || !strcmp(ds, "off"))) cfg.dir_stripe = 0;
+    /* per-RPC reply timeout (60 s, rocepool_client.c): a request that gets no reply in time
+     * fails the operation (EIO), it is never re-sent blindly. The
+     * simulated cluster oversubscribes its host and raises it. */
+    const char *to = getenv("ROCEPOOL_RPC_TIMEOUT_MS");
+    if (to && atoi(to) > 0) rp_timeout_ms = atoi(to);
+    const char *dr = getenv("ROCEPOOL_DIRECT_READ");
+    if (dr && (!strcmp(dr, "0") || !strcmp(dr, "off"))) cfg.direct_read = 0;
+    const char *dl = getenv("ROCEPOOL_DIRECT_LOOKUP");
+    if (dl && *dl) g_direct_lookup = strcmp(dl, "0") && strcmp(dl, "off");
+    const char *ma = getenv("ROCEPOOL_MDT_ASYNC");
+    if (ma && !strcmp(ma, "1")) cfg.mdt_async = 1;
+    const char *ss = getenv("ROCEPOOL_SCACHE_SLOTS");
+    if (ss && atoi(ss) > 0) cfg.scache_slots = atoi(ss);
+    if (cfg.nmdt < 1 || cfg.nost < 1) return -EINVAL;
+    if (cfg.threads < 1) cfg.threads = 1;
+    if (cfg.io_threads < 1) cfg.io_threads = 1;
+    if (!cfg.stripe_size) cfg.stripe_size = 1u << 20;
+    for (int i = 0; i < cfg.nmdt; i++) peer_init(&g_mdts[i], cfg.mdt[i]);
+    for (int i = 0; i < cfg.nost; i++) peer_init(&g_osts[i], cfg.ost[i]);
+    pthread_attr_t at;
+    pthread_attr_init(&at);
+    pthread_attr_setdetachstate(&at, PTHREAD_CREATE_DETACHED);
+    for (int i = 0; i < cfg.io_threads; i++) {
+        pthread_t t;
+        if (pthread_create(&t, &at, pool_worker, NULL)) { pthread_attr_destroy(&at); return -EAGAIN; }
+    }
+    pthread_attr_destroy(&at);
+    return 0;
+}

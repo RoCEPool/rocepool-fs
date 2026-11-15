@@ -73,7 +73,8 @@ class GDSTests(unittest.TestCase):
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
         st = next(l for l in out.stdout.splitlines() if l.startswith("STATS "))
         d, b, p, rt = st.split()[1:]
-        return out.stdout, {"direct": int(d), "bounced": int(b), "posix": int(p), "runtime": rt}
+        why = next((l[4:] for l in out.stdout.splitlines() if l.startswith("WHY ")), "")
+        return out.stdout, {"direct": int(d), "bounced": int(b), "posix": int(p), "runtime": rt, "why": why}
 
     def put(self, name: str, data: bytes, at: int = 0):
         """writes through the interception library, from an ordinary program"""
@@ -138,6 +139,8 @@ class GDSTests(unittest.TestCase):
         got, st = self.gpu_read("big/c.bin", 0, len(data), env={"ROCEPOOL_DEV_EMU_NO_DMABUF": "1"})
         self.assertEqual(got, data)
         self.assertMoved(st, len(data), direct=False)
+        # and it says why (a silent fallback to host copies looks like GPUDirect that "works", only slower)
+        self.assertIn("not registered with the NIC", st["why"])
 
     def test_implicit_buffer_registration(self):
         data = random.Random(5).randbytes(3 << 20)

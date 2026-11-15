@@ -187,8 +187,13 @@ static int cuda_info(const void *p, void **base, size_t *size, int *dev, int *fd
     *base = (void *)(uintptr_t)start;
     *size = sz;
     *dev = cuda_dev_of(p);
-    /* without a dma-buf: the device pointer itself, if nvidia-peermem is loaded */
-    *fd = access("/sys/module/nvidia_peermem", F_OK) == 0 || access("/sys/module/nv_peer_mem", F_OK) == 0 ? -1 : -2;
+    /* without a dma-buf: the device pointer itself, if a peer-memory module is
+     * loaded: nvidia-peermem (Mellanox / RoCE), nv_peer_mem (older), or EFA's
+     * own efa_nv_peermem ("EFA NV Peermem" in the kernel log on AWS GPU hosts;
+     * missing it here made every EFA device read bounce) */
+    *fd = access("/sys/module/nvidia_peermem", F_OK) == 0 || access("/sys/module/nv_peer_mem", F_OK) == 0 ||
+                  access("/sys/module/efa_nv_peermem", F_OK) == 0
+              ? -1 : -2;
     *fd_off = 0;
     int supported = 0;
     CUdevice_rp d;
