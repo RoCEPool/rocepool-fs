@@ -40,7 +40,8 @@
  *    32 bits (EFA's do).
  *
  * Environment: ROCE_OFI_PROVIDER (default "efa" when an EFA device exists,
- * else "tcp"), ROCE_OFI_RAILS / ROCE_OFI_RAIL (several devices: see
+ * else "tcp"), ROCE_OFI_FABRIC (default "efa" on EFA: see ofi_fabric),
+ * ROCE_OFI_RAILS / ROCE_OFI_RAIL (several devices: see
  * dom_get), ROCE_OFI_SERVER_EPS, ROCE_OFI_CLIENT_EPS, ROCE_POLL_SPIN_US,
  * ROCE_BUFPOOL_MAX, ROCE_PIN_THREADS, ROCE_SERVER_DRAIN_MS.
  */
@@ -63,6 +64,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
@@ -193,6 +195,24 @@ static const char *ofi_provider(void) {
 }
 static int ip_provider(const char *prov) { return strcmp(prov, "efa") != 0; }
 
+/* The fabric to take when the provider offers several (ROCE_OFI_FABRIC; "any":
+ * the provider's first). EFA: "efa", the RDM path with libfabric's own
+ * protocols -- message segmentation, unexpected-message buffering, RNR
+ * handling. libfabric 2.x also offers "efa-direct", and lists it FIRST, on
+ * devices with RDMA read, write and unsolicited write receive (newer EFA
+ * generations); it has none of those protocols: messages up to the MTU only,
+ * no buffering of a message whose receive is not posted yet, and its queue
+ * pairs retry RNR forever -- so a frame of ours (up to SMALL_FRAME) or a send
+ * that finds no posted receive does not fail, it never completes. A pool on
+ * 2 x g6e.8xlarge hung at its first write across the machines, every process
+ * busy, nothing logged; i3en / hpc6id, whose EFA lacks one of the three,
+ * never offered efa-direct for MSG+RMA. */
+static const char *ofi_fabric(const char *prov) {
+    const char *f = getenv("ROCE_OFI_FABRIC");
+    if (f && *f) return strcmp(f, "any") ? f : NULL;
+    return strcmp(prov, "efa") ? NULL : "efa";
+}
+
 /* the local IPv4 address the kernel would use to reach host (for IP-based providers) */
 static int local_ip_for(const char *host, char *out, size_t n) {
     struct addrinfo hints = {.ai_family = AF_INET, .ai_socktype = SOCK_DGRAM}, *ai = NULL;
@@ -275,13 +295,16 @@ static struct ofi_dom *dom_get(const char *src_ip, int rail) {
     hints->domain_attr->mr_mode = FI_MR_LOCAL | FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
     hints->domain_attr->threading = FI_THREAD_SAFE;
     hints->fabric_attr->prov_name = strdup(prov);
+    const char *fab = ofi_fabric(prov);
+    if (fab) hints->fabric_attr->name = strdup(fab);
     struct fi_info *list = NULL;
     const char *node = (src_ip && ip_provider(prov)) ? src_ip : NULL;
     int rc = fi_getinfo(OFI_API, node, NULL, node ? FI_SOURCE : 0, hints, &list);
     fi_freeinfo(hints);
     if (rc || !list) {
-        set_error("fi_getinfo(provider %s%s%s, RDM, MSG+RMA): %s -- is libfabric's %s provider usable here?", prov,
-                  node ? ", source " : "", node ? node : "", fi_strerror(-rc), prov);
+        set_error("fi_getinfo(provider %s%s%s%s%s, RDM, MSG+RMA): %s -- is libfabric's %s provider usable here?", prov,
+                  fab ? ", fabric " : "", fab ? fab : "", node ? ", source " : "", node ? node : "", fi_strerror(-rc),
+                  prov);
         return NULL;
     }
     /* the devices, in the provider's order, each once (a device can be
@@ -289,10 +312,16 @@ static struct ofi_dom *dom_get(const char *src_ip, int rail) {
     struct fi_info *dev[MAX_DOMS];
     int ndev = 0;
     for (struct fi_info *i = list; i && ndev < MAX_DOMS; i = i->next) {
+        if (fab && strcasecmp(i->fabric_attr->name, fab)) continue;   /* libfabric filters; take no other even so */
         int seen = 0;
         for (int j = 0; j < ndev; j++)
             if (!strcmp(dev[j]->domain_attr->name, i->domain_attr->name)) seen = 1;
         if (!seen) dev[ndev++] = i;
+    }
+    if (!ndev) {
+        set_error("provider %s offers no fabric named %s (first: %s)", prov, fab, list->fabric_attr->name);
+        fi_freeinfo(list);
+        return NULL;
     }
     pthread_mutex_lock(&g_doms_lk);
     if (!g_rails) g_rails = rails_of(ndev);
@@ -332,6 +361,8 @@ static struct ofi_dom *dom_get(const char *src_ip, int rail) {
     struct fi_av_attr av_attr = {.type = FI_AV_TABLE};
     if ((rc = fi_av_open(d->domain, &av_attr, &d->av, NULL))) { set_fi_error("fi_av_open", rc); goto fail; }
     g_doms[g_ndoms++] = d;
+    /* in every server's and client's log: which path the data takes */
+    fprintf(stderr, "ofi: provider %s fabric %s domain %s rail %d\n", prov, d->info->fabric_attr->name, d->name, rail);
     goto out;
 fail:
     if (d->av) fi_close(&d->av->fid);
