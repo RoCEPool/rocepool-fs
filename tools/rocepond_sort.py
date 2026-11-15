@@ -124,7 +124,11 @@ def main() -> int:
         log(f"== rocepool up: {n} MDT, {n} OST, mounted at {MNT} on all {n} nodes (OST data: "
             f"{report['rocepool']['ost_data']})")
         if args.diagnose:
-            report["diagnosis"] = diagnose(cluster, env, n, slots, duck, args)
+            try:
+                report["diagnosis"] = diagnose(cluster, env, n, slots, duck, args)
+            except Exception as exc:  # noqa: BLE001  the diagnosis failing is a finding, not the end of the run
+                report["diagnosis"] = {"error": f"{type(exc).__name__}: {exc}"[:4000]}
+                log(f"== diagnosis failed: {report['diagnosis']['error'][:1500]}")
         for kind in executors:
             # each run starts from an empty directory: the last one's data would hold the OSTs' memory
             cluster.run(0, ["rm", "-rf", f"{MNT}/rocepond"], env, net=False)
@@ -137,10 +141,31 @@ def main() -> int:
     finally:
         rp.stop()
         cluster.down()
+        report["server_and_client_logs"] = log_digest(args.workdir)
         with open(args.report, "w") as f:
             json.dump(report, f, indent=1)
         log(f"== report: {args.report}")
     return 0 if report.get("passed") else 1
+
+
+def log_digest(workdir: str, keep: int = 40) -> dict:
+    """What rocepool's servers and FUSE clients said (their logs are in
+    `workdir` on node 0, the peers' streamed there over ssh): the lines that
+    are not routine, so a failed run says why without fetching the logs."""
+    out = {}
+    routine = ("READY", "serves on rail", "provider ")
+    for name in sorted(os.listdir(workdir)) if os.path.isdir(workdir) else []:
+        if not name.endswith(".log"):
+            continue
+        try:
+            lines = open(os.path.join(workdir, name), errors="replace").read().splitlines()
+        except OSError:
+            continue
+        odd = [ln for ln in lines if ln.strip() and not any(r in ln for r in routine)]
+        if odd:
+            out[name] = {"lines": len(lines), "notable": len(odd), "first": odd[:keep // 2], "last": odd[-keep // 2:]}
+            log(f"== {name}: {len(odd)} notable lines; first: " + " | ".join(odd[:6])[:1500])
+    return out
 
 
 def host_facts() -> dict:
