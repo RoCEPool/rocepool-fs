@@ -189,3 +189,94 @@ print("RESULT", ok)
 
 if __name__ == "__main__":
     unittest.main()
+
+
+PIPE_CLIENT = r'''
+import hashlib, json, sys, threading, time
+sys.path.insert(0, sys.argv[1])
+from roce.roce_transport import RoCETransport
+from roce.remote_engine import RemoteEngine
+from roce.protocol import Frame, Op
+ost, nthreads, per = sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
+bad = []
+def data(t, i):
+    seed = hashlib.sha256(f"{t}.{i}".encode()).digest()
+    return (seed * ((1 << 20) // 32 + 1))[:(1 << 20) - 7 * i]
+def work(t):
+    e = RemoteEngine(ost, RoCETransport())
+    for i in range(per):
+        e.put(f"big{t}.{i}", data(t, i))
+    for i in range(per):
+        if e.get(f"big{t}.{i}") != data(t, i):
+            bad.append((t, i))
+t0 = time.time()
+ts = [threading.Thread(target=work, args=(t,)) for t in range(nthreads)]
+[x.start() for x in ts]; [x.join() for x in ts]
+st = json.loads(RoCETransport().send_request(ost, Frame(op=Op.STATS, request_id=1, key="", value=b"")).value)
+tr = st["transport"]
+print("RESULT " + json.dumps({"bad": bad, "seconds": round(time.time() - t0, 2), "reqs": st["reqs"],
+                              "pulls": tr["pull_local_n"] + tr["pull_remote_n"],
+                              "queue_us": round(tr["queue_ns"] / max(1, tr["reqs"]) / 1e3),
+                              **{k: tr[k] for k in ("pull_pipeline", "pull_pipeline_max", "big_replies", "big_replies_async")}}))
+'''
+
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class OfiPipelineTests(unittest.TestCase):
+    """An endpoint's thread no longer waits for a request's payload pull or
+    for a large reply's send: it posts them and takes the next request
+    (6 x i3en: 1 MiB writes queued 15 ms behind other requests' 2 ms pulls,
+    1 MiB reads behind 1.25 ms sends). One endpoint, one thread, 12 clients
+    writing and reading megabytes: several pulls and several large replies
+    in flight at once, every byte right -- and with both turned off
+    (ROCE_OFI_PULL_PIPELINE=1, ROCE_OFI_BIG_REPLIES=0) the old path still
+    works."""
+
+    def run_once(self, port, extra):
+        sys.path.insert(0, ROOT)
+        from roce.native.build_lib import ensure_softverbs_lib
+        was = os.environ.get("ROCEPOOL_BACKEND")
+        os.environ["ROCEPOOL_BACKEND"] = "ofi"
+        try:
+            lib = ensure_softverbs_lib()
+        finally:
+            if was is None:
+                os.environ.pop("ROCEPOOL_BACKEND")
+            else:
+                os.environ["ROCEPOOL_BACKEND"] = was
+        env = dict(os.environ, ROCE_TRANSPORT_LIB=lib, PYTHONPATH=ROOT, ROCE_OFI_PROVIDER="tcp",
+                   ROCE_OFI_SERVER_EPS="1", **extra)
+        srv = subprocess.Popen([sys.executable, "-u", os.path.join(ROOT, "tests", "fakes", "native_cluster.py"), ROOT,
+                                str(port), "1", "1"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
+        try:
+            _, _, ost = srv.stdout.readline().split()
+            r = subprocess.run([sys.executable, "-c", PIPE_CLIENT, ROOT, ost, "12", "6"],
+                               env=dict(env, ROCE_OFI_CLIENT_EPS="12"), capture_output=True, text=True, timeout=600)
+        finally:
+            srv.stdin.close()
+            srv.wait(timeout=30)
+        line = next((ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")), None)
+        self.assertIsNotNone(line, r.stdout + r.stderr)
+        return json.loads(line[7:])
+
+    def test_pulls_and_large_replies_in_flight(self):
+        d = self.run_once(23560, {})
+        print(f"\n    pipelined: {d}", file=sys.stderr)
+        self.assertEqual(d["bad"], [])
+        self.assertGreaterEqual(d["pulls"], 72)             # every PUT's megabyte was pulled
+        self.assertEqual((d["pull_pipeline"], d["big_replies"]), (4, 4))
+        self.assertGreater(d["pull_pipeline_max"], 1)       # more than one pull in flight on the one thread
+        self.assertLessEqual(d["pull_pipeline_max"], 4)
+        self.assertGreater(d["big_replies_async"], 0)       # GET replies sent without waiting
+
+    def test_turned_off_is_the_waiting_path(self):
+        d = self.run_once(23570, {"ROCE_OFI_PULL_PIPELINE": "1", "ROCE_OFI_BIG_REPLIES": "0"})
+        print(f"\n    waiting:   {d}", file=sys.stderr)
+        self.assertEqual(d["bad"], [])
+        self.assertGreaterEqual(d["pulls"], 72)
+        self.assertEqual((d["pull_pipeline"], d["pull_pipeline_max"], d["big_replies_async"]), (1, 0, 0))
+
+    def test_a_small_pool_gets_fewer_in_flight(self):
+        d = self.run_once(23580, {"ROCE_BUFPOOL_MAX": "12"})  # (2 + pipe + big) * 1 + 8 <= 12
+        self.assertEqual(d["bad"], [])
+        self.assertEqual((d["pull_pipeline"], d["big_replies"]), (2, 0))

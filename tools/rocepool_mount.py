@@ -20,10 +20,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 class RocepoolMount:
     def __init__(self, cluster, env: dict, workdir: str, mount: str, ost_tier: str = "ram",
-                 mdt_port: int = 19901, ost_port: int = 19951, fuse_args: list | None = None):
+                 mdt_port: int = 19901, ost_port: int = 19951, fuse_args: list | None = None,
+                 ost_env: dict | None = None):
         self.cluster, self.env, self.workdir, self.mount, self.ost_tier = cluster, env, workdir, mount, ost_tier
         self.mdt_port, self.ost_port = mdt_port, ost_port
         self.fuse_args = list(fuse_args or [])
+        self.ost_env = dict(ost_env or {})  # extra environment of every OST; {node} = the node's number
         self.procs, self.fuse, self.tier_files = [], [], []
         self.mdts = self.osts = ""
 
@@ -45,6 +47,8 @@ class RocepoolMount:
                     c.run(s["node"], ["sh", "-c", f"mkdir -p {shlex.quote(os.path.dirname(path))} && "
                                                   f"rm -f {shlex.quote(path)}"], env, net=False)
                     self.tier_files.append((s["node"], path))
+            if s["kind"] == "ost":
+                s["env"].update({k: str(v).replace("{node}", str(s["node"])) for k, v in self.ost_env.items()})
             s["log"] = os.path.join(self.workdir, f"{s['kind']}{s['node']}.log")
             self.procs.append(c.popen(s["node"], [sys.executable, "-u", helper, f"{s['kind']}-native", s["addr"]],
                                       s["env"], stdin=subprocess.PIPE, stdout=open(s["log"], "w"),
