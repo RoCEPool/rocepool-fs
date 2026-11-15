@@ -33,12 +33,12 @@ PIECE = 47008
 
 WRITER = r"""
 import os, sys, time
-path, w, total, seconds = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), float(sys.argv[4])
+path, w, total, seconds, most = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), float(sys.argv[4]), int(sys.argv[5])
 piece = 47008
 buf = bytes([w % 251 + 1]) * piece
 fd = os.open(path, os.O_CREAT | os.O_WRONLY, 0o644)
 end, k = time.monotonic() + seconds, 0
-while time.monotonic() < end:
+while time.monotonic() < end and k < most:   # `most`: this writer's share of what the tiers hold
     os.pwrite(fd, buf, (k * total + w) * piece)
     k += 1
 os.fsync(fd)
@@ -75,10 +75,12 @@ def one_set(cluster, base_env: dict, name: str, extra: dict, args) -> dict:
     total = n * args.writers
     try:
         rp.start()
+        # 40% of the tiers at most: the slabs are 1 MiB objects, gaps may be written too
+        most = int(0.4 * args.tier_gib * n * 2**30 / PIECE / total)
         before = ost_stats(cluster, env, rp.osts)
         t0 = time.monotonic()
         procs = [cluster.popen(node.index, [sys.executable, "-c", WRITER, f"{MNT}/hard.bin", str(node.index * args.writers + w),
-                                            str(total), str(args.seconds)], env, stdout=subprocess.PIPE,
+                                            str(total), str(args.seconds), str(most)], env, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, text=True) for node in cluster.nodes for w in range(args.writers)]
         pieces = 0
         for p in procs:
