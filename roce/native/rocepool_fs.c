@@ -778,6 +778,33 @@ void ac_update_size(const char *path, uint64_t size, int exact) {
     pthread_mutex_unlock(&g_ac_lk);
 }
 
+/* ac_put for an answer that may arrive out of order with others for the same
+ * file (concurrent writers' spill_set_size replies): all in one locked step,
+ * and a striped entry's cached size never shrinks */
+static void ac_put_grow(const char *path, const attr_t *a) {
+    if (cfg.attr_ttl <= 0) return;
+    uint32_t b = strhash(path) % AC_BUCKETS;
+    pthread_mutex_lock(&g_ac_lk);
+    ac_ent *e;
+    for (e = g_ac[b]; e; e = e->next)
+        if (!strcmp(e->path, path)) break;
+    uint64_t keep = 0;
+    if (e && !e->negative && !e->a.is_dir && !e->a.inl) keep = e->a.size;
+    if (!e) {
+        if (g_ac_n >= 100000) ac_clear_locked();
+        e = calloc(1, sizeof(*e));
+        e->path = xstrdup(path);
+        e->next = g_ac[b];
+        g_ac[b] = e;
+        g_ac_n++;
+    }
+    e->expires = mono_s() + cfg.attr_ttl;
+    e->negative = 0;
+    e->a = *a;
+    if (keep > e->a.size) e->a.size = keep;
+    pthread_mutex_unlock(&g_ac_lk);
+}
+
 /* ---------------------------------------------------------------- task pool
  * Stripe RPCs fan out across OSTs concurrently. FUSE threads only wait on
  * tasks; tasks never wait on other tasks, so a fixed pool cannot deadlock. */
@@ -1374,7 +1401,7 @@ static int fs_write_segs(const char *path, uint64_t off, const wseg_t *segs, int
         if (rc) return rc;
         attr_t na;
         rc = mdt_spill_set_size(path, off + len, &na);
-        if (rc == 0) { ac_put(path, &na); return 0; }
+        if (rc == 0) { ac_put_grow(path, &na); return 0; }  /* replies to concurrent writers arrive in any order */
         if (rc == E_UNSUPPORTED) g_spill_set_size_ok = 0;
         else if (rc != E_NOT_EMPTY && rc != E_FROZEN && rc != E_NOT_INLINE) return rc;
         ac_del(path);
