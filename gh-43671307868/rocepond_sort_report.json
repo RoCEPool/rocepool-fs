@@ -1,0 +1,154 @@
+{
+ "what": "GraySort-style sort on rocepond + rocepool (rocepond/sort.py)",
+ "nodes": 2,
+ "slots_per_node": 32,
+ "threads_per_task": 1,
+ "vcpus": 72,
+ "physical_cores": 36,
+ "memory_limit_per_duckdb": "1500MiB",
+ "cores_note": "all cores of the cluster",
+ "host": {
+  "vcpus_per_host": 36,
+  "physical_cores_per_host": 18,
+  "memory_gib_per_host": 92.3,
+  "cpu": "Intel(R) Xeon(R) Platinum 8124M CPU @ 3.00GHz",
+  "instance_type": "c5n.9xlarge"
+ },
+ "runs": [
+  {
+   "executor": "process",
+   "error": "TaskError: workers did not start: n1s9: worker n1s9 did not start within 120 s; n1s2: worker n1s2 did not start within 120 s; n1s21: worker n1s21 did not start within 120 s; n1s11: worker n1s11 did not start within 120 s; n1s16: worker n1s16 did not start within 120 s; n1s5: worker n1s5 did not start within 120 s; n1s31: worker n1s31 did not start within 120 s; n1s19: worker n1s19 did not start within 120 s; n1s0: worker n1s0 did not start within 120 s; n1s28: worker n1s28 did not start within 120 s; n1s10: worker n1s10 did not start within 120 s; n1s12: worker n1s12 did not start within 120 s",
+   "passed": false
+  },
+  {
+   "executor": "ray",
+   "scheduler": {
+    "scheduler": "rocepond.RayExecutor",
+    "ray": "2.60.0",
+    "nodes": 2,
+    "cpus": 64.0,
+    "threads_per_task": 1
+   },
+   "stages": [
+    {
+     "stage": "generate sort_input",
+     "tasks": 64,
+     "wall_s": 13.494,
+     "retries": 1,
+     "tasks_per_s": 4.7,
+     "task_s_total": 708.76,
+     "duck_s_total": 707.923,
+     "utilization": 0.821
+    },
+    {
+     "stage": "repartition sort_input -> sort_shuffled (1024 partitions)",
+     "tasks": 64,
+     "wall_s": 75.547,
+     "retries": 4,
+     "tasks_per_s": 0.8,
+     "task_s_total": 4389.218,
+     "duck_s_total": 4353.556,
+     "utilization": 0.908
+    },
+    {
+     "stage": "repartition sort_shuffled: list",
+     "tasks": 1,
+     "wall_s": 1.706,
+     "retries": 0,
+     "tasks_per_s": 0.6,
+     "task_s_total": 1.703,
+     "duck_s_total": 1.669,
+     "utilization": 0.016
+    },
+    {
+     "stage": "partition_sql -> sort_output",
+     "tasks": 1024,
+     "wall_s": 43.932,
+     "retries": 243,
+     "tasks_per_s": 23.3,
+     "task_s_total": 2160.045,
+     "duck_s_total": 2136.448,
+     "utilization": 0.768
+    },
+    {
+     "stage": "sort: validate output",
+     "tasks": 1024,
+     "wall_s": 14.71,
+     "retries": 0,
+     "tasks_per_s": 69.6,
+     "task_s_total": 899.946,
+     "duck_s_total": 504.741,
+     "utilization": 0.956
+    },
+    {
+     "stage": "sort: validate input",
+     "tasks": 64,
+     "wall_s": 24.764,
+     "retries": 0,
+     "tasks_per_s": 2.6,
+     "task_s_total": 1528.331,
+     "duck_s_total": 1528.329,
+     "utilization": 0.964
+    }
+   ],
+   "sort": {
+    "records": 214748364,
+    "bytes": 21474836400,
+    "partitions": 1024,
+    "splits": 64,
+    "generate_s": 13.49,
+    "shuffle_s": 77.25,
+    "sort_s": 43.94,
+    "total_s": 121.19,
+    "gib_per_min": 9.902,
+    "tasks": {
+     "generate sort_input": 64,
+     "repartition sort_input -> sort_shuffled (1024 partitions)": 64,
+     "repartition sort_shuffled: list": 1,
+     "partition_sql -> sort_output": 1024
+    },
+    "validation": {
+     "records_in": 214748364,
+     "records_out": 214748364,
+     "output_bytes": 21474836400,
+     "order_violations_in_files": 0,
+     "partition_ranges_in_order": true,
+     "checksum_equal": true,
+     "empty_partitions": 0,
+     "largest_partition_records": 211490,
+     "seconds": 39.48
+    },
+    "valid": true
+   },
+   "comparison": {
+    "rocepond_rocepool": {
+     "bytes": 21474836400,
+     "seconds": 121.19,
+     "gib_per_min": 9.902,
+     "vcpus": 72,
+     "physical_cores": 36,
+     "mib_per_s_per_vcpu": 2.35,
+     "mib_per_s_per_physical_core": 4.69,
+     "storage": "on the same hosts (one MDT + one OST per host, data in RAM)"
+    },
+    "smallpond_3fs_published": {
+     "bytes": 121496034869248,
+     "seconds": 1814,
+     "gib_per_min": 3742.6,
+     "compute_cores": 9600,
+     "storage_nodes_not_counted": 25,
+     "mib_per_s_per_compute_core": 6.65
+    }
+   },
+   "passed": true
+  }
+ ],
+ "rocepool": {
+  "mdts": "172.31.1.55:19901,172.31.10.173:19901",
+  "osts": "172.31.1.55:19951,172.31.10.173:19951",
+  "mount": "/mnt/rocepool_rocepond",
+  "client": "native FUSE (rocepool-fuse)",
+  "ost_data": "RAM"
+ },
+ "passed": false
+}
