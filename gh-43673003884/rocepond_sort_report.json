@@ -1,0 +1,27 @@
+{
+ "what": "GraySort-style sort on rocepond + rocepool (rocepond/sort.py)",
+ "nodes": 2,
+ "slots_per_node": 32,
+ "threads_per_task": 1,
+ "vcpus": 72,
+ "physical_cores": 36,
+ "memory_limit_per_duckdb": "1500MiB",
+ "cores_note": "all cores of the cluster",
+ "host": {
+  "vcpus_per_host": 36,
+  "physical_cores_per_host": 18,
+  "memory_gib_per_host": 92.3,
+  "cpu": "Intel(R) Xeon(R) Platinum 8124M CPU @ 3.00GHz",
+  "instance_type": "c5n.9xlarge"
+ },
+ "runs": [],
+ "rocepool": {
+  "mdts": "172.31.11.159:19901,172.31.4.214:19901",
+  "osts": "172.31.11.159:19951,172.31.4.214:19951",
+  "mount": "/mnt/rocepool_rocepond",
+  "client": "native FUSE (rocepool-fuse)",
+  "ost_data": "RAM"
+ },
+ "error": "TaskError: task failed 1 times: diagnose 18\n  attempt 1 on n0s18: DuckError: IOException: IO Error: Async write failed for range [offset=26, size=45479]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond_diag/pw/bucket=23/from-18-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+ "passed": false
+}
