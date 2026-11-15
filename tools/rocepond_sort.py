@@ -76,6 +76,9 @@ def main() -> int:
                     help="partitions one shuffle task writes; above it the shuffle takes two passes")
     ap.add_argument("--executor", default="process", help="process, ray, or process,ray (both, in turn)")
     ap.add_argument("--memory-limit", default="", help="per DuckDB, e.g. 2GiB (default: host memory / workers)")
+    ap.add_argument("--engine", default="auto", choices=("auto", "module", "cli"),
+                    help="DuckDB: auto (the Python package if installed), module, or cli (--duckdb, else the release CLI)")
+    ap.add_argument("--diagnose-only", action="store_true", help="--diagnose, then no sort")
     ap.add_argument("--diagnose", action="store_true",
                     help="first: every worker times the sort's I/O on local disk and on rocepool (see diagnose())")
     ap.add_argument("--slots", type=int, default=0, help="workers per node (default: the node's cores)")
@@ -94,7 +97,15 @@ def main() -> int:
         os.environ["ROCEPOOL_CLUSTER"] = real_hosts_bootstrap(log)
         log(f"== again with {VENV}/bin/python3 (duckdb, ray)")
         os.execv(f"{VENV}/bin/python3", [f"{VENV}/bin/python3", os.path.abspath(__file__)] + sys.argv[1:])
-    duck = "" if have_module() and args.duckdb == "auto" else ensure_duckdb(args.duckdb)
+    args.diagnose = args.diagnose or args.diagnose_only
+    if args.diagnose_only:
+        executors = []
+    if args.duckdb == "auto" and os.access(f"{VENV}/bin/duckdb", os.X_OK):  # real hosts: the same CLI on every host
+        args.duckdb = f"{VENV}/bin/duckdb"
+    duck = "" if have_module() and args.duckdb == "auto" and args.engine != "cli" else ensure_duckdb(args.duckdb)
+    if args.engine == "cli" and not duck:
+        print("--engine cli: no DuckDB CLI", file=sys.stderr)
+        return 2
     if not duck and not have_module():
         print("no DuckDB: pip install duckdb, or --duckdb <CLI>", file=sys.stderr)
         return 2
@@ -133,7 +144,8 @@ def main() -> int:
                 rp.stop()
             rp = start_rocepool(cluster, env, args, report)
             report["runs"].append(one_run(kind, cluster, env, n, slots, duck, args, total_cores, total_phys))
-        report["passed"] = all(r.get("passed") for r in report["runs"])
+        report["passed"] = all(r.get("passed") for r in report["runs"]) and \
+            not (args.diagnose_only and "error" in report.get("diagnosis", {}))
     except Exception as exc:  # noqa: BLE001
         report["error"] = f"{type(exc).__name__}: {exc}"
         report["passed"] = False
@@ -225,7 +237,10 @@ def diagnose(cluster, env, n: int, slots: int, duck: str, args) -> dict:
             f"SELECT bit_xor(hash(records)) FROM '{rp}/in-{k}.parquet'",
             f"COPY (SELECT {bucket} FROM '{loc}/in.parquet') TO '{loc}/pw' {pw}",
             f"COPY (SELECT {bucket} FROM '{loc}/in.parquet') TO '{rp}/pw' {pw}"]})
-    ex = process_executor(cluster, env, slots, args.threads, duck, memory_limit=args.memory_limit, max_retries=0)
+    ex = process_executor(cluster, env, slots, args.threads, duck, memory_limit=args.memory_limit, max_retries=0,
+                          engine=args.engine)
+    report_engine = ex.info.get("duckdb")
+    log(f"== diagnosis DuckDB: {report_engine}")
     out = {"tasks": tasks_n, "mib_per_task": round(records * sort.RECORD_BYTES / 2**20, 1), "partitions": p}
     try:
         res = ex.run_all(tasks, "diagnose")
@@ -259,9 +274,11 @@ def one_run(kind: str, cluster, env: dict, n: int, slots: int, duck: str, args, 
             res = ray_cluster.run_driver(["-m", "rocepond.sort", "--root", root, "--gib", str(args.gib),
                                           "--partitions", str(args.partitions), "--splits", str(args.splits),
                                           "--threads", str(args.threads), "--duckdb", duck, "--no-ship-package",
-                                          "--max-fanout", str(args.max_fanout), "--memory-limit", args.memory_limit])
+                                          "--max-fanout", str(args.max_fanout), "--memory-limit", args.memory_limit,
+                                          "--engine", args.engine])
         else:
-            ex = process_executor(cluster, env, slots, args.threads, duck, memory_limit=args.memory_limit)
+            ex = process_executor(cluster, env, slots, args.threads, duck, memory_limit=args.memory_limit,
+                                  engine=args.engine)
             sp = rocepond.Session(ex, root)
             res = sort.run(sp, int(args.gib * 2**30), args.partitions, args.splits or None, args.max_fanout)
             res["executor"], res["stages"] = ex.info, ex.stats

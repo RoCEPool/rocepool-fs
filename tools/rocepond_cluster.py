@@ -88,7 +88,8 @@ class RayOnCluster:
                     self.cluster.run(i, ["umount", "-l", "/tmp/ray"], self.env, net=False, capture_output=True)
 
 
-VENV = "/opt/rocepond-venv"  # the same path on every host: workers and Ray start with this Python
+VENV = "/opt/rocepond-venv"
+DUCKDB_CLI_VERSION = "v1.5.6"  # the same path on every host: workers and Ray start with this Python
 
 
 def real_hosts_bootstrap(log=print) -> str | None:
@@ -118,6 +119,10 @@ def real_hosts_bootstrap(log=print) -> str | None:
               "{ apt-get update -q >/dev/null; apt-get install -y -q python3-venv >/dev/null; }; "
               f"python3 -m venv {VENV}; {VENV}/bin/pip install -q --upgrade pip; "
               f"{VENV}/bin/pip install -q duckdb ray; "
+              # the DuckDB CLI too (--engine cli: another DuckDB version, synchronous writes); optional
+              f"[ -x {VENV}/bin/duckdb ] || {{ cd /tmp && curl -fsSL --retry 3 -o duckdb_cli.zip "
+              f"https://github.com/duckdb/duckdb/releases/download/{DUCKDB_CLI_VERSION}/duckdb_cli-linux-amd64.zip && "
+              f"python3 -m zipfile -e duckdb_cli.zip {VENV}/bin/ && chmod +x {VENV}/bin/duckdb; }} || true; "
               f"{VENV}/bin/python3 -c 'import duckdb, ray; print(\"duckdb\", duckdb.__version__, \"ray\", ray.__version__)'")
     procs = [(n.index, cluster.popen(n.index, ["bash", "-c", script], cluster.env(), stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT, text=True)) for n in cluster.nodes]
