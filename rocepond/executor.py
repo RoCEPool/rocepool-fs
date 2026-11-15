@@ -166,7 +166,7 @@ class ProcessExecutor(Executor):
     def __init__(self, launch, nodes: list, duckdb: str = "", threads: int = 1, slots_per_node: int = 1,
                  engine: str = "auto", memory_limit: str = "", workers_per_host: int | None = None,
                  max_retries: int = 3, task_timeout: float | None = None, start_timeout: float = 300,
-                 starts_per_node: int = 6):
+                 starts_per_node: int = 6, settings: list | tuple = ()):
         """memory_limit: per DuckDB, e.g. "4GiB"; "" = a host's memory (less a
         third) divided by workers_per_host (default: slots_per_node; more
         when several simulated nodes are one host); "none" = DuckDB's default.
@@ -182,6 +182,8 @@ class ProcessExecutor(Executor):
             argv += ["--duckdb", duckdb]
         if memory_limit:
             argv += ["--memory-limit", memory_limit]
+        for stmt in settings:
+            argv += ["--setting", stmt]
         specs = [(f"n{k}s{s}", node) for k, node in enumerate(nodes) for s in range(slots_per_node)]
         self.slots: list[_Slot] = [None] * len(specs)
         errors = []

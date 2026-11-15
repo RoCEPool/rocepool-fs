@@ -338,7 +338,15 @@ static void reply(uint64_t unique, int err, const void *b1, size_t n1, const voi
     }
     struct iovec iov[3] = {{&oh, sizeof(oh)}, {(void *)b1, err ? 0 : n1}, {(void *)b2, err ? 0 : n2}};
     ssize_t w = writev(g_fuse_fd, iov, 3);
-    (void)w;  /* ENOENT here = the request was interrupted; nothing to do */
+    /* ENOENT = the request was interrupted: nothing to do. Anything else
+     * means the kernel refused the reply (e.g. its length), and the
+     * application got an error the daemon never sent: say so */
+    if (w < 0 && errno != ENOENT) {
+        static _Atomic int said_w;
+        if (atomic_fetch_add(&said_w, 1) < 50)
+            fprintf(stderr, "rocepool-fuse: reply to opcode %u (unique %llu, %u bytes) refused: %s\n", tl_opcode,
+                    (unsigned long long)unique, oh.len, strerror(errno));
+    }
 }
 
 static void fill_attr(struct fuse_attr *fa, uint64_t ino, const attr_t *a) {

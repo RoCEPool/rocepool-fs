@@ -53,9 +53,10 @@ def engine_for(conf: dict):
         limit = auto_memory_limit(int(conf.get("share") or max(1, (os.cpu_count() or 1) // int(conf.get("threads", 1)))))
     elif limit == "none":
         limit = ""
-    key = (conf.get("engine", "auto"), conf.get("duckdb", ""), int(conf.get("threads", 1)), limit)
+    settings = tuple(conf.get("settings") or ())
+    key = (conf.get("engine", "auto"), conf.get("duckdb", ""), int(conf.get("threads", 1)), limit, settings)
     if key not in _ENGINES:
-        _ENGINES[key] = open_engine(key[2], key[1], key[3] or None, key[0])
+        _ENGINES[key] = open_engine(key[2], key[1], key[3] or None, key[0], settings)
     return _ENGINES[key]
 
 

@@ -24,13 +24,15 @@ class DuckError(RuntimeError):
 class Duck:
     """An in-memory DuckDB. run(sql) -> (seconds as DuckDB timed it, rows)."""
 
-    def __init__(self, exe: str, threads: int, memory_limit: str | None = None):
+    def __init__(self, exe: str, threads: int, memory_limit: str | None = None, settings: tuple = ()):
         self.p = subprocess.Popen([exe, "-csv", "-noheader"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   stderr=subprocess.STDOUT, text=True, bufsize=1)
         self._raw(".timer on")
         self.run(f"SET threads = {int(threads)};")
         if memory_limit:
             self.run(f"SET memory_limit = '{memory_limit}';")
+        for stmt in settings:
+            self.run(stmt.rstrip(";") + ";")
         self.version = self.run("SELECT version();")[1][0][0]
 
     def _raw(self, text: str) -> list[str]:
@@ -76,13 +78,15 @@ class Duck:
 class DuckModule:
     """The `duckdb` Python package, in memory, in this process."""
 
-    def __init__(self, threads: int, memory_limit: str | None = None):
+    def __init__(self, threads: int, memory_limit: str | None = None, settings: tuple = ()):
         import duckdb
         self._duckdb = duckdb
         self.con = duckdb.connect(database=":memory:")
         self.con.execute(f"SET threads = {int(threads)}")
         if memory_limit:
             self.con.execute(f"SET memory_limit = '{memory_limit}'")
+        for stmt in settings:
+            self.con.execute(stmt)
         self.version = "v" + duckdb.__version__ + " (python package)"
 
     def run(self, sql: str) -> tuple[float, list[list[str]]]:
@@ -118,10 +122,12 @@ def have_module() -> bool:
         return False
 
 
-def open_engine(threads: int, exe: str = "", memory_limit: str | None = None, engine: str = "auto"):
+def open_engine(threads: int, exe: str = "", memory_limit: str | None = None, engine: str = "auto",
+                settings: tuple = ()):
+    """settings: statements every new DuckDB runs first, e.g. ("SET async_threads = 0",)."""
     """engine: auto (the Python package if importable, else the CLI at `exe`), module, cli."""
     if engine == "module" or (engine == "auto" and have_module()):
-        return DuckModule(threads, memory_limit)
+        return DuckModule(threads, memory_limit, settings)
     if not exe:
         raise DuckError("no DuckDB: the `duckdb` Python package is not installed and no CLI path was given")
-    return Duck(exe, threads, memory_limit)
+    return Duck(exe, threads, memory_limit, settings)

@@ -20,9 +20,10 @@ def main() -> int:
     ap.add_argument("--threads", type=int, default=os.cpu_count() or 1)
     ap.add_argument("--memory-limit", default="", help="per DuckDB; default: this host's memory shared by --share")
     ap.add_argument("--share", type=int, default=1, help="DuckDB workers on this host")
+    ap.add_argument("--setting", action="append", default=[], help="a statement DuckDB runs first (repeatable)")
     a = ap.parse_args()
     engine = engine_for({"engine": a.engine, "duckdb": a.duckdb, "threads": a.threads,
-                         "memory_limit": a.memory_limit, "share": a.share})
+                         "memory_limit": a.memory_limit, "share": a.share, "settings": a.setting})
     print(json.dumps({"ready": True, "duckdb": engine.version, "threads": a.threads, "pid": os.getpid()}),
           flush=True)
     for line in sys.stdin:
