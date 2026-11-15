@@ -290,9 +290,16 @@ static struct ofi_dom *dom_get(const char *src_ip, int rail) {
      * (tools/roce_preflight.py sets it on EFA hosts with GPUs), since a
      * provider without it would otherwise not be offered at all */
     const char *hm = getenv("ROCE_OFI_HMEM");
-    if (hm && !strcmp(hm, "1")) hints->caps |= FI_HMEM;
+    int want_hmem = hm && !strcmp(hm, "1");
+    if (want_hmem) hints->caps |= FI_HMEM;
     hints->mode = FI_CONTEXT | FI_CONTEXT2;
     hints->domain_attr->mr_mode = FI_MR_LOCAL | FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
+    /* FI_HMEM needs FI_MR_HMEM: the provider takes device buffers only with
+     * their registrations' descriptors (ours always carry one: FI_MR_LOCAL).
+     * Without it efa answers FI_HMEM with -FI_ENODATA ("FI_HMEM capability
+     * requires device registrations"), so no endpoint opens and every GPU
+     * read falls back to host memory: no GPUDirect over EFA. */
+    if (want_hmem) hints->domain_attr->mr_mode |= FI_MR_HMEM;
     hints->domain_attr->threading = FI_THREAD_SAFE;
     hints->fabric_attr->prov_name = strdup(prov);
     const char *fab = ofi_fabric(prov);
