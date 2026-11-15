@@ -1,0 +1,190 @@
+{
+ "what": "GraySort-style sort on rocepond + rocepool (rocepond/sort.py)",
+ "nodes": 2,
+ "slots_per_node": 32,
+ "threads_per_task": 1,
+ "vcpus": 72,
+ "physical_cores": 36,
+ "memory_limit_per_duckdb": "1500MiB",
+ "cores_note": "all cores of the cluster",
+ "host": {
+  "vcpus_per_host": 36,
+  "physical_cores_per_host": 18,
+  "memory_gib_per_host": 92.3,
+  "cpu": "Intel(R) Xeon(R) Platinum 8124M CPU @ 3.00GHz",
+  "instance_type": "c5n.9xlarge"
+ },
+ "runs": [
+  {
+   "executor": "process",
+   "scheduler": {
+    "scheduler": "rocepond.ProcessExecutor",
+    "nodes": 2,
+    "slots_per_node": 32,
+    "threads_per_slot": 1,
+    "duckdb": "v2.0.0 (python package)"
+   },
+   "stages": [
+    {
+     "stage": "generate sort_input",
+     "tasks": 64,
+     "wall_s": 10.908,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 5.9,
+     "task_s_total": 671.251,
+     "duck_s_total": 671.228,
+     "utilization": 0.962
+    },
+    {
+     "stage": "repartition sort_input -> sort_shuffled (1024 partitions)",
+     "tasks": 64,
+     "wall_s": 97.361,
+     "retries": 12,
+     "retry_errors": [
+      "repartition sort_input -> sort_shuffled (1024 partitions) [61/64]: attempt 1 on n1s29: DuckError: IOException: IO Error: Async write failed for range [offset=45799, size=22]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=18/from-61-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [34/64]: attempt 1 on n1s2: DuckError: IOException: IO Error: Async write failed for range [offset=26, size=45185]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=226/from-34-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [33/64]: attempt 1 on n1s1: DuckError: IOException: IO Error: Async write failed for range [offset=47381, size=22]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=323/from-33-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [32/64]: attempt 1 on n1s0: DuckError: IOException: IO Error: Async write failed for range [offset=0, size=26]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=383/from-32-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [54/64]: attempt 1 on n1s22: DuckError: IOException: IO Error: Async write failed for range [offset=0, size=26]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=387/from-54-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [41/64]: attempt 1 on n1s9: DuckError: IOException: IO Error: Async write failed for range [offset=26, size=44975]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=546/from-41-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [42/64]: attempt 1 on n1s10: DuckError: IOException: IO Error: Async write failed for range [offset=396575, size=684]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=636/from-42-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [24/64]: attempt 1 on n0s24: DuckError: IOException: IO Error: Async write failed for range [offset=45701, size=22]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=554/from-24-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [29/64]: attempt 1 on n0s29: DuckError: IOException: IO Error: Async write failed for range [offset=46339, size=340525]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=669/from-29-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [14/64]: attempt 1 on n0s14: DuckError: IOException: IO Error: Async write failed for range [offset=0, size=26]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=785/from-14-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [54/64]: attempt 2 on n1s22: DuckError: IOException: IO Error: Async write failed for range [offset=0, size=26]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=158/from-54-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [46/64]: attempt 1 on n1s14: DuckError: IOException: IO Error: Async write failed for range [offset=382301, size=684]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=874/from-46-0.parquet\\\": Input/output error\",\"errno\":\"5\"}"
+     ],
+     "tasks_per_s": 0.7,
+     "task_s_total": 4851.431,
+     "duck_s_total": 4794.532,
+     "utilization": 0.779
+    },
+    {
+     "stage": "repartition sort_shuffled: list",
+     "tasks": 1,
+     "wall_s": 2.012,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 0.5,
+     "task_s_total": 2.008,
+     "duck_s_total": 1.97,
+     "utilization": 0.016
+    },
+    {
+     "stage": "partition_sql -> sort_output",
+     "tasks": 1024,
+     "wall_s": 35.246,
+     "retries": 139,
+     "retry_errors": [
+      "partition_sql -> sort_output [16/1024]: attempt 1 on n0s16: DuckError: IOException: IO Error: Async write failed for range [offset=12902400, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00016.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [48/1024]: attempt 1 on n1s16: DuckError: IOException: IO Error: Async write failed for range [offset=16179200, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00048.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [50/1024]: attempt 1 on n1s18: DuckError: IOException: IO Error: Async write failed for range [offset=15974400, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00050.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [22/1024]: attempt 1 on n0s22: DuckError: IOException: IO Error: Async write failed for range [offset=15155200, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00022.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [18/1024]: attempt 1 on n0s18: DuckError: IOException: IO Error: Async write failed for range [offset=14131200, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00018.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [24/1024]: attempt 1 on n0s24: DuckError: IOException: IO Error: Async write failed for range [offset=16793600, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00024.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [56/1024]: attempt 1 on n1s24: DuckError: IOException: IO Error: Async write failed for range [offset=14131200, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00056.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [38/1024]: attempt 1 on n1s6: DuckError: IOException: IO Error: Async write failed for range [offset=11673600, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00038.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [45/1024]: attempt 1 on n1s13: DuckError: IOException: IO Error: Async write failed for range [offset=15360000, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00045.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [19/1024]: attempt 1 on n0s19: DuckError: IOException: IO Error: Async write failed for range [offset=11878400, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00019.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [17/1024]: attempt 1 on n0s17: DuckError: IOException: IO Error: Async write failed for range [offset=16998400, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00017.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [29/1024]: attempt 1 on n0s29: DuckError: IOException: IO Error: Async write failed for range [offset=11468800, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00029.dat\\\": Input/output error\",\"errno\":\"5\"}"
+     ],
+     "tasks_per_s": 29.1,
+     "task_s_total": 1937.824,
+     "duck_s_total": 1926.708,
+     "utilization": 0.859
+    },
+    {
+     "stage": "sort: validate output",
+     "tasks": 1024,
+     "wall_s": 14.694,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 69.7,
+     "task_s_total": 925.237,
+     "duck_s_total": 481.916,
+     "utilization": 0.984
+    },
+    {
+     "stage": "sort: validate input",
+     "tasks": 64,
+     "wall_s": 24.779,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 2.6,
+     "task_s_total": 1574.071,
+     "duck_s_total": 1574.07,
+     "utilization": 0.993
+    }
+   ],
+   "sort": {
+    "records": 214748364,
+    "bytes": 21474836400,
+    "partitions": 1024,
+    "splits": 64,
+    "generate_s": 10.91,
+    "shuffle_s": 99.37,
+    "sort_s": 35.25,
+    "total_s": 134.62,
+    "gib_per_min": 8.914,
+    "tasks": {
+     "generate sort_input": 64,
+     "repartition sort_input -> sort_shuffled (1024 partitions)": 64,
+     "repartition sort_shuffled: list": 1,
+     "partition_sql -> sort_output": 1024
+    },
+    "validation": {
+     "records_in": 214748364,
+     "records_out": 214748364,
+     "output_bytes": 21474836400,
+     "order_violations_in_files": 0,
+     "partition_ranges_in_order": true,
+     "checksum_equal": true,
+     "empty_partitions": 0,
+     "largest_partition_records": 211490,
+     "seconds": 39.48
+    },
+    "valid": true
+   },
+   "comparison": {
+    "rocepond_rocepool": {
+     "bytes": 21474836400,
+     "seconds": 134.62,
+     "gib_per_min": 8.914,
+     "vcpus": 72,
+     "physical_cores": 36,
+     "mib_per_s_per_vcpu": 2.11,
+     "mib_per_s_per_physical_core": 4.23,
+     "storage": "on the same hosts (one MDT + one OST per host, data in RAM)"
+    },
+    "smallpond_3fs_published": {
+     "bytes": 121496034869248,
+     "seconds": 1814,
+     "gib_per_min": 3742.6,
+     "compute_cores": 9600,
+     "storage_nodes_not_counted": 25,
+     "mib_per_s_per_compute_core": 6.65
+    }
+   },
+   "passed": true
+  },
+  {
+   "executor": "ray",
+   "error": "RuntimeError: the Ray driver failed (1):              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/rocepool/rocepond/__init__.py\", line 121, in repartition\n    return self.session._repartition(self, npartitions, hash_by, by, name, compression, max_fanout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/rocepool/rocepond/__init__.py\", line 226, in _repartition\n    self._run(f\"repartition {df.name} -> {name_} ({n} partitions)\", [{\n  File \"/root/rocepool/rocepond/__init__.py\", line 166, in _run\n    return self.ex.run_all(tasks, stage)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/rocepool/rocepond/ray_executor.py\", line 131, in run_all\n    raise failure\nrocepond.executor.TaskError: task failed 4 times: repartition sort_input -> sort_shuffled (1024 partitions) [55/64]\n  attempt 1: OutOfMemoryError: 8 worker(s) were killed due to the node running low on memory. Memory on the node (IP: 172.31.12.76, ID: 22d4b81c9855a9172315c95f76745a6b8f4322611a0d7abc0d1bee56) was 89.06GB used / 92.28GB limit (0.965146)\nOOM kill reason: Memory usage 94555574272B exceeded threshold of 94127915008B (95.0% of 99082018816B limit)\nObject store memory usage: [- objects spillable: 0\n- bytes spillable: 0\n- objects unsealed: 0\n- bytes unsealed: 0\n- objects in use: 0\n- bytes in use: 0\n- objects evictable: 0\n- bytes ev\n  attempt 2: OutOfMemoryError: 12 worker(s) were killed due to the node running low on memory. Memory on the node (IP: 172.31.12.76, ID: 22d4b81c9855a9172315c95f76745a6b8f4322611a0d7abc0d1bee56) was 88.36GB used / 92.28GB limit (0.957587)\nOOM kill reason: Memory usage 94243549184B exceeded threshold of 94127915008B (95.0% of 99082018816B limit)\nObject store memory usage: [- objects spillable: 0\n- bytes spillable: 0\n- objects unsealed: 0\n- bytes unsealed: 0\n- objects in use: 0\n- bytes in use: 0\n- objects evictable: 0\n- bytes e\n  attempt 3: OutOfMemoryError: 11 worker(s) were killed due to the node running low on memory. Memory on the node (IP: 172.31.12.76, ID: 22d4b81c9855a9172315c95f76745a6b8f4322611a0d7abc0d1bee56) was 88.97GB used / 92.28GB limit (0.964172)\nOOM kill reason: Memory usage 94384607232B exceeded threshold of 94127915008B (95.0% of 99082018816B limit)\nObject store memory usage: [- objects spillable: 0\n- bytes spillable: 0\n- objects unsealed: 0\n- bytes unsealed: 0\n- objects in use: 0\n- bytes in use: 0\n- objects evictable: 0\n- bytes e\n  attempt 4: OutOfMemoryError: 12 worker(s) were killed due to the node running low on memory. Memory on the node (IP: 172.31.12.76, ID: 22d4b81c9855a9172315c95f76745a6b8f4322611a0d7abc0d1bee56) was 89.30GB used / 92.28GB limit (0.967687)\nOOM kill reason: Memory usage 94273798144B exceeded threshold of 94127915008B (95.0% of 99082018816B limit)\nObject store memory usage: [- objects spillable: 0\n- bytes spillable: 0\n- objects unsealed: 0\n- bytes unsealed: 0\n- objects in use: 0\n- bytes in use: 0\n- objects evictable: 0\n- bytes e\n",
+   "passed": false
+  }
+ ],
+ "rocepool": {
+  "mdts": "172.31.12.76:19901,172.31.11.68:19901",
+  "osts": "172.31.12.76:19951,172.31.11.68:19951",
+  "mount": "/mnt/rocepool_rocepond",
+  "client": "native FUSE (rocepool-fuse)",
+  "ost_data": "RAM"
+ },
+ "diagnosis": {
+  "error": "TaskError: task failed 1 times: diagnose 9\n  attempt 1 on n0s9: DuckError: IOException: IO Error: Async write failed for range [offset=44995, size=330637]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond_diag/pw/bucket=160/from-9-0.parquet\\\": Input/output error\",\"errno\":\"5\"}"
+ },
+ "passed": false,
+ "server_and_client_logs": {}
+}

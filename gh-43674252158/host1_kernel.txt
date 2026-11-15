@@ -1,0 +1,220 @@
+[Sun Nov 15 03:53:00 2026] vmclock AMZNC10C:00: vmclock0: registered miscdev
+[Sun Nov 15 03:53:00 2026] parport_pc 00:03: reported by Plug and Play ACPI
+[Sun Nov 15 03:53:00 2026] piix4_smbus 0000:00:01.3: SMBus base address uninitialized - upgrade BIOS or use force_addr=0xaddr
+[Sun Nov 15 03:53:00 2026] nvme nvme0: using unchecked data buffer
+[Sun Nov 15 03:53:00 2026] ena 0000:00:05.0: ENA device version: 0.10
+[Sun Nov 15 03:53:00 2026] ena 0000:00:05.0: ENA controller version: 0.0.1 implementation version 1
+[Sun Nov 15 03:53:00 2026] ena 0000:00:05.0: Elastic Network Adapter (ENA) found at mem c0804000, mac addr 02:ff:df:7d:02:d7
+[Sun Nov 15 03:53:00 2026] ppdev: user-space parallel port driver
+[Sun Nov 15 03:53:00 2026] RAPL PMU: API unit is 2^-32 Joules, 0 fixed counters, 10737418240 ms ovfl timer
+[Sun Nov 15 03:53:00 2026] ena 0000:00:05.0 ens5: renamed from eth0
+[Sun Nov 15 03:53:00 2026] intel_powerclamp: No package C-state available
+[Sun Nov 15 03:53:00 2026] efa 0000:00:1f.0: Setup irq:60 name:efa-mgmnt@pci:0000:00:1f.0
+[Sun Nov 15 03:53:00 2026] efa 0000:00:1f.0 efa_0: IB device registered
+[Sun Nov 15 03:53:01 2026] input: ImPS/2 Generic Wheel Mouse as /devices/platform/i8042/serio1/input/input4
+[Sun Nov 15 03:53:01 2026] EXT4-fs (nvme0n1p16): mounted filesystem 66e0ce68-527d-4508-af75-1cb17f46135a r/w with ordered data mode. Quota mode: none.
+[Sun Nov 15 03:53:01 2026] audit: type=1400 audit(1794714781.157:2): apparmor="STATUS" operation="profile_load" profile="unconfined" name="ch-checkns" pid=658 comm="apparmor_parser"
+[Sun Nov 15 03:53:01 2026] audit: type=1400 audit(1794714781.157:3): apparmor="STATUS" operation="profile_load" profile="unconfined" name="vscode" pid=661 comm="apparmor_parser"
+[Sun Nov 15 03:53:01 2026] audit: type=1400 audit(1794714781.157:4): apparmor="STATUS" operation="profile_load" profile="unconfined" name="firefox" pid=667 comm="apparmor_parser"
+[Sun Nov 15 03:53:01 2026] audit: type=1400 audit(1794714781.157:5): apparmor="STATUS" operation="profile_load" profile="unconfined" name="geary" pid=670 comm="apparmor_parser"
+[Sun Nov 15 03:53:01 2026] audit: type=1400 audit(1794714781.157:6): apparmor="STATUS" operation="profile_load" profile="unconfined" name="1password" pid=650 comm="apparmor_parser"
+[Sun Nov 15 03:53:01 2026] audit: type=1400 audit(1794714781.157:7): apparmor="STATUS" operation="profile_load" profile="unconfined" name="ipa_verify" pid=673 comm="apparmor_parser"
+[Sun Nov 15 03:53:01 2026] audit: type=1400 audit(1794714781.157:8): apparmor="STATUS" operation="profile_load" profile="unconfined" name="foliate" pid=669 comm="apparmor_parser"
+[Sun Nov 15 03:53:01 2026] audit: type=1400 audit(1794714781.157:9): apparmor="STATUS" operation="profile_load" profile="unconfined" name="evolution" pid=666 comm="apparmor_parser"
+[Sun Nov 15 03:53:01 2026] audit: type=1400 audit(1794714781.157:10): apparmor="STATUS" operation="profile_load" profile="unconfined" name="lxc-create" pid=682 comm="apparmor_parser"
+[Sun Nov 15 03:53:02 2026] 8021q: 802.1Q VLAN Support v1.8
+[Sun Nov 15 03:53:02 2026] cfg80211: Loading compiled-in X.509 certificates for regulatory database
+[Sun Nov 15 03:53:02 2026] Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+[Sun Nov 15 03:53:02 2026] Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+[Sun Nov 15 03:53:02 2026] faux_driver regulatory: Direct firmware load for regulatory.db failed with error -2
+[Sun Nov 15 03:53:02 2026] cfg80211: failed to load regulatory.db
+[Sun Nov 15 03:53:05 2026] EXT4-fs (nvme0n1p1): resizing filesystem from 1834747 to 25951995 blocks
+[Sun Nov 15 03:53:06 2026] EXT4-fs (nvme0n1p1): resized filesystem to 25951995
+[Sun Nov 15 03:53:07 2026] kauditd_printk_skb: 113 callbacks suppressed
+[Sun Nov 15 03:53:07 2026] audit: type=1400 audit(1794714787.009:124): apparmor="STATUS" operation="profile_replace" info="same as current profile, skipping" profile="unconfined" name="rsyslogd" pid=1034 comm="apparmor_parser"
+[Sun Nov 15 03:53:07 2026] NET: Registered PF_QIPCRTR protocol family
+[Sun Nov 15 03:53:07 2026] loop3: detected capacity change from 0 to 8
+[Sun Nov 15 03:53:24 2026] systemd[1]: systemd 255.4-1ubuntu8.18 running in system mode (+PAM +AUDIT +SELINUX +APPARMOR +IMA +SMACK +SECCOMP +GCRYPT -GNUTLS +OPENSSL +ACL +BLKID +CURL +ELFUTILS +FIDO2 +IDN2 -IDN +IPTC +KMOD +LIBCRYPTSETUP +LIBFDISK +PCRE2 -PWQUALITY +P11KIT +QRENCODE +TPM2 +BZIP2 +LZ4 +XZ +ZLIB +ZSTD -BPF_FRAMEWORK -XKBCOMMON +UTMP +SYSVINIT default-hierarchy=unified)
+[Sun Nov 15 03:53:24 2026] systemd[1]: Detected virtualization amazon.
+[Sun Nov 15 03:53:24 2026] systemd[1]: Detected architecture x86-64.
+[Sun Nov 15 03:53:37 2026] Loading iSCSI transport class v2.0-870.
+[Sun Nov 15 03:53:37 2026] iscsi: registered transport (iser)
+[Sun Nov 15 03:53:37 2026] RPC: Registered named UNIX socket transport module.
+[Sun Nov 15 03:53:37 2026] RPC: Registered udp transport module.
+[Sun Nov 15 03:53:37 2026] RPC: Registered tcp transport module.
+[Sun Nov 15 03:53:37 2026] RPC: Registered tcp-with-tls transport module.
+[Sun Nov 15 03:53:37 2026] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[Sun Nov 15 03:53:37 2026] RPC: Registered rdma transport module.
+[Sun Nov 15 03:53:37 2026] RPC: Registered rdma backchannel transport module.
+[Sun Nov 15 03:53:43 2026] systemd-journald[366]: Received SIGTERM from PID 1 (systemd).
+[Sun Nov 15 03:53:43 2026] systemd[1]: Stopping systemd-journald.service - Journal Service...
+[Sun Nov 15 03:53:43 2026] systemd[1]: Started acpid.service - ACPI event daemon.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Starting packagekit.service - PackageKit Daemon...
+[Sun Nov 15 03:53:43 2026] systemd[1]: netplan-ovs-cleanup.service - OpenVSwitch configuration for cleanup was skipped because of an unmet condition check (ConditionFileIsExecutable=/usr/bin/ovs-vsctl).
+[Sun Nov 15 03:53:43 2026] systemd[1]: systemd-networkd-wait-online.service: Deactivated successfully.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Stopped systemd-networkd-wait-online.service - Wait for Network to be Configured.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Stopping systemd-networkd-wait-online.service - Wait for Network to be Configured...
+[Sun Nov 15 03:53:43 2026] systemd[1]: Stopping systemd-networkd.service - Network Configuration...
+[Sun Nov 15 03:53:43 2026] (acpid)[4328]: acpid.service: Referenced but unset environment variable evaluates to an empty string: OPTIONS
+[Sun Nov 15 03:53:43 2026] systemd[1]: ModemManager.service: Deactivated successfully.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Stopped ModemManager.service - Modem Manager.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Stopping polkit.service - Authorization Manager...
+[Sun Nov 15 03:53:43 2026] systemd[1]: Stopping systemd-resolved.service - Network Name Resolution...
+[Sun Nov 15 03:53:43 2026] systemd[1]: Stopping udisks2.service - Disk Manager...
+[Sun Nov 15 03:53:43 2026] systemd[1]: polkit.service: Deactivated successfully.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Stopped polkit.service - Authorization Manager.
+[Sun Nov 15 03:53:43 2026] systemd[1]: multipathd.service: Deactivated successfully.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Stopped multipathd.service - Device-Mapper Multipath Device Controller.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Starting multipathd.service - Device-Mapper Multipath Device Controller...
+[Sun Nov 15 03:53:43 2026] systemd[1]: Starting polkit.service - Authorization Manager...
+[Sun Nov 15 03:53:43 2026] systemd[1]: Started chrony.service - chrony, an NTP client/server.
+[Sun Nov 15 03:53:43 2026] systemd[1]: udisks2.service: Deactivated successfully.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Stopped udisks2.service - Disk Manager.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Starting udisks2.service - Disk Manager...
+[Sun Nov 15 03:53:43 2026] systemd[1]: Started ssh.service - OpenBSD Secure Shell server.
+[Sun Nov 15 03:53:43 2026] systemd[1]: systemd-journald.service: Deactivated successfully.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Stopped systemd-journald.service - Journal Service.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Starting systemd-journald.service - Journal Service...
+[Sun Nov 15 03:53:43 2026] systemd[1]: systemd-resolved.service: Deactivated successfully.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Stopped systemd-resolved.service - Network Name Resolution.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Starting systemd-resolved.service - Network Name Resolution...
+[Sun Nov 15 03:53:43 2026] systemd[1]: Started multipathd.service - Device-Mapper Multipath Device Controller.
+[Sun Nov 15 03:53:43 2026] systemd[1]: systemd-networkd.service: Deactivated successfully.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Stopped systemd-networkd.service - Network Configuration.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Stopping systemd-udevd.service - Rule-based Manager for Device Events and Files...
+[Sun Nov 15 03:53:43 2026] systemd-journald[4370]: Collecting audit messages is disabled.
+[Sun Nov 15 03:53:43 2026] systemd[1]: Started systemd-journald.service - Journal Service.
+[Sun Nov 15 03:53:43 2026] audit: type=1400 audit(1794714823.883:125): apparmor="STATUS" operation="profile_replace" info="same as current profile, skipping" profile="unconfined" name="rsyslogd" pid=4365 comm="apparmor_parser"
+[Sun Nov 15 03:53:56 2026] efa 0000:00:1f.0 efa_0: Unregister ib device
+[Sun Nov 15 03:55:13 2026] efa: loading out-of-tree module taints kernel.
+[Sun Nov 15 03:55:13 2026] efa: module verification failed: signature and/or required key missing - tainting kernel
+[Sun Nov 15 03:55:13 2026] Elastic Fabric Adapter (EFA) v3.3.1g
+[Sun Nov 15 03:55:13 2026] efa 0000:00:1f.0: Setup irq:60 name:efa-mgmnt@pci:0000:00:1f.0
+[Sun Nov 15 03:55:13 2026] efa 0000:00:1f.0 efa_0: IB device registered
+[Sun Nov 15 03:58:36 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:36 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-166) [-22]
+[Sun Nov 15 03:58:36 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:36 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-164) [-22]
+[Sun Nov 15 03:58:36 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:36 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-161) [-22]
+[Sun Nov 15 03:58:36 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:36 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-158) [-22]
+[Sun Nov 15 03:58:37 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:37 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-156) [-22]
+[Sun Nov 15 03:58:37 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:37 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-154) [-22]
+[Sun Nov 15 03:58:37 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:37 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-152) [-22]
+[Sun Nov 15 03:58:37 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:37 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-150) [-22]
+[Sun Nov 15 03:58:37 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:37 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-148) [-22]
+[Sun Nov 15 03:58:37 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:37 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-145) [-22]
+[Sun Nov 15 03:58:43 2026] hrtimer: interrupt took 8030 ns
+[Sun Nov 15 03:58:44 2026] efa_com_cmd_exec: 29 callbacks suppressed
+[Sun Nov 15 03:58:44 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:44 2026] efa_com_dereg_mr: 29 callbacks suppressed
+[Sun Nov 15 03:58:44 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-286) [-22]
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-280) [-22]
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-285) [-22]
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-279) [-22]
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-276) [-22]
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-275) [-22]
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-272) [-22]
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-273) [-22]
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-269) [-22]
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:45 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-270) [-22]
+[Sun Nov 15 03:58:50 2026] efa_com_cmd_exec: 21 callbacks suppressed
+[Sun Nov 15 03:58:50 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:50 2026] efa_com_dereg_mr: 21 callbacks suppressed
+[Sun Nov 15 03:58:50 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-2097251) [-22]
+[Sun Nov 15 03:58:50 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:50 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-2097249) [-22]
+[Sun Nov 15 03:58:50 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:50 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-2097221) [-22]
+[Sun Nov 15 03:58:50 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:50 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-2097219) [-22]
+[Sun Nov 15 03:58:50 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:50 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-2097222) [-22]
+[Sun Nov 15 03:58:50 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:50 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-2097245) [-22]
+[Sun Nov 15 03:58:51 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:51 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-2097304) [-22]
+[Sun Nov 15 03:58:51 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:51 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-2097239) [-22]
+[Sun Nov 15 03:58:51 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:51 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-2097213) [-22]
+[Sun Nov 15 03:58:52 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 03:58:52 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-3145868) [-22]
+[Sun Nov 15 04:08:59 2026] efa_com_cmd_exec: 17 callbacks suppressed
+[Sun Nov 15 04:08:59 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:08:59 2026] efa_com_dereg_mr: 17 callbacks suppressed
+[Sun Nov 15 04:08:59 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-3145841) [-22]
+[Sun Nov 15 04:08:59 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:08:59 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-3145801) [-22]
+[Sun Nov 15 04:09:09 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:09 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-3145897) [-22]
+[Sun Nov 15 04:09:09 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:09 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194381) [-22]
+[Sun Nov 15 04:09:09 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:09 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194396) [-22]
+[Sun Nov 15 04:09:09 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:09 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194443) [-22]
+[Sun Nov 15 04:09:09 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:09 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194458) [-22]
+[Sun Nov 15 04:09:09 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:09 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194384) [-22]
+[Sun Nov 15 04:09:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194440) [-22]
+[Sun Nov 15 04:09:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194400) [-22]
+[Sun Nov 15 04:09:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:10 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194449) [-22]
+[Sun Nov 15 04:09:16 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:16 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194393) [-22]
+[Sun Nov 15 04:09:16 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:16 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194462) [-22]
+[Sun Nov 15 04:09:17 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:17 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194433) [-22]
+[Sun Nov 15 04:09:17 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:17 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194445) [-22]
+[Sun Nov 15 04:09:17 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:17 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194379) [-22]
+[Sun Nov 15 04:09:17 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:17 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194408) [-22]
+[Sun Nov 15 04:09:17 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:17 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194388) [-22]
+[Sun Nov 15 04:09:17 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:17 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194376) [-22]
+[Sun Nov 15 04:09:17 2026] efa 0000:00:1f.0 rdmap0s31: Failed to process command DEREG_MR (opcode 8) err -22
+[Sun Nov 15 04:09:17 2026] efa 0000:00:1f.0 rdmap0s31: Failed to de-register mr(lkey-4194372) [-22]
+
+               total        used        free      shared  buff/cache   available
+Mem:           94491        9458       85407           2         499       85033
+Swap:              0           0           0
+
+    PID   RSS    VSZ STAT     ELAPSED COMMAND
+   1020 44324 3184336 Ssl       16:27 snapd
+   4361 24976 223432 SLsl       15:50 multipathd
+   1155 22468 110040 Ssl        16:27 unattended-upgr
+   1430 22032 2423960 Ssl       16:26 amazon-ssm-agen
+   1013 20360  32444 Ss         16:27 networkd-dispat
+      1 13600  22584 Ss         16:36 systemd
+   4360 12856 469004 Ssl        15:50 udisksd
+   4370 12744  50832 S<s        15:50 systemd-journal
+   4380 12232  21480 Ss         15:50 systemd-resolve
+  73310 11648  20276 Ss         00:00 systemd
+   4396 11468 391896 Ssl        15:50 ModemManager
+  73305 10852  15012 Ss         00:00 sshd
+   1023  9236  18312 Ss         16:27 systemd-logind
+   4413  8864  19028 Ss         15:50 systemd-network
