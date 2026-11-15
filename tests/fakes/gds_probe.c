@@ -11,7 +11,8 @@
  * Device memory: the emulated GPU's when ROCEPOOL_DEV_EMU=1, else real GPU
  * memory (cuMemAlloc on device $GDS_DEVICE, default 0, through libcuda.so.1),
  * so the same probe is the on-site GPU benchmark.
- * Each command ends with: STATS <direct> <bounced> <posix> <runtime>
+ * Each command ends with: STATS <direct> <bounced> <posix> <runtime>, then
+ * WHY <the first reason a device transfer bounced, or nothing>
  * The device buffer starts 4096 bytes into its allocation (devPtr_offset). */
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -56,6 +57,7 @@ void rp_devemu_free(void *);
 int rp_devemu_copy_to(void *, const void *, size_t);
 int rp_devemu_copy_from(void *, const void *, size_t);
 void rp_cufile_stats(uint64_t *, uint64_t *, uint64_t *);
+const char *rp_cufile_dev_why(void);
 const char *rp_cufile_runtime(void);
 
 static int g_emu;
@@ -131,6 +133,7 @@ static void stats(void) {
     rp_cufile_stats(&d, &b, &p);
     printf("STATS %llu %llu %llu %s\n", (unsigned long long)d, (unsigned long long)b, (unsigned long long)p,
            rp_cufile_runtime());
+    printf("WHY %s\n", rp_cufile_dev_why());
 }
 
 static double now(void) {
