@@ -45,6 +45,41 @@ jobs:
           echo "$r -- $v" >> "$GITHUB_STEP_SUMMARY"
           grep -E '^(FAIL|ERROR):' unittest.log | head -20 | sed 's/^/::error title=test::/' || true
 
+  tier-commit:
+    # what a durable OST's commit costs under ior-hard-write's shape, on XFS
+    # (the tier's file system on the AWS hosts) and ext4, with a fresh slab's
+    # gaps written (the default) and skipped: tools/hard_write_bench.py
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ make cmake pkg-config autoconf automake libtool fuse3 iproute2 \
+            libibverbs-dev librdmacm-dev xfsprogs e2fsprogs
+          sudo modprobe fuse || true
+          sudo modprobe xfs || true
+      - name: file systems (loop devices on the runner's disk)
+        run: |
+          for fs in xfs ext4; do
+            sudo truncate -s 14G /mnt/$fs.img
+            sudo mkfs.$fs -q /mnt/$fs.img
+            sudo mkdir -p /mnt/t_$fs
+            sudo mount -o loop /mnt/$fs.img /mnt/t_$fs
+          done
+          df -hT /mnt/t_xfs /mnt/t_ext4
+      - name: ior-hard-write shape, durable OSTs
+        run: |
+          set -o pipefail
+          for fs in xfs ext4 xfs; do
+            sudo -E env "PATH=$PATH" python3 tools/hard_write_bench.py --dir /mnt/t_$fs/bench --seconds 40 \
+              --writers 8 --tier-gib 5 2>&1 | tee -a bench.log
+          done
+      - name: summary
+        if: always()
+        run: grep -E '^== ' bench.log | cut -c1-900 | sed 's/^== /::notice title=tier commit::/' || true
+
   rocepond:
     # rocepond's schedulers with the real packages (Ray, DuckDB): the tests on
     # a local Ray, then the sort -- thousands of tasks -- on a simulated
