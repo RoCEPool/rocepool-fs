@@ -60,25 +60,52 @@ jobs:
             libibverbs-dev librdmacm-dev xfsprogs e2fsprogs
           sudo modprobe fuse || true
           sudo modprobe xfs || true
-      - name: file systems (loop devices on the runner's disk)
-        run: |
-          for fs in xfs ext4; do
-            sudo truncate -s 14G /mnt/$fs.img
-            sudo mkfs.$fs -q /mnt/$fs.img
-            sudo mkdir -p /mnt/t_$fs
-            sudo mount -o loop /mnt/$fs.img /mnt/t_$fs
-          done
-          df -hT /mnt/t_xfs /mnt/t_ext4
-      - name: ior-hard-write shape, durable OSTs
+      - name: ior-hard-write shape, durable OSTs -- XFS and ext4 on a RAM-backed loop device
+        # in RAM a flush costs nothing, so a commit's time is the file system's
+        # own work (journal, extent conversions) -- on the runner's disk the
+        # flush (3.7 ms) hid everything else (first run of this job)
         run: |
           set -o pipefail
+          sudo mount -o remount,size=12G /dev/shm
           for fs in xfs ext4 xfs; do
-            sudo -E env "PATH=$PATH" python3 tools/hard_write_bench.py --dir /mnt/t_$fs/bench --seconds 40 \
-              --writers 8 --tier-gib 5 2>&1 | tee -a bench.log
+            sudo truncate -s 9G /dev/shm/$fs.img
+            sudo mkfs.$fs -q /dev/shm/$fs.img
+            sudo mkdir -p /mnt/t_$fs
+            sudo mount -o loop /dev/shm/$fs.img /mnt/t_$fs
+            sudo -E env "PATH=$PATH" python3 tools/hard_write_bench.py --dir /mnt/t_$fs/bench --seconds 30 \
+              --writers 16 --tier-gib 3 --ram-cache-mib 64 2>&1 | tee -a bench.log
+            sudo umount /mnt/t_$fs
+            sudo rm -f /dev/shm/$fs.img
           done
       - name: summary
         if: always()
         run: grep -E '^== ' bench.log | cut -c1-900 | sed 's/^== /::notice title=tier commit::/' || true
+
+  ofi-lanes:
+    # a server endpoint's thread with payload pulls and large replies in
+    # flight against waiting for each (tools/ofi_lane_bench.py), with a
+    # delay on the link so that transfers take wire time as on EFA
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - name: packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ make cmake pkg-config autoconf automake libtool fuse3 iproute2 \
+            libibverbs-dev librdmacm-dev
+          sudo apt-get install -y "linux-modules-extra-$(uname -r)" || true
+          sudo modprobe sch_netem || true
+      - name: 1 MiB writes and reads, no delay / 0.5 ms / 2 ms
+        run: |
+          set -o pipefail
+          for d in "" 500us 2ms; do
+            sudo -E env "PATH=$PATH" python3 tools/ofi_lane_bench.py ${d:+--delay $d} --clients 32 --objects 24 --eps 2 \
+              --rounds 2 2>&1 | tee -a lanes.log
+          done
+      - name: summary
+        if: always()
+        run: grep -E '^== ' lanes.log | cut -c1-900 | sed 's/^== /::notice title=ofi lanes::/' || true
 
   rocepond:
     # rocepond's schedulers with the real packages (Ray, DuckDB): the tests on
