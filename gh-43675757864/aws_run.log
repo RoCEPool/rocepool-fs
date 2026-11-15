@@ -1,0 +1,124 @@
+[aws 04:13:32] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 04:13:32] 2 x c5n.9xlarge: 36 vCPU, 96 GiB, 50 Gigabit, NVMe 0 GB, EFA yes
+[aws 04:13:33] vCPU quota 300 >= 72 needed (instances already running count against it too)
+[aws 04:13:47] launched i-0ec9b673503a1b2b4, i-0b9b0c5cecf0a88be
+[aws 04:14:04] running: 3.133.159.205 (172.31.14.231), 18.117.165.25 (172.31.15.184)
+[aws 04:16:16] 3.133.159.205: ready (efa)
+[aws 04:16:17] 18.117.165.25: ready (efa)
+[aws 04:16:26] command started on 3.133.159.205 (2 hosts); following its progress
+  | == rocepool cluster setup on the real hosts: --peers root@172.31.15.184=172.31.15.184 --ip 172.31.14.231 --bench none --skip-tests
+  | == rocepool 20261017a run Sun Nov 15 04:16:26 UTC 2026 ==
+  | == 1/4 依赖
+  | == 2/4 编译 + 自检
+  |    模拟器版库、FUSE 客户端、拦截库、KV 库：已编译
+  | == 集群节点：root 免密登录、主机名
+  |    本机：<this host>；其余 1 台
+  |    节点就绪：root@172.31.15.184=172.31.15.184
+  | == 3/4 运行
+  |    节点：本机 + root@172.31.15.184=172.31.15.184
+  |    网卡：RoCE -> verbs 传输后端
+  | [PASS]   kernel   7.0.0-1014-aws: fork() is safe with registered memory
+  | [PASS]   memlock  locked-memory limit 11811 MiB >= 2560 MiB needed
+  | [PASS]   power    governor n/a, no deep idle states enabled
+  | [PASS]   device   1 AWS EFA device(s): rdmap0s31 -- the ofi (libfabric) transport backend
+  | [PASS]   ip       172.31.14.231: the bootstrap/control address (data goes over rdmap0s31)
+  | [PASS]   libfabric libfabric's efa provider is up (fi_info -p efa -t FI_EP_RDM)
+  | [WARN]   rdma_read c5n.9xlarge: not known to do EFA RDMA read in hardware (Nitro v4+ does); libfabric emulates reads with the target's CPU -- correct, slower one-sided reads; the client probe in tools/io500_run.py decides between one-sided and RPC reads
+  | [PASS]   lossless EFA's SRD transport is reliable over AWS's lossy fabric: no PFC/DSCP to configure
+  | [PASS]   tuning   36 CPUs: completion busy-poll 20 us before sleeping (ROCE_POLL_SPIN_US=20; tools/roce_onsite.py then measures the best value on this NIC)
+  | [WARN] preflight  rdmap0s31 port None (None) ip 172.31.14.231; env: {'ROCE_BACKEND': 'ofi', 'ROCE_OFI_PROVIDER': 'efa', 'ROCE_POLL_SPIN_US': '20'}; fixes: ['disabled 36 deep idle states (exit latency > 20 us) (until reboot)']
+  | [ ... ] peers      checking root@172.31.15.184 (SSH, root, RoCE IP, hostname)
+  | [PASS] peers      local: ip-172-31-14-231 172.31.14.231; root@172.31.15.184: ip-172-31-15-184 172.31.15.184
+  | [PASS] build      [build] transport backend: ofi / [build] using libfabric at /opt/amazon/efa / [build] OST tier: kernel backend only (set SPDK_DIR=<built spdk tree> for the SPDK backend) / [build] built /root/rocepool/roce/native/libroce_transport.so / [build] built /root/rocepool/roce/native/rocepool-fuse (native FUSE client) / [build] built /root/rocepool/roce/native/librocepool_kv.so (native KV client API) and rocepool-kv-bench / [build] built /root/rocepool/roce/native/librocepool_intercept.so (LD_PRELOAD interception client) / [build] built /root/rocepool/roce/native/librocepool_cufile.so and cufile/libcufile.so.0 (GPUDirect Storage, cuFile API)
+  | [PASS] transport  pooling, stale-connection recovery, drain, SRQ back-pressure, bounded registration, native OST/MDT parity + CAS atomicity over 172.31.14.231 (64.7s)
+  | [ ... ] spin       measuring the completion busy-poll on this NIC (about 30 s)
+  | [PASS] spin       ROCE_POLL_SPIN_US=50 (measured: 0 us: 1 thr 16462/s p50 60 us, 8 thr 30704/s; 20 us: 1 thr 12518/s p50 80 us, 8 thr 24870/s; 50 us: 1 thr 27342/s p50 36 us, 8 thr 39784/s; 100 us: 1 thr 27515/s p50 36 us, 8 thr 40680/s; 200 us: 1 thr 27215/s p50 36 us, 8 thr 40531/s; 400 us: 1 thr 27432/s p50 36 us, 8 thr 40686/s)
+  | [ ... ] peer       copying this tree to root@172.31.15.184:/tmp/rocepool_onsite, then its preflight and build
+  | [WARN] peer       root@172.31.15.184: rdmap0s31 172.31.15.184; env {'ROCE_BACKEND': 'ofi', 'ROCE_OFI_PROVIDER': 'efa', 'ROCE_POLL_SPIN_US': '20'}; failing: none
+  | [PASS] peer-build /opt/amazon/efa
+  | [build] OST tier: kernel backend only (set SPDK_DIR=<built spdk tree> for the SPDK backend)
+  | [build] built /tmp/rocepool_onsite/roce/native/libroce_transport.so
+  | [build] built /tmp/rocepool_onsite/roce/native/rocepool-fuse (native FUSE client)
+  | [build] built /tmp/rocepool_onsite/roce/native/librocepool_kv.so (native KV client API) and rocepool-kv-bench
+  | [build] built /tmp/rocepool_onsite/roce/native/librocepool_intercept.so (LD_PRELOAD interception client)
+  | [build] built /tmp/rocepool_onsite/roce/native/librocepool_cufile.so and cufile/libcufile.so.0 (GPUDirect Storage, cuFile API)
+  | [ ... ] functional smoke / pool / mpi / hpc / stream phases over RoCE (a few minutes)
+  | [PASS] functional [PASS] smoke [PASS] pool [PASS] mpi [PASS] hpc [PASS] stream
+  | [ ... ] cluster-prep MPI + IO500 (built from deps/ the first time: ~10 min), then this tree and those builds to every peer, their preflight and build
+  | [deps] mpich: unpacked the bundled mpich-4.2.3-ch3.tar.xz
+  |     rm -f ./src/include/mpio.h ; \
+  |     ( cd ./src/include &&       \
+  |         ln -s ../mpi/romio/include/mpio.h ) ; \
+  |       |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  |                  from src/mpi/coll/barrier/barrier_intra_k_dissemination.c:6:
+  |    50 | int MPIC_Waitall(int numreq, MPIR_Request * requests[], MPI_Status * statuses);
+  |       |     ^~~~~~~~~~~~
+  |     cd /root/rocepool/.bench_cache/mpich/bin && ln -f -s mpiexec.hydra mpiexec ; \
+  |     cd /root/rocepool/.bench_cache/mpich/bin && ln -f -s mpiexec.hydra mpirun ; \
+  |    /root/rocepool/.bench_cache/mpich/lib
+  |    - add LIBDIR to the 'LD_LIBRARY_PATH' environment variable
+  |      during execution
+  |    - add LIBDIR to the 'LD_RUN_PATH' environment variable
+  |      during linking
+  |    - use the '-Wl,-rpath -Wl,LIBDIR' linker flag
+  |    - have your system administrator add LIBDIR to '/etc/ld.so.conf'
+  |     . lib/libpmpi.la ; \
+  |     . lib/libmpi.la ; \
+  | [deps] io500: unpacked the bundled io500-sc26.tar.xz
+  |       |     ^~~~~~~~~~~~~~~~~~
+  |       |     ^~~~~~~~~~~~~~~~~~
+  |       |                                     ^
+  |                  from ior.c:15:
+  |     inlined from ‘GetPlatformName’ at ior.c:591:9:
+  |    30 |   return __builtin___sprintf_chk (__s, __USE_FORTIFY_LEVEL - 1,
+  |       |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  |    31 |                                   __glibc_objsize (__s), __fmt,
+  |       |                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  |    32 |                                   __va_arg_pack ());
+  |       |                                   ~~~~~~~~~~~~~~~~~
+  | [io500] built io500-sc26_v4 (IOR e4e457852b2f, pfind 27427343bb66)
+  | [WARN] cluster-prep root@172.31.15.184: copied to /root/rocepool (+ .bench_cache/mpich, .bench_cache/io500_src/io500, .bench_cache/io500_src/bin); preflight WARN (rdmap0s31 172.31.15.184)
+  | [PASS] nvme-preflight local: tier file:/rocepool_tier/rocepool_ost_{n}.tier:45 (O_DIRECT write 288 MiB/s); P2P memory none; no NVMe-backed file system with room: the tier goes on / (/dev/root, 91 GiB free; not NVMe -- slower)
+  | [WARN] io500      not run (--bench none); cluster ready: ROCEPOOL_CLUSTER=/root/rocepool/onsite_cluster.json tools/io500_run.py
+  | verdict: WARN   report: onsite_report.json
+  | == 4/4 完成（rc=0）：onsite_report.json 
+  |    注意：没有 IO500 结果（看 onsite_report.json 里 io500 / cluster 步骤的原因）
+  | == 结果包：/root/rocepool/rocepool-results-ip-172-31-14-231-20261115-042243.tar.gz（把这个文件发回来即可）
+  | == node 0: /opt/rocepond-venv: duckdb 2.0.0 ray 2.60.0
+  | == node 1: /opt/rocepond-venv: duckdb 2.0.0 ray 2.60.0
+  | == again with /opt/rocepond-venv/bin/python3 (duckdb, ray)
+  | == rocepool up: 2 MDT, 2 OST, mounted at /mnt/rocepool_rocepond on all 2 nodes (OST data: RAM)
+  | == diagnosis: 64 tasks at once, 320 MiB each, local disk vs rocepool
+  | == diagnosis failed: TaskError: task failed 1 times: diagnose 13
+  | == rocepool up: 2 MDT, 2 OST, mounted at /mnt/rocepool_rocepond on all 2 nodes (OST data: RAM)
+  | == run: executor process, 20.0 GiB, 1024 partitions, 2 nodes x 32 slots
+  | == scheduler: {"scheduler": "rocepond.ProcessExecutor", "nodes": 2, "slots_per_node": 32, "threads_per_slot": 1, "duckdb": "v2.0.0 (python package)"}
+  | == 20.00 GiB (214,748,364 records) in 1024 partitions: generate 13.9 s (not timed), shuffle 94.98 s, sort 44.75 s
+  |    generate sort_input                                            64 tasks    13.90 s      4.6 tasks/s  retries 1
+  |    repartition sort_input -> sort_shuffled (1024 partitions)      64 tasks    93.13 s      0.7 tasks/s  retries 6
+  |    repartition sort_shuffled: list                                 1 tasks     1.84 s      0.5 tasks/s  retries 0
+  |    partition_sql -> sort_output                                 1024 tasks    44.74 s     22.9 tasks/s  retries 155
+  |    sort: validate output                                        1024 tasks    15.76 s     65.0 tasks/s  retries 0
+  |    sort: validate input                                           64 tasks    25.91 s      2.5 tasks/s  retries 0
+  | == validation (process): PASSED -- 214,748,364 records out, 0 order violations, partition ranges in order: True, checksum equal: True
+  | == shuffle + sort (process): 139.73 s = 8.588 GiB/min = 4.07 MiB/s per physical core (2.04 per vCPU; 36 cores, 72 vCPUs)
+  | == smallpond + 3FS (published): 3742.6 GiB/min on 9600 compute cores (+25 storage nodes) = 6.65 MiB/s per compute core
+  | == rocepool up: 2 MDT, 2 OST, mounted at /mnt/rocepool_rocepond on all 2 nodes (OST data: RAM)
+  | == run: executor ray, 20.0 GiB, 1024 partitions, 2 nodes x 32 slots
+  | == Ray up: head on node 0 (172.31.14.231:6399), 2 nodes x 32 CPUs
+  | == scheduler: {"scheduler": "rocepond.RayExecutor", "ray": "2.60.0", "nodes": 2, "cpus": 64.0, "threads_per_task": 1}
+  | == 20.00 GiB (214,748,364 records) in 1024 partitions: generate 13.79 s (not timed), shuffle 81.21 s, sort 45.61 s
+  |    generate sort_input                                            64 tasks    13.79 s      4.6 tasks/s  retries 0
+  |    repartition sort_input -> sort_shuffled (1024 partitions)      64 tasks    79.47 s      0.8 tasks/s  retries 4
+  |    repartition sort_shuffled: list                                 1 tasks     1.74 s      0.6 tasks/s  retries 0
+  |    partition_sql -> sort_output                                 1024 tasks    45.60 s     22.5 tasks/s  retries 163
+  |    sort: validate output                                        1024 tasks    15.67 s     65.3 tasks/s  retries 2
+  |    sort: validate input                                           64 tasks    26.30 s      2.4 tasks/s  retries 0
+  | == validation (ray): PASSED -- 214,748,364 records out, 0 order violations, partition ranges in order: True, checksum equal: True
+  | == shuffle + sort (ray): 126.82 s = 9.462 GiB/min = 4.49 MiB/s per physical core (2.24 per vCPU; 36 cores, 72 vCPUs)
+  | == smallpond + 3FS (published): 3742.6 GiB/min on 9600 compute cores (+25 storage nodes) = 6.65 MiB/s per compute core
+  | == report: /root/rocepool/rocepond_sort_report.json
+[aws 04:33:35] reports in aws_runs/gh-43675757864/: onsite_report.json, run.log, aws_run.out, onsite_crossover.json, rocepond_sort_report.json, host0_kernel.txt, host1_kernel.txt
+[aws 04:33:35] run.sh exit code 0
+[aws 04:33:36] terminating i-0ec9b673503a1b2b4, i-0b9b0c5cecf0a88be
+[aws 04:34:11] all resources released

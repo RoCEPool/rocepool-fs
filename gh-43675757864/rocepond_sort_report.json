@@ -1,0 +1,330 @@
+{
+ "what": "GraySort-style sort on rocepond + rocepool (rocepond/sort.py)",
+ "nodes": 2,
+ "slots_per_node": 32,
+ "threads_per_task": 1,
+ "vcpus": 72,
+ "physical_cores": 36,
+ "memory_limit_per_duckdb": "1500MiB",
+ "cores_note": "all cores of the cluster",
+ "host": {
+  "vcpus_per_host": 36,
+  "physical_cores_per_host": 18,
+  "memory_gib_per_host": 92.3,
+  "cpu": "Intel(R) Xeon(R) Platinum 8124M CPU @ 3.00GHz",
+  "instance_type": "c5n.9xlarge"
+ },
+ "runs": [
+  {
+   "executor": "process",
+   "scheduler": {
+    "scheduler": "rocepond.ProcessExecutor",
+    "nodes": 2,
+    "slots_per_node": 32,
+    "threads_per_slot": 1,
+    "duckdb": "v2.0.0 (python package)"
+   },
+   "stages": [
+    {
+     "stage": "generate sort_input",
+     "tasks": 64,
+     "wall_s": 13.897,
+     "retries": 1,
+     "retry_errors": [
+      "generate sort_input [27/64]: attempt 1 on n0s27: DuckError: IOException: IO Error: Async write failed for range [offset=129393238, size=25]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_input/part-00027.parquet\\\": Input/output error\",\"errno\":\"5\"}"
+     ],
+     "tasks_per_s": 4.6,
+     "task_s_total": 754.889,
+     "duck_s_total": 749.957,
+     "utilization": 0.849
+    },
+    {
+     "stage": "repartition sort_input -> sort_shuffled (1024 partitions)",
+     "tasks": 64,
+     "wall_s": 93.131,
+     "retries": 6,
+     "retry_errors": [
+      "repartition sort_input -> sort_shuffled (1024 partitions) [18/64]: attempt 1 on n0s18: DuckError: IOException: IO Error: Async write failed for range [offset=26, size=46585]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=17/from-18-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [46/64]: attempt 1 on n1s14: DuckError: IOException: IO Error: Async write failed for range [offset=46387, size=22]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=320/from-46-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [60/64]: attempt 1 on n1s28: DuckError: IOException: IO Error: Async write failed for range [offset=0, size=26]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=653/from-60-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [22/64]: attempt 1 on n0s22: DuckError: IOException: IO Error: Async write failed for range [offset=0, size=26]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=716/from-22-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [6/64]: attempt 1 on n0s6: DuckError: IOException: IO Error: Async write failed for range [offset=46037, size=22]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=885/from-6-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [57/64]: attempt 1 on n1s25: DuckError: IOException: IO Error: Async write failed for range [offset=47199, size=22]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=923/from-57-0.parquet\\\": Input/output error\",\"errno\":\"5\"}"
+     ],
+     "tasks_per_s": 0.7,
+     "task_s_total": 5207.069,
+     "duck_s_total": 5182.994,
+     "utilization": 0.874
+    },
+    {
+     "stage": "repartition sort_shuffled: list",
+     "tasks": 1,
+     "wall_s": 1.843,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 0.5,
+     "task_s_total": 1.839,
+     "duck_s_total": 1.806,
+     "utilization": 0.016
+    },
+    {
+     "stage": "partition_sql -> sort_output",
+     "tasks": 1024,
+     "wall_s": 44.74,
+     "retries": 155,
+     "retry_errors": [
+      "partition_sql -> sort_output [5/1024]: attempt 1 on n0s5: DuckError: IOException: IO Error: Async write failed for range [offset=14950400, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00005.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [41/1024]: attempt 1 on n1s9: DuckError: IOException: IO Error: Async write failed for range [offset=5120000, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00041.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [0/1024]: attempt 1 on n0s0: DuckError: IOException: IO Error: Async write failed for range [offset=17817600, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00000.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [46/1024]: attempt 1 on n1s14: DuckError: IOException: IO Error: Async write failed for range [offset=9625600, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00046.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [39/1024]: attempt 1 on n1s7: DuckError: IOException: IO Error: Async write failed for range [offset=5120000, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00039.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [44/1024]: attempt 1 on n1s12: DuckError: IOException: IO Error: Async write failed for range [offset=15564800, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00044.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [11/1024]: attempt 1 on n0s11: DuckError: IOException: IO Error: Async write failed for range [offset=13107200, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00011.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [20/1024]: attempt 1 on n0s20: DuckError: IOException: IO Error: Async write failed for range [offset=20275200, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00020.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [31/1024]: attempt 1 on n0s31: DuckError: IOException: IO Error: Async write failed for range [offset=8806400, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00031.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [60/1024]: attempt 1 on n1s28: DuckError: IOException: IO Error: Async write failed for range [offset=15974400, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00060.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [57/1024]: attempt 1 on n1s25: DuckError: IOException: IO Error: Async write failed for range [offset=8601600, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00057.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [63/1024]: attempt 1 on n1s31: DuckError: IOException: IO Error: Async write failed for range [offset=13312000, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00063.dat\\\": Input/output error\",\"errno\":\"5\"}"
+     ],
+     "tasks_per_s": 22.9,
+     "task_s_total": 2416.987,
+     "duck_s_total": 2403.823,
+     "utilization": 0.844
+    },
+    {
+     "stage": "sort: validate output",
+     "tasks": 1024,
+     "wall_s": 15.763,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 65.0,
+     "task_s_total": 996.046,
+     "duck_s_total": 502.267,
+     "utilization": 0.987
+    },
+    {
+     "stage": "sort: validate input",
+     "tasks": 64,
+     "wall_s": 25.911,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 2.5,
+     "task_s_total": 1643.718,
+     "duck_s_total": 1643.716,
+     "utilization": 0.991
+    }
+   ],
+   "sort": {
+    "records": 214748364,
+    "bytes": 21474836400,
+    "partitions": 1024,
+    "splits": 64,
+    "generate_s": 13.9,
+    "shuffle_s": 94.98,
+    "sort_s": 44.75,
+    "total_s": 139.73,
+    "gib_per_min": 8.588,
+    "tasks": {
+     "generate sort_input": 64,
+     "repartition sort_input -> sort_shuffled (1024 partitions)": 64,
+     "repartition sort_shuffled: list": 1,
+     "partition_sql -> sort_output": 1024
+    },
+    "validation": {
+     "records_in": 214748364,
+     "records_out": 214748364,
+     "output_bytes": 21474836400,
+     "order_violations_in_files": 0,
+     "partition_ranges_in_order": true,
+     "checksum_equal": true,
+     "empty_partitions": 0,
+     "largest_partition_records": 211490,
+     "seconds": 41.68
+    },
+    "valid": true
+   },
+   "comparison": {
+    "rocepond_rocepool": {
+     "bytes": 21474836400,
+     "seconds": 139.73,
+     "gib_per_min": 8.588,
+     "vcpus": 72,
+     "physical_cores": 36,
+     "mib_per_s_per_vcpu": 2.04,
+     "mib_per_s_per_physical_core": 4.07,
+     "storage": "on the same hosts (one MDT + one OST per host, data in RAM)"
+    },
+    "smallpond_3fs_published": {
+     "bytes": 121496034869248,
+     "seconds": 1814,
+     "gib_per_min": 3742.6,
+     "compute_cores": 9600,
+     "storage_nodes_not_counted": 25,
+     "mib_per_s_per_compute_core": 6.65
+    }
+   },
+   "passed": true
+  },
+  {
+   "executor": "ray",
+   "scheduler": {
+    "scheduler": "rocepond.RayExecutor",
+    "ray": "2.60.0",
+    "nodes": 2,
+    "cpus": 64.0,
+    "threads_per_task": 1
+   },
+   "stages": [
+    {
+     "stage": "generate sort_input",
+     "tasks": 64,
+     "wall_s": 13.789,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 4.6,
+     "task_s_total": 740.469,
+     "duck_s_total": 738.332,
+     "utilization": 0.839
+    },
+    {
+     "stage": "repartition sort_input -> sort_shuffled (1024 partitions)",
+     "tasks": 64,
+     "wall_s": 79.466,
+     "retries": 4,
+     "retry_errors": [
+      "repartition sort_input -> sort_shuffled (1024 partitions) [31/64]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=44455, size=22]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=2/from-31-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [50/64]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=45169, size=22]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=547/from-50-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [17/64]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=371186, size=684]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=574/from-17-0.parquet\\\": Input/output error\",\"errno\":\"5\"}",
+      "repartition sort_input -> sort_shuffled (1024 partitions) [30/64]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=369665, size=684]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=685/from-30-0.parquet\\\": Input/output error\",\"errno\":\"5\"}"
+     ],
+     "tasks_per_s": 0.8,
+     "task_s_total": 4560.496,
+     "duck_s_total": 4528.125,
+     "utilization": 0.897
+    },
+    {
+     "stage": "repartition sort_shuffled: list",
+     "tasks": 1,
+     "wall_s": 1.74,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 0.6,
+     "task_s_total": 1.738,
+     "duck_s_total": 1.704,
+     "utilization": 0.016
+    },
+    {
+     "stage": "partition_sql -> sort_output",
+     "tasks": 1024,
+     "wall_s": 45.604,
+     "retries": 163,
+     "retry_errors": [
+      "partition_sql -> sort_output [10/1024]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=4915200, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00010.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [12/1024]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=16998400, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00012.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [15/1024]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=11059200, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00015.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [18/1024]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=5120000, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00018.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [20/1024]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=11264000, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00020.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [22/1024]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=4915200, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00022.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [31/1024]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=9216000, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00031.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [32/1024]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=10854400, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00032.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [43/1024]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=9830400, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00043.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [44/1024]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=17203200, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00044.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [57/1024]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=9011200, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00057.dat\\\": Input/output error\",\"errno\":\"5\"}",
+      "partition_sql -> sort_output [53/1024]: attempt 1: DuckError: IOException: IO Error: Async write failed for range [offset=9625600, size=204799]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00053.dat\\\": Input/output error\",\"errno\":\"5\"}"
+     ],
+     "tasks_per_s": 22.5,
+     "task_s_total": 2409.742,
+     "duck_s_total": 2380.613,
+     "utilization": 0.826
+    },
+    {
+     "stage": "sort: validate output",
+     "tasks": 1024,
+     "wall_s": 15.674,
+     "retries": 2,
+     "retry_errors": [
+      "sort: validate output [57/1024]: attempt 1: DuckError: IOException: IO Error: No files found that match the pattern \"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00057.dat\"\n\nLINE 1: SELECT count(*), coalesce(bit_xor(hash(line)), 0) FROM read_csv('/mnt/rocepool_rocepond/rocepond/data/sort_output...\n                                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "sort: validate output [94/1024]: attempt 1: DuckError: IOException: IO Error: No files found that match the pattern \"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00094.dat\"\n\nLINE 1: SELECT count(*), coalesce(bit_xor(hash(line)), 0) FROM read_csv('/mnt/rocepool_rocepond/rocepond/data/sort_output...\n                                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+     ],
+     "tasks_per_s": 65.3,
+     "task_s_total": 964.031,
+     "duck_s_total": 531.742,
+     "utilization": 0.961
+    },
+    {
+     "stage": "sort: validate input",
+     "tasks": 64,
+     "wall_s": 26.302,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 2.4,
+     "task_s_total": 1660.593,
+     "duck_s_total": 1660.591,
+     "utilization": 0.986
+    }
+   ],
+   "sort": {
+    "records": 214748364,
+    "bytes": 21474836400,
+    "partitions": 1024,
+    "splits": 64,
+    "generate_s": 13.79,
+    "shuffle_s": 81.21,
+    "sort_s": 45.61,
+    "total_s": 126.82,
+    "gib_per_min": 9.462,
+    "tasks": {
+     "generate sort_input": 64,
+     "repartition sort_input -> sort_shuffled (1024 partitions)": 64,
+     "repartition sort_shuffled: list": 1,
+     "partition_sql -> sort_output": 1024
+    },
+    "validation": {
+     "records_in": 214748364,
+     "records_out": 214748364,
+     "output_bytes": 21474836400,
+     "order_violations_in_files": 0,
+     "partition_ranges_in_order": true,
+     "checksum_equal": true,
+     "empty_partitions": 0,
+     "largest_partition_records": 211490,
+     "seconds": 41.98
+    },
+    "valid": true
+   },
+   "comparison": {
+    "rocepond_rocepool": {
+     "bytes": 21474836400,
+     "seconds": 126.82,
+     "gib_per_min": 9.462,
+     "vcpus": 72,
+     "physical_cores": 36,
+     "mib_per_s_per_vcpu": 2.24,
+     "mib_per_s_per_physical_core": 4.49,
+     "storage": "on the same hosts (one MDT + one OST per host, data in RAM)"
+    },
+    "smallpond_3fs_published": {
+     "bytes": 121496034869248,
+     "seconds": 1814,
+     "gib_per_min": 3742.6,
+     "compute_cores": 9600,
+     "storage_nodes_not_counted": 25,
+     "mib_per_s_per_compute_core": 6.65
+    }
+   },
+   "passed": true
+  }
+ ],
+ "rocepool": {
+  "mdts": "172.31.14.231:19901,172.31.15.184:19901",
+  "osts": "172.31.14.231:19951,172.31.15.184:19951",
+  "mount": "/mnt/rocepool_rocepond",
+  "client": "native FUSE (rocepool-fuse)",
+  "ost_data": "RAM"
+ },
+ "diagnosis": {
+  "error": "TaskError: task failed 1 times: diagnose 13\n  attempt 1 on n0s13: DuckError: IOException: IO Error: Async write failed for range [offset=46023, size=22]: {\"exception_type\":\"IO\",\"exception_message\":\"Could not write file \\\"/mnt/rocepool_rocepond/rocepond_diag/pw/bucket=187/from-13-0.parquet\\\": Input/output error\",\"errno\":\"5\"}"
+ },
+ "passed": true,
+ "server_and_client_logs": {}
+}
