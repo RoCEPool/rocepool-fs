@@ -1,0 +1,293 @@
+{
+ "what": "GraySort-style sort on rocepond + rocepool (rocepond/sort.py)",
+ "nodes": 2,
+ "slots_per_node": 32,
+ "threads_per_task": 1,
+ "vcpus": 72,
+ "physical_cores": 36,
+ "memory_limit_per_duckdb": "1500MiB",
+ "duckdb_settings": [],
+ "engine": "cli",
+ "cores_note": "all cores of the cluster",
+ "host": {
+  "vcpus_per_host": 36,
+  "physical_cores_per_host": 18,
+  "memory_gib_per_host": 92.3,
+  "cpu": "Intel(R) Xeon(R) Platinum 8124M CPU @ 3.00GHz",
+  "instance_type": "c5n.9xlarge"
+ },
+ "runs": [
+  {
+   "executor": "process",
+   "scheduler": {
+    "scheduler": "rocepond.ProcessExecutor",
+    "nodes": 2,
+    "slots_per_node": 32,
+    "threads_per_slot": 1,
+    "duckdb": "v1.5.6"
+   },
+   "stages": [
+    {
+     "stage": "generate sort_input",
+     "tasks": 64,
+     "wall_s": 13.882,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 4.6,
+     "task_s_total": 848.252,
+     "duck_s_total": 843.714,
+     "utilization": 0.955
+    },
+    {
+     "stage": "repartition sort_input -> sort_shuffled (1024 partitions)",
+     "tasks": 64,
+     "wall_s": 65.779,
+     "retries": 1,
+     "retry_errors": [
+      "repartition sort_input -> sort_shuffled (1024 partitions) [62/64]: attempt 1 on n1s30: DuckError: IO Error: Could not write file \"/mnt/rocepool_rocepond/rocepond/data/sort_shuffled/bucket=549/from-62-0.parquet\": Input/output error"
+     ],
+     "tasks_per_s": 1.0,
+     "task_s_total": 4051.615,
+     "duck_s_total": 4047.315,
+     "utilization": 0.962
+    },
+    {
+     "stage": "repartition sort_shuffled: list",
+     "tasks": 1,
+     "wall_s": 9.597,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 0.1,
+     "task_s_total": 9.594,
+     "duck_s_total": 9.381,
+     "utilization": 0.016
+    },
+    {
+     "stage": "partition_sql -> sort_output",
+     "tasks": 1024,
+     "wall_s": 106.478,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 9.6,
+     "task_s_total": 6687.746,
+     "duck_s_total": 6685.533,
+     "utilization": 0.981
+    },
+    {
+     "stage": "sort: validate output",
+     "tasks": 1024,
+     "wall_s": 14.029,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 73.0,
+     "task_s_total": 883.732,
+     "duck_s_total": 459.605,
+     "utilization": 0.984
+    },
+    {
+     "stage": "sort: validate input",
+     "tasks": 64,
+     "wall_s": 8.089,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 7.9,
+     "task_s_total": 494.33,
+     "duck_s_total": 494.302,
+     "utilization": 0.955
+    }
+   ],
+   "sort": {
+    "records": 214748364,
+    "bytes": 21474836400,
+    "partitions": 1024,
+    "splits": 64,
+    "generate_s": 13.88,
+    "shuffle_s": 75.38,
+    "sort_s": 106.48,
+    "total_s": 181.86,
+    "gib_per_min": 6.598,
+    "tasks": {
+     "generate sort_input": 64,
+     "repartition sort_input -> sort_shuffled (1024 partitions)": 64,
+     "repartition sort_shuffled: list": 1,
+     "partition_sql -> sort_output": 1024
+    },
+    "validation": {
+     "records_in": 214748364,
+     "records_out": 214748364,
+     "output_bytes": 21474836400,
+     "order_violations_in_files": 0,
+     "partition_ranges_in_order": true,
+     "checksum_equal": true,
+     "empty_partitions": 0,
+     "largest_partition_records": 211490,
+     "seconds": 22.12
+    },
+    "valid": true
+   },
+   "comparison": {
+    "rocepond_rocepool": {
+     "bytes": 21474836400,
+     "seconds": 181.86,
+     "gib_per_min": 6.598,
+     "vcpus": 72,
+     "physical_cores": 36,
+     "mib_per_s_per_vcpu": 1.56,
+     "mib_per_s_per_physical_core": 3.13,
+     "storage": "on the same hosts (one MDT + one OST per host, data in RAM)"
+    },
+    "smallpond_3fs_published": {
+     "bytes": 121496034869248,
+     "seconds": 1814,
+     "gib_per_min": 3742.6,
+     "compute_cores": 9600,
+     "storage_nodes_not_counted": 25,
+     "mib_per_s_per_compute_core": 6.65
+    }
+   },
+   "passed": true
+  },
+  {
+   "executor": "ray",
+   "scheduler": {
+    "scheduler": "rocepond.RayExecutor",
+    "ray": "2.60.0",
+    "nodes": 2,
+    "cpus": 64.0,
+    "threads_per_task": 1
+   },
+   "stages": [
+    {
+     "stage": "generate sort_input",
+     "tasks": 64,
+     "wall_s": 13.911,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 4.6,
+     "task_s_total": 791.776,
+     "duck_s_total": 789.193,
+     "utilization": 0.889
+    },
+    {
+     "stage": "repartition sort_input -> sort_shuffled (1024 partitions)",
+     "tasks": 64,
+     "wall_s": 65.573,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 1.0,
+     "task_s_total": 4048.99,
+     "duck_s_total": 4048.819,
+     "utilization": 0.965
+    },
+    {
+     "stage": "repartition sort_shuffled: list",
+     "tasks": 1,
+     "wall_s": 9.025,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 0.1,
+     "task_s_total": 9.022,
+     "duck_s_total": 8.808,
+     "utilization": 0.016
+    },
+    {
+     "stage": "partition_sql -> sort_output",
+     "tasks": 1024,
+     "wall_s": 107.826,
+     "retries": 1,
+     "retry_errors": [
+      "partition_sql -> sort_output [87/1024]: attempt 1: DuckError: IO Error: Could not write file \"/mnt/rocepool_rocepond/rocepond/data/sort_output/part-00087.dat\": Input/output error"
+     ],
+     "tasks_per_s": 9.5,
+     "task_s_total": 6726.487,
+     "duck_s_total": 6723.735,
+     "utilization": 0.975
+    },
+    {
+     "stage": "sort: validate output",
+     "tasks": 1024,
+     "wall_s": 13.863,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 73.9,
+     "task_s_total": 847.912,
+     "duck_s_total": 467.268,
+     "utilization": 0.956
+    },
+    {
+     "stage": "sort: validate input",
+     "tasks": 64,
+     "wall_s": 7.816,
+     "retries": 0,
+     "retry_errors": [],
+     "tasks_per_s": 8.2,
+     "task_s_total": 487.063,
+     "duck_s_total": 487.033,
+     "utilization": 0.974
+    }
+   ],
+   "sort": {
+    "records": 214748364,
+    "bytes": 21474836400,
+    "partitions": 1024,
+    "splits": 64,
+    "generate_s": 13.91,
+    "shuffle_s": 74.6,
+    "sort_s": 107.83,
+    "total_s": 182.43,
+    "gib_per_min": 6.578,
+    "tasks": {
+     "generate sort_input": 64,
+     "repartition sort_input -> sort_shuffled (1024 partitions)": 64,
+     "repartition sort_shuffled: list": 1,
+     "partition_sql -> sort_output": 1024
+    },
+    "validation": {
+     "records_in": 214748364,
+     "records_out": 214748364,
+     "output_bytes": 21474836400,
+     "order_violations_in_files": 0,
+     "partition_ranges_in_order": true,
+     "checksum_equal": true,
+     "empty_partitions": 0,
+     "largest_partition_records": 211490,
+     "seconds": 21.68
+    },
+    "valid": true
+   },
+   "comparison": {
+    "rocepond_rocepool": {
+     "bytes": 21474836400,
+     "seconds": 182.43,
+     "gib_per_min": 6.578,
+     "vcpus": 72,
+     "physical_cores": 36,
+     "mib_per_s_per_vcpu": 1.56,
+     "mib_per_s_per_physical_core": 3.12,
+     "storage": "on the same hosts (one MDT + one OST per host, data in RAM)"
+    },
+    "smallpond_3fs_published": {
+     "bytes": 121496034869248,
+     "seconds": 1814,
+     "gib_per_min": 3742.6,
+     "compute_cores": 9600,
+     "storage_nodes_not_counted": 25,
+     "mib_per_s_per_compute_core": 6.65
+    }
+   },
+   "passed": true
+  }
+ ],
+ "rocepool": {
+  "mdts": "172.31.6.221:19901,172.31.5.73:19901",
+  "osts": "172.31.6.221:19951,172.31.5.73:19951",
+  "mount": "/mnt/rocepool_rocepond",
+  "client": "native FUSE (rocepool-fuse)",
+  "ost_data": "RAM"
+ },
+ "diagnosis": {
+  "error": "TaskError: task failed 1 times: diagnose 55\n  attempt 1 on n1s23: DuckError: IO Error: Could not write file \"/mnt/rocepool_rocepond/rocepond_diag/in-55.parquet\": Input/output error"
+ },
+ "passed": true,
+ "server_and_client_logs": {}
+}
