@@ -1,0 +1,68 @@
+{
+ "what": "GraySort-style sort on rocepond + rocepool (rocepond/sort.py)",
+ "nodes": 2,
+ "slots_per_node": 32,
+ "threads_per_task": 1,
+ "vcpus": 72,
+ "physical_cores": 36,
+ "memory_limit_per_duckdb": "1500MiB",
+ "cores_note": "all cores of the cluster",
+ "host": {
+  "vcpus_per_host": 36,
+  "physical_cores_per_host": 18,
+  "memory_gib_per_host": 92.3,
+  "cpu": "Intel(R) Xeon(R) Platinum 8124M CPU @ 3.00GHz",
+  "instance_type": "c5n.9xlarge"
+ },
+ "runs": [],
+ "rocepool": {
+  "mdts": "172.31.13.181:19901,172.31.6.154:19901",
+  "osts": "172.31.13.181:19951,172.31.6.154:19951",
+  "mount": "/mnt/rocepool_rocepond",
+  "client": "native FUSE (rocepool-fuse)",
+  "ost_data": "RAM"
+ },
+ "diagnosis": {
+  "tasks": 64,
+  "mib_per_task": 320.0,
+  "partitions": 1024,
+  "generate (local disk)": {
+   "median_s": 4.978,
+   "max_s": 6.689,
+   "mib_per_s_per_task": 64.3,
+   "mib_per_s_all_tasks": 4114.0
+  },
+  "copy local disk -> rocepool": {
+   "median_s": 10.264,
+   "max_s": 11.371,
+   "mib_per_s_per_task": 31.2,
+   "mib_per_s_all_tasks": 1995.0
+  },
+  "read (local disk)": {
+   "median_s": 0.199,
+   "max_s": 0.256,
+   "mib_per_s_per_task": 1608.0,
+   "mib_per_s_all_tasks": 102915.0
+  },
+  "read (rocepool)": {
+   "median_s": 8.868,
+   "max_s": 10.196,
+   "mib_per_s_per_task": 36.1,
+   "mib_per_s_all_tasks": 2309.0
+  },
+  "partitioned write (local disk)": {
+   "median_s": 15.864,
+   "max_s": 17.969,
+   "mib_per_s_per_task": 20.2,
+   "mib_per_s_all_tasks": 1291.0
+  },
+  "partitioned write (rocepool)": {
+   "median_s": 99.669,
+   "max_s": 105.684,
+   "mib_per_s_per_task": 3.2,
+   "mib_per_s_all_tasks": 205.0
+  }
+ },
+ "passed": true,
+ "server_and_client_logs": {}
+}

@@ -1,0 +1,44 @@
+{
+  "run_id": "gh-43677507575",
+  "region": "us-east-2",
+  "mode": "efa",
+  "type": "c5n.9xlarge",
+  "nodes": 2,
+  "facts": {
+    "arch": "amd64",
+    "efa": true,
+    "vcpus": 36,
+    "mem_mib": 98304,
+    "network": "50 Gigabit",
+    "nvme": 0,
+    "network_cards": 1,
+    "efa_max": 1
+  },
+  "efa": true,
+  "ami": "ami-096d6538c463eb1db",
+  "vpc": "vpc-0599fd0abc5040937",
+  "az": "us-east-2a",
+  "subnet": "subnet-099d60c7e4b358f02",
+  "key": null,
+  "sg": null,
+  "pg": null,
+  "instances": [],
+  "placement_group_used": true,
+  "roles": {
+    "i-00dbf2041fe04ea31": "storage",
+    "i-0a7fa6f1db30fce89": "storage"
+  },
+  "hosts": [
+    {
+      "public": "18.119.110.16",
+      "private": "172.31.13.181"
+    },
+    {
+      "public": "18.224.53.24",
+      "private": "172.31.6.154"
+    }
+  ],
+  "gpu_hosts": [],
+  "setup": true,
+  "down": true
+}
