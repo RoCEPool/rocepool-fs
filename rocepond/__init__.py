@@ -59,6 +59,7 @@ def __getattr__(name):  # RayExecutor without importing ray until it is asked fo
 
 
 def local_executor(slots: int = 2, **kw) -> ProcessExecutor:
+    """kw: as ProcessExecutor (duckdb=, threads=, memory_limit=, settings=["SET ..."], ...)."""
     """Worker processes on this host (no cluster): for trying things out."""
     return ProcessExecutor(lambda node, argv: subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE),
                            [0], slots_per_node=slots, **kw)

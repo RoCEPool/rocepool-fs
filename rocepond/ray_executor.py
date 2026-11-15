@@ -36,7 +36,7 @@ class RayExecutor(Executor):
     def __init__(self, address: str | None = None, threads: int = 1, duckdb: str = "", engine: str = "auto",
                  memory_limit: str = "", memory: int | None = None, resources: dict | None = None,
                  scheduling_strategy=None, max_retries: int = 3, task_timeout: float | None = None,
-                 ship_package: bool = True, **ray_init):
+                 ship_package: bool = True, settings: list | tuple = (), **ray_init):
         super().__init__()
         import ray
         self.ray = ray
@@ -45,7 +45,8 @@ class RayExecutor(Executor):
         # worker's host's memory shared by its cores / threads (rocepond/task.py)
         if not memory_limit and memory:
             memory_limit = f"{memory >> 20}MiB"
-        self.conf = {"engine": engine, "duckdb": duckdb, "threads": threads, "memory_limit": memory_limit}
+        self.conf = {"engine": engine, "duckdb": duckdb, "threads": threads, "memory_limit": memory_limit,
+                     "settings": list(settings)}
         self._owns_ray = not ray.is_initialized()
         if self._owns_ray:
             kw = dict(ray_init)

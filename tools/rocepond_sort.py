@@ -78,6 +78,11 @@ def main() -> int:
     ap.add_argument("--memory-limit", default="", help="per DuckDB, e.g. 2GiB (default: host memory / workers)")
     ap.add_argument("--engine", default="auto", choices=("auto", "module", "cli"),
                     help="DuckDB: auto (the Python package if installed), module, or cli (--duckdb, else the release CLI)")
+    ap.add_argument("--setting", action="append", default=[],
+                    help="a statement every DuckDB runs first, e.g. 'SET async_threads = 0' (repeatable)")
+    ap.add_argument("--pwrite-stress", default="",
+                    help="first: tools/fuse_pwrite_stress.py on every node at once on rocepool, with these "
+                         "arguments (e.g. '--procs 32 --files 8 --threads 144')")
     ap.add_argument("--diagnose-only", action="store_true", help="--diagnose, then no sort")
     ap.add_argument("--diagnose", action="store_true",
                     help="first: every worker times the sort's I/O on local disk and on rocepool (see diagnose())")
@@ -119,6 +124,7 @@ def main() -> int:
     report = {"what": "GraySort-style sort on rocepond + rocepool (rocepond/sort.py)", "nodes": n,
               "slots_per_node": slots, "threads_per_task": args.threads, "vcpus": total_cores,
               "physical_cores": total_phys, "memory_limit_per_duckdb": args.memory_limit or "auto",
+              "duckdb_settings": args.setting, "engine": args.engine,
               "cores_note": "all cores of the cluster" if cluster.real else
               "one host: its cores run every worker, rocepool's servers and clients, and the emulated RDMA",
               "host": host_facts(), "runs": []}
@@ -130,7 +136,12 @@ def main() -> int:
     env["PYTHONPATH"] = ROOT
     rp = None
     try:
+        if args.pwrite_stress:
+            rp = start_rocepool(cluster, env, args, report)
+            report["pwrite_stress"] = pwrite_stress(cluster, env, args.pwrite_stress)
         if args.diagnose:
+            if rp is not None:
+                rp.stop()
             rp = start_rocepool(cluster, env, args, report)
             try:
                 report["diagnosis"] = diagnose(cluster, env, n, slots, duck, args)
@@ -159,6 +170,26 @@ def main() -> int:
             json.dump(report, f, indent=1)
         log(f"== report: {args.report}")
     return 0 if report.get("passed") else 1
+
+
+def pwrite_stress(cluster, env: dict, spec: str) -> list:
+    """tools/fuse_pwrite_stress.py on every node at the same time, into rocepool."""
+    import shlex
+    import subprocess
+    tool = os.path.join(ROOT, "tools", "fuse_pwrite_stress.py")
+    procs = [cluster.popen(n.index, [sys.executable, tool, f"{MNT}/pwrite_stress", "--tag", f"n{n.index}",
+                                     *shlex.split(spec)], env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           text=True) for n in cluster.nodes]
+    out = []
+    for i, p in enumerate(procs):
+        text, _ = p.communicate(timeout=3600)
+        try:
+            out.append(json.loads(text.strip().splitlines()[-1]))
+        except (ValueError, IndexError):
+            out.append({"host": f"n{i}", "output": text[-2000:]})
+        log(f"== pwrite stress, node {i}: {json.dumps(out[-1])[:1500]}")
+    cluster.run(0, ["rm", "-rf", f"{MNT}/pwrite_stress"], env, net=False)
+    return out
 
 
 def start_rocepool(cluster, env: dict, args, report: dict) -> RocepoolMount:
@@ -238,7 +269,7 @@ def diagnose(cluster, env, n: int, slots: int, duck: str, args) -> dict:
             f"COPY (SELECT {bucket} FROM '{loc}/in.parquet') TO '{loc}/pw' {pw}",
             f"COPY (SELECT {bucket} FROM '{loc}/in.parquet') TO '{rp}/pw' {pw}"]})
     ex = process_executor(cluster, env, slots, args.threads, duck, memory_limit=args.memory_limit, max_retries=0,
-                          engine=args.engine)
+                          engine=args.engine, settings=args.setting)
     report_engine = ex.info.get("duckdb")
     log(f"== diagnosis DuckDB: {report_engine}")
     out = {"tasks": tasks_n, "mib_per_task": round(records * sort.RECORD_BYTES / 2**20, 1), "partitions": p}
@@ -275,10 +306,11 @@ def one_run(kind: str, cluster, env: dict, n: int, slots: int, duck: str, args, 
                                           "--partitions", str(args.partitions), "--splits", str(args.splits),
                                           "--threads", str(args.threads), "--duckdb", duck, "--no-ship-package",
                                           "--max-fanout", str(args.max_fanout), "--memory-limit", args.memory_limit,
-                                          "--engine", args.engine])
+                                          "--engine", args.engine]
+                                         + [x for stmt in args.setting for x in ("--setting", stmt)])
         else:
             ex = process_executor(cluster, env, slots, args.threads, duck, memory_limit=args.memory_limit,
-                                  engine=args.engine)
+                                  engine=args.engine, settings=args.setting)
             sp = rocepond.Session(ex, root)
             res = sort.run(sp, int(args.gib * 2**30), args.partitions, args.splits or None, args.max_fanout)
             res["executor"], res["stages"] = ex.info, ex.stats
