@@ -666,14 +666,22 @@ static void op_read(uint64_t u, const struct fuse_read_in *ri) {
 
 /* The WRITE's bytes stay in the kernel request buffer `base` (arena memory,
  * see fuse_worker), which this handle now owns: no copy here, none at the
- * flush, none in the transport -- the OST reads them from this buffer. */
+ * flush, none in the transport -- the OST reads them from this buffer.
+ * `wi` lives in that buffer too, so everything the reply needs is read
+ * BEFORE the hand-over: from then on a flush (this write's, another
+ * thread's on the same fd, the write-behind) may free the buffer and the
+ * next request land in it. Reading wi->size after it answered other
+ * requests' counts: short writes, and counts above the request that the
+ * kernel turns into EIO without a word. */
 static void op_write(uint64_t u, const struct fuse_write_in *wi, const uint8_t *data, uint8_t *base) {
     handle_t *h = (handle_t *)(uintptr_t)wi->fh;
+    const uint64_t off = wi->offset;
+    const uint32_t size = wi->size;
     pthread_mutex_lock(&h->lk);
-    int rc = handle_write(h, wi->offset, data, wi->size, base);
+    int rc = handle_write(h, off, data, size, base);  /* `wi` and `data` are the handle's from here */
     pthread_mutex_unlock(&h->lk);
     if (rc) { reply(u, -rc, NULL, 0, NULL, 0); return; }
-    struct fuse_write_out wo = {.size = wi->size};
+    struct fuse_write_out wo = {.size = size};
     reply(u, 0, &wo, sizeof(wo), NULL, 0);
 }
 
@@ -893,6 +901,10 @@ static size_t uring_op_header_size(uint32_t opcode) {
 static void ring_handle(uqueue_t *q, int i) {
     uent_t *e = &q->ents[i];
     const struct fuse_in_header *ih = (const struct fuse_in_header *)e->hdr->in_out;
+    /* the reply re-arms the entry and the kernel may put the next request in
+     * it at once: what is needed after the handler is read now */
+    const uint32_t opcode = ih->opcode;
+    const uint64_t unique = ih->unique;
     struct timespec ta, tb;
     clock_gettime(CLOCK_MONOTONIC, &ta);
     e->commit_id = e->hdr->ring_ent_in_out.commit_id;
@@ -913,9 +925,9 @@ static void ring_handle(uqueue_t *q, int i) {
         memcpy(in + hs, e->payload, take);
         dispatch_parts(ih, in, hs + take, NULL, NULL);
     }
-    if (tl_uent) reply(ih->unique, 0, NULL, 0, NULL, 0);  /* a no-reply op: re-arm the entry anyway */
+    if (tl_uent) reply(unique, 0, NULL, 0, NULL, 0);  /* a no-reply op: re-arm the entry anyway */
     clock_gettime(CLOCK_MONOTONIC, &tb);
-    uint32_t opc = ih->opcode < 63 ? ih->opcode : 63;  /* the same per-opcode counters as the classic path */
+    uint32_t opc = opcode < 63 ? opcode : 63;  /* the same per-opcode counters as the classic path */
     atomic_fetch_add(&g_opcnt[opc], 1);
     atomic_fetch_add(&g_opns[opc], (unsigned long long)((tb.tv_sec - ta.tv_sec) * 1000000000ll + (tb.tv_nsec - ta.tv_nsec)));
 }

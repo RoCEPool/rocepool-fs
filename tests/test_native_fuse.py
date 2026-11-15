@@ -546,6 +546,67 @@ class NativeFuseClientTests(unittest.TestCase):
         self.assertEqual(self.dfs("sha", "stalefz.bin"), hashlib.sha256(want).hexdigest())
         self.assertEqual(self.dfs("attr", "stalefz.bin"), {"size": len(want), "inline": False})
 
+    def test_concurrent_writes_on_one_fd_are_answered_with_their_own_size(self):
+        """A WRITE's request buffer goes to the handle (zero copy) and is
+        freed when the handle's buffered data is flushed -- by this write
+        (past the dirty cap), another thread's write on the same fd, or the
+        write-behind. The reply's byte count was read from that buffer
+        after the hand-over: once reused by another request it answered a
+        wrong count -- a short write, or more than asked, which the kernel
+        turns into EIO without a word (AWS, many writers per fd). A 1 MiB
+        dirty cap makes the flushes, many threads per fd the reuse."""
+        mnt2 = os.path.join(self.tmp, "mnt_smallcap")
+        os.makedirs(mnt2, exist_ok=True)
+        fuse2 = subprocess.Popen([self.bin, "--mount", mnt2, "--mdts", self.mdts, "--osts", self.osts,
+                                  "--attr-ttl", "3", "--uring", "1" if self.uring else "0"],
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                 env=dict(self.env, ROCEPOOL_DIRTY_CAP_MIB="1"))
+        try:
+            self.assertTrue(fuse2.stdout.readline().startswith("READY"))
+            problems, lock = [], threading.Lock()
+            chunk, per_thread, nthreads, nfiles = 96 * 1024 + 13, 24, 8, 6
+
+            def one_file(fi):
+                path = f"{mnt2}/fdshare/f{fi}.bin"
+                fd = os.open(path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o644)
+
+                def w(t):
+                    for k in range(per_thread):
+                        idx = k * nthreads + t
+                        data = bytes([(fi * 31 + idx) % 251 + 1]) * chunk
+                        try:
+                            n = os.pwrite(fd, data, idx * chunk)
+                        except OSError as e:
+                            with lock:
+                                problems.append(f"{path} @{idx * chunk}: {e}")
+                            return
+                        if n != chunk:
+                            with lock:
+                                problems.append(f"{path} @{idx * chunk}: wrote {n} of {chunk}")
+                ts = [threading.Thread(target=w, args=(t,)) for t in range(nthreads)]
+                [t.start() for t in ts]
+                [t.join() for t in ts]
+                os.close(fd)
+                with open(path, "rb") as f:
+                    got = f.read()
+                want = b"".join(bytes([(fi * 31 + i) % 251 + 1]) * chunk for i in range(per_thread * nthreads))
+                if got != want:
+                    with lock:
+                        problems.append(f"{path}: content differs ({len(got)} bytes, want {len(want)})")
+            os.makedirs(f"{mnt2}/fdshare", exist_ok=True)
+            for _ in range(3):
+                fs = [threading.Thread(target=one_file, args=(i,)) for i in range(nfiles)]
+                [t.start() for t in fs]
+                [t.join() for t in fs]
+            self.assertEqual(problems, [])
+        finally:
+            subprocess.run(["umount", "-l", mnt2], capture_output=True)
+            fuse2.terminate()
+            try:
+                fuse2.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                fuse2.kill()
+
     def test_shuffle_like_new_files_from_two_clients(self):
         """What a shuffle writes: two clients (two nodes) creating many new
         files over 32 KiB in the same directories at once, each written as a

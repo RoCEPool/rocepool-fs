@@ -200,17 +200,22 @@ simulated cluster the times are bound by the emulated RDMA's CPU use; on
 EFA each round trip saved is network latency off every file. Not yet
 measured on real hosts.
 
-**DuckDB 2.0 (the current Python package) and rocepool's FUSE client: I/O
-errors.** With DuckDB 2.0, writes on rocepool failed with EIO under load on
-AWS (about 150 per run, all recovered by the schedulers' retries; then
-4.1-4.5 MiB/s per physical core, since 2.0 writes faster). The FUSE client
-itself never answered EIO (it now logs every such reply), so the error comes
-from the kernel side of DuckDB 2.0's asynchronous writes on FUSE; DuckDB
-1.5.6 (synchronous writes) gave none with the same data and concurrency. Not
-reproduced on the simulated cluster. Until it is understood, real-host runs
-use `--engine cli` (DuckDB 1.5.6 on every host). The kernel log also shows
-EFA `DEREG_MR` failures (err -22) under this load, without errors reaching
-the applications.
+**I/O errors on AWS: a FUSE client bug, found and fixed.** Writes on
+rocepool failed now and then with EIO on AWS (about 150 per run with DuckDB
+2.0, a few with 1.5.6; all recovered by the schedulers' retries), never on
+the simulated cluster at first, and the FUSE client never answered EIO. The
+cause: a WRITE's request buffer goes to the file handle (zero copy), and the
+reply's byte count was read from that buffer after the hand-over. A flush
+-- by this write past the dirty cap, by another thread writing the same fd,
+or by the write-behind -- can free the buffer first, and the next request
+lands in it: the reply then carried another request's count, a short write
+when smaller, and when larger an EIO the kernel produces on its own. Many
+writers per fd (DuckDB 2.0's asynchronous writer: up to 4 x the host's
+cores of threads) made it frequent. `op_write` now reads what the reply
+needs before the hand-over. `test_concurrent_writes_on_one_fd_are_answered_with_their_own_size`
+(1 MiB dirty cap, 8 threads per fd) failed every time before and passes
+since. The kernel log also shows EFA `DEREG_MR` failures (err -22) under
+this load, without errors reaching the applications.
 
 ## The 11 TPC-H queries (first prototype)
 
