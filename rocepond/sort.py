@@ -120,16 +120,19 @@ def main(argv=None) -> int:
     ap.add_argument("--threads", type=int, default=1, help="DuckDB threads (and CPUs) per task")
     ap.add_argument("--duckdb", default="", help="DuckDB CLI, where the duckdb Python package is not installed")
     ap.add_argument("--max-retries", type=int, default=3)
+    ap.add_argument("--memory-limit", default="", help="per DuckDB, e.g. 2GiB (default: host memory / workers)")
+    ap.add_argument("--engine", default="auto", choices=("auto", "module", "cli"))
     ap.add_argument("--no-ship-package", action="store_true",
                     help="Ray: rocepond is importable on every node already (PYTHONPATH)")
     ap.add_argument("--json", default="", help="write the result here")
     a = ap.parse_args(argv)
     if a.executor == "ray":
-        ex = rocepond.RayExecutor(address=a.address, threads=a.threads, duckdb=a.duckdb,
+        ex = rocepond.RayExecutor(address=a.address, threads=a.threads, duckdb=a.duckdb, memory_limit=a.memory_limit, engine=a.engine,
                                   max_retries=a.max_retries, ship_package=not a.no_ship_package)
     else:
         import os
         ex = rocepond.local_executor(a.slots or os.cpu_count() or 1, duckdb=a.duckdb, threads=a.threads,
+                                     memory_limit=a.memory_limit, engine=a.engine,
                                      max_retries=a.max_retries)
     try:
         res = run(rocepond.Session(ex, a.root), int(a.gib * 2**30), a.partitions, a.splits or None, a.max_fanout)

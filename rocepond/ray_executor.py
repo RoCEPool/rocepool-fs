@@ -23,7 +23,7 @@ from __future__ import annotations
 import os
 import time
 
-from .executor import Executor, TaskError, describe, summarize
+from .executor import MAX_ERROR_SAMPLES, Executor, TaskError, describe, summarize
 
 
 def _run_task(task: dict, conf: dict) -> dict:
@@ -85,7 +85,7 @@ class RayExecutor(Executor):
 
         for i in range(n):
             submit(i, 0, [])
-        retries, failure = 0, None
+        retries, failure, samples = 0, None, []
         while pending and failure is None:
             done, _ = ray.wait(list(pending), num_returns=min(len(pending), 256), timeout=1.0)
             finished = []
@@ -114,6 +114,8 @@ class RayExecutor(Executor):
                 errs = errs + [f"attempt {attempts + 1}: {res['error']}"]
                 if attempts < self.max_retries:
                     retries += 1
+                    if len(samples) < MAX_ERROR_SAMPLES:
+                        samples.append(f"{describe(tasks[i])}: {errs[-1]}"[:600])
                     submit(i, attempts + 1, errs)
                 elif failure is None:
                     failure = TaskError(f"task failed {attempts + 1} times: {describe(tasks[i])}\n  "
@@ -124,7 +126,7 @@ class RayExecutor(Executor):
                     ray.cancel(ref, force=True)
                 except Exception:  # noqa: BLE001
                     pass
-        self.stats.append(summarize(stage, n, t0, results, retries, self.parallelism))
+        self.stats.append(summarize(stage, n, t0, results, retries, self.parallelism, samples))
         if failure is not None:
             raise failure
         return results

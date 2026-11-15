@@ -13,7 +13,7 @@ node can run any task:
      "check_sorted": [files], "key_bytes": 10,                           see check_sorted()
      "name": "sort p17"}            for reports and error messages
 
-The result: {"ok", "rows", "checks", "duck_s", "wall_s", "error", "host", "pid"}.
+The result: {"ok", "rows", "checks", "duck_s", "step_s" (per statement), "wall_s", "error", "host", "pid"}.
 
 Test hooks (used by the scheduler's tests to make failures happen):
     "_fail_once": marker   fail unless the marker file exists (and create it)
@@ -108,8 +108,10 @@ def execute(task: dict, engine) -> dict:
             shutil.rmtree(d, ignore_errors=True)
         for d in task.get("mkdirs", []):
             os.makedirs(d, exist_ok=True)
+        steps = out["step_s"] = []
         for sql in task.get("sql", []):
             secs, rows = engine.run(sql)
+            steps.append(round(secs, 4))
             out["duck_s"] += secs
             out["rows"] = rows
         if not task.get("fetch"):

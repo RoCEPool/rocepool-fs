@@ -234,6 +234,8 @@ typedef struct {
 } uqueue_t;
 
 static __thread uent_t *tl_uent;   /* the ring entry the request being handled arrived in */
+static __thread uint32_t tl_opcode;  /* the FUSE opcode being handled (for the error log in reply()) */
+static __thread uint64_t tl_nodeid;
 static __thread uqueue_t *tl_uq;
 
 static atomic_ullong g_uring_reqs;  /* requests answered through the ring */
@@ -306,6 +308,13 @@ static int uring_enter(uqueue_t *q, unsigned to_submit, unsigned min_complete) {
 
 static void reply(uint64_t unique, int err, const void *b1, size_t n1, const void *b2, size_t n2) {
     if (err >= 4096) err = EIO;  /* an internal code must never reach the kernel */
+    if (err == EIO || err == ETIMEDOUT || err == ENOMEM) {  /* what an application sees as an I/O error: say where */
+        static _Atomic int said;
+        int k = atomic_fetch_add(&said, 1);
+        if (k < 50) fprintf(stderr, "rocepool-fuse: opcode %u node %llu -> %s\n", tl_opcode,
+                            (unsigned long long)tl_nodeid, strerror(err));
+        else if (k == 50) fprintf(stderr, "rocepool-fuse: more I/O errors follow (not logged)\n");
+    }
     struct fuse_out_header oh = {.len = (uint32_t)(sizeof(oh) + n1 + n2), .error = err ? -err : 0, .unique = unique};
     if (err) oh.len = sizeof(oh);
     if (tl_uent) {  /* through the ring: reply header + out args into the entry, then commit */
@@ -770,6 +779,8 @@ static int dispatch_parts(const struct fuse_in_header *ih, const uint8_t *in, si
                           uint8_t *base) {
     size_t n = n_in + sizeof(*ih);
     uint64_t u = ih->unique, node = ih->nodeid;
+    tl_opcode = ih->opcode;
+    tl_nodeid = node;
     switch (ih->opcode) {
     case FUSE_INIT:
         op_init(u, in);

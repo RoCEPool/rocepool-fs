@@ -86,3 +86,49 @@ class RayOnCluster:
                 self._ray(i, ["stop", "--force"], check=False)
                 if not self.cluster.real:
                     self.cluster.run(i, ["umount", "-l", "/tmp/ray"], self.env, net=False, capture_output=True)
+
+
+VENV = "/opt/rocepond-venv"
+DUCKDB_CLI_VERSION = "v1.5.6"  # the same path on every host: workers and Ray start with this Python
+
+
+def real_hosts_bootstrap(log=print) -> str | None:
+    """On hosts started by tools/aws_cluster.py --command (HEAD_IP and
+    PEER_IPS set): bring rocepool's cluster up the way run.sh does for IO500
+    (tree shipped to the same path on every host, native build, RDMA checks)
+    without a benchmark, and a Python environment with duckdb and ray at
+    VENV on every host. Returns the cluster file, or None when not on such
+    hosts. Idempotent: a second call reuses both."""
+    head, peers = os.environ.get("HEAD_IP"), os.environ.get("PEER_IPS", "").split()
+    if not head:
+        return None
+    cfile = os.path.join(ROOT, "onsite_cluster.json")
+    if not os.path.exists(cfile):
+        argv = [os.path.join(ROOT, "run.sh"), "--ip", head, "--bench", "none", "--skip-tests"]
+        if peers:
+            argv[1:1] = ["--peers", ",".join(f"root@{ip}={ip}" for ip in peers)]
+        log("== rocepool cluster setup on the real hosts: " + " ".join(argv[1:]))
+        r = subprocess.run(argv, cwd=ROOT)
+        if r.returncode or not os.path.exists(cfile):
+            raise RuntimeError(f"run.sh --bench none failed ({r.returncode}); see run.log")
+    from tools.cluster import Cluster
+    cluster = Cluster.from_file(cfile)
+    script = (f"set -e; [ -x {VENV}/bin/python3 ] && {VENV}/bin/python3 -c 'import duckdb, ray' 2>/dev/null && exit 0; "
+              "export DEBIAN_FRONTEND=noninteractive; "
+              "python3 -m venv --help >/dev/null 2>&1 && python3 -c 'import ensurepip' 2>/dev/null || "
+              "{ apt-get update -q >/dev/null; apt-get install -y -q python3-venv >/dev/null; }; "
+              f"python3 -m venv {VENV}; {VENV}/bin/pip install -q --upgrade pip; "
+              f"{VENV}/bin/pip install -q duckdb ray; "
+              # the DuckDB CLI too (--engine cli: another DuckDB version, synchronous writes); optional
+              f"[ -x {VENV}/bin/duckdb ] || {{ cd /tmp && curl -fsSL --retry 3 -o duckdb_cli.zip "
+              f"https://github.com/duckdb/duckdb/releases/download/{DUCKDB_CLI_VERSION}/duckdb_cli-linux-amd64.zip && "
+              f"python3 -m zipfile -e duckdb_cli.zip {VENV}/bin/ && chmod +x {VENV}/bin/duckdb; }} || true; "
+              f"{VENV}/bin/python3 -c 'import duckdb, ray; print(\"duckdb\", duckdb.__version__, \"ray\", ray.__version__)'")
+    procs = [(n.index, cluster.popen(n.index, ["bash", "-c", script], cluster.env(), stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT, text=True)) for n in cluster.nodes]
+    for i, p in procs:
+        out, _ = p.communicate(timeout=1800)
+        if p.returncode:
+            raise RuntimeError(f"node {i}: Python environment ({VENV}) failed: {out[-1500:]}")
+        log(f"== node {i}: {VENV}: {(out.strip().splitlines() or ['ready'])[-1]}")
+    return cfile

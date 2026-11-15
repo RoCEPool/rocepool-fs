@@ -621,7 +621,7 @@ class Run:
             ips = " ".join(h["private"] for h in st["hosts"][1:])
             gips = " ".join(h["private"] for h in st.get("gpu_hosts") or [])
             cmd = (f"cd /root/rocepool && export HEAD_IP={st['hosts'][0]['private']} PEER_IPS={shlex.quote(ips)} "
-                   f"GPU_IPS={shlex.quote(gips)}; "
+                   f"GPU_IPS={shlex.quote(gips)} ROCEPOOL_INSTANCE_TYPE={shlex.quote(st.get('type') or '')}; "
                    f"( {a.command} ) > aws_run.out 2>&1; echo $? > aws_run.rc")
         else:
             # the NIC speed as AWS states it ("50 Gigabit"): ENA reports no
@@ -663,7 +663,8 @@ class Run:
         files = ["onsite_report.json", "onsite_io500.json", "onsite_io500_valid.json", "run.log", "aws_run.out",
                  "onsite_crossover.json", "onsite_stress.json", "onsite_ior.json", "onsite_ior_hard.json",
                  "onsite_kv.json", "onsite_gds.json", "onsite_kvcache.json", "selftest.log",
-                 "rapidsse_tpch_report.json"]  # tools/rapidsse_tpch.py (RapidsSE's TPC-H on rocepool)
+                 "rapidsse_tpch_report.json",  # tools/rapidsse_tpch.py (RapidsSE's TPC-H on rocepool)
+                 "rocepond_sort_report.json"]  # tools/rocepond_sort.py (rocepond's sort on rocepool)
         # targeted measurements (roce_onsite.py --bench writes): onsite_writes_spin<N>.json
         # and the probes before the valid run: ranks per node, OFI endpoints per rank, the rates it was sized by
         r = self.ssh(head, "cd /root/rocepool && ls onsite_writes_*.json onsite_io500_ranks.json onsite_io500_eps*.json "
