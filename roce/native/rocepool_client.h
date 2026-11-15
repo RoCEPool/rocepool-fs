@@ -23,7 +23,14 @@ enum {
     RP_ERROR = 255,
 };
 
-#define RP_POOL_IDLE_MAX 16
+/* idle connections kept per server. Above it a finished request's connection
+ * was closed and the next one dialled again (TCP bootstrap, handshake, the
+ * server's per-connection memory registrations): on AWS EFA, 32 DuckDB tasks
+ * per node writing 1024 files each kept far more than 16 requests in flight
+ * per server, and the churn showed as EFA DEREG_MR failures in the kernel log
+ * and EIO in the applications. Kept connections are closed after 30 s idle
+ * (peer_checkout), so a peak's connections do not outlive it for long. */
+#define RP_POOL_IDLE_MAX 256
 
 typedef struct {
     char addr[128];

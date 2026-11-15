@@ -117,21 +117,21 @@ def main() -> int:
     if not cluster.real:
         env.update({"ROCEPOOL_RPC_TIMEOUT_MS": "60000"})
     env["PYTHONPATH"] = ROOT
-    rp = RocepoolMount(cluster, env, args.workdir, MNT, args.ost_tier)
+    rp = None
     try:
-        rp.start()
-        report["rocepool"] = rp.describe()
-        log(f"== rocepool up: {n} MDT, {n} OST, mounted at {MNT} on all {n} nodes (OST data: "
-            f"{report['rocepool']['ost_data']})")
         if args.diagnose:
+            rp = start_rocepool(cluster, env, args, report)
             try:
                 report["diagnosis"] = diagnose(cluster, env, n, slots, duck, args)
             except Exception as exc:  # noqa: BLE001  the diagnosis failing is a finding, not the end of the run
                 report["diagnosis"] = {"error": f"{type(exc).__name__}: {exc}"[:4000]}
                 log(f"== diagnosis failed: {report['diagnosis']['error'][:1500]}")
         for kind in executors:
-            # each run starts from an empty directory: the last one's data would hold the OSTs' memory
-            cluster.run(0, ["rm", "-rf", f"{MNT}/rocepond"], env, net=False)
+            # every run on a fresh rocepool: the OSTs keep data in RAM, and the
+            # last run's would leave less memory for this one
+            if rp is not None:
+                rp.stop()
+            rp = start_rocepool(cluster, env, args, report)
             report["runs"].append(one_run(kind, cluster, env, n, slots, duck, args, total_cores, total_phys))
         report["passed"] = all(r.get("passed") for r in report["runs"])
     except Exception as exc:  # noqa: BLE001
@@ -139,13 +139,24 @@ def main() -> int:
         report["passed"] = False
         log(f"== ERROR: {report['error'][:3000]}")
     finally:
-        rp.stop()
+        if rp is not None:
+            rp.stop()
         cluster.down()
         report["server_and_client_logs"] = log_digest(args.workdir)
         with open(args.report, "w") as f:
             json.dump(report, f, indent=1)
         log(f"== report: {args.report}")
     return 0 if report.get("passed") else 1
+
+
+def start_rocepool(cluster, env: dict, args, report: dict) -> RocepoolMount:
+    n = len(cluster.nodes)
+    rp = RocepoolMount(cluster, env, args.workdir, MNT, args.ost_tier)
+    rp.start()
+    report["rocepool"] = rp.describe()
+    log(f"== rocepool up: {n} MDT, {n} OST, mounted at {MNT} on all {n} nodes (OST data: "
+        f"{report['rocepool']['ost_data']})")
+    return rp
 
 
 def log_digest(workdir: str, keep: int = 40) -> dict:
