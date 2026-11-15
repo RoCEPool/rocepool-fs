@@ -546,6 +546,68 @@ class NativeFuseClientTests(unittest.TestCase):
         self.assertEqual(self.dfs("sha", "stalefz.bin"), hashlib.sha256(want).hexdigest())
         self.assertEqual(self.dfs("attr", "stalefz.bin"), {"size": len(want), "inline": False})
 
+    def test_shuffle_like_new_files_from_two_clients(self):
+        """What a shuffle writes: two clients (two nodes) creating many new
+        files over 32 KiB in the same directories at once, each written as a
+        small header, a body and a footer, out of order on one fd from
+        several threads (DuckDB 2.0's writer). A new file's first flush goes
+        straight to its stripes and becomes striped in one MDT step
+        (spill_set_size); every file must read back right from the other
+        client, as striped, and a file that got inline bytes first still
+        spills the classic way."""
+        mnt2 = os.path.join(self.tmp, "mnt_shuffle")
+        os.makedirs(mnt2, exist_ok=True)
+        fuse2 = subprocess.Popen([self.bin, "--mount", mnt2, "--mdts", self.mdts, "--osts", self.osts,
+                                  "--attr-ttl", "3", "--uring", "1" if self.uring else "0"],
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=self.env)
+        try:
+            self.assertTrue(fuse2.stdout.readline().startswith("READY"))
+            mounts = [self.mnt, mnt2]
+            want = {}
+
+            def content(who, i):
+                r = random.Random(f"{who}-{i}")
+                return b"PAR1" + r.randbytes(r.choice([33000, 45185, 330637, 1 << 20, (1 << 20) + 7, 2500000]))
+
+            def writer(who):
+                for i in range(24):
+                    rel = f"shuf/bucket={i % 6}/from-{who}-{i}.bin"
+                    data = content(who, i)
+                    os.makedirs(os.path.dirname(f"{mounts[who]}/{rel}"), exist_ok=True)
+                    fd = os.open(f"{mounts[who]}/{rel}", os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o644)
+                    pieces = [(o, data[o:o + 70000]) for o in range(0, len(data), 70000)]
+                    random.Random(i).shuffle(pieces)
+                    ts = [threading.Thread(target=lambda ps: [os.pwrite(fd, d, o) for o, d in ps],
+                                           args=(pieces[k::3],)) for k in range(3)]
+                    [t.start() for t in ts]
+                    [t.join() for t in ts]
+                    os.close(fd)
+                    want[rel] = data
+            ws = [threading.Thread(target=writer, args=(w,)) for w in (0, 1)]
+            [t.start() for t in ws]
+            [t.join() for t in ws]
+            for rel, data in want.items():
+                for m in mounts:  # each file from both clients: the writer's and the other one
+                    with open(f"{m}/{rel}", "rb") as f:
+                        self.assertEqual(f.read(), data, f"{rel} via {m}")
+                self.assertEqual(self.dfs("attr", rel), {"size": len(data), "inline": False}, rel)
+            # inline bytes first, then a big write: the classic spill keeps both
+            p = f"{self.mnt}/shuf/mixed.bin"
+            with open(p, "wb") as f:
+                f.write(b"small-head")
+            with open(p, "r+b") as f:
+                f.seek(0, 2)
+                f.write(b"B" * 100000)
+            with open(f"{mnt2}/shuf/mixed.bin", "rb") as f:
+                self.assertEqual(f.read(), b"small-head" + b"B" * 100000)
+        finally:
+            subprocess.run(["umount", "-l", mnt2], capture_output=True)
+            fuse2.terminate()
+            try:
+                fuse2.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                fuse2.kill()
+
     def test_new_file_with_a_run_bigger_than_one_frame(self):
         # a new file starts inline; its first flush here is one 40 MiB run
         # (> the 16 MiB frame): it must spill, not ship the run to the MDT

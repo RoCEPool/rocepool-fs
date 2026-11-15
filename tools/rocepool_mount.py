@@ -20,9 +20,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 class RocepoolMount:
     def __init__(self, cluster, env: dict, workdir: str, mount: str, ost_tier: str = "ram",
-                 mdt_port: int = 19901, ost_port: int = 19951):
+                 mdt_port: int = 19901, ost_port: int = 19951, fuse_args: list | None = None):
         self.cluster, self.env, self.workdir, self.mount, self.ost_tier = cluster, env, workdir, mount, ost_tier
         self.mdt_port, self.ost_port = mdt_port, ost_port
+        self.fuse_args = list(fuse_args or [])
         self.procs, self.fuse, self.tier_files = [], [], []
         self.mdts = self.osts = ""
 
@@ -59,8 +60,10 @@ class RocepoolMount:
         self.osts = ",".join(s["addr"] for s in servers if s["kind"] == "ost")
         for node in c.nodes:
             c.run(node.index, ["mkdir", "-p", self.mount], env, net=False, check=True)
+            # per-opcode counters on SIGUSR1 (rocepool-fuse): one file per node, in the workdir
+            cenv = dict(env, ROCEPOOL_FUSE_STATS=os.path.join(self.workdir, f"fuse{node.index}.stats.json"))
             self.fuse.append(c.popen(node.index, [c.fuse_client, "--mount", self.mount, "--mdts", self.mdts,
-                                                  "--osts", self.osts, "--attr-ttl", "3"], env,
+                                                  "--osts", self.osts, "--attr-ttl", "3", *self.fuse_args], cenv,
                                      stdin=subprocess.PIPE,
                                      stdout=open(os.path.join(self.workdir, f"client{node.index}.log"), "w"),
                                      stderr=subprocess.STDOUT))

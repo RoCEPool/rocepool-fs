@@ -59,6 +59,8 @@ typedef struct {
 #define E_INLINE_FULL (-10002)
 #define E_FROZEN (-10003)
 #define E_INLINE (-10004)
+#define E_NOT_EMPTY (-10005)   /* spill_set_size: the inline file holds bytes */
+#define E_UNSUPPORTED (-10006) /* the server does not know the op (an older MDT) */
 
 typedef struct {
     char *name;

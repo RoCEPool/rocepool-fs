@@ -165,7 +165,7 @@ class MDTServer:
                 return [dict(_public(v), name=k) for k, v in sorted(self._children.get(d, {}).items())]
             if op == "child_count":
                 return len(self._children.get(normalize(req["path"]), {}))
-            if op in ("write_inline", "read_inline", "freeze", "spill_commit"):
+            if op in ("write_inline", "read_inline", "freeze", "spill_commit", "spill_set_size"):
                 return self._inline_op(op, req)
             raise MDTError("UNSUPPORTED_OP", op)
 
@@ -184,6 +184,17 @@ class MDTServer:
             if e["inline"]:
                 e["frozen"] = True  # inline bytes immutable from here on
             return e["iver"], _public(e), (e["data"] if e["inline"] else b"")
+        if op == "spill_set_size":
+            if e["inline"]:
+                if e["frozen"]:
+                    raise MDTError("FROZEN", path)
+                if e["size"] or not e.get("layout"):
+                    raise MDTError("NOT_EMPTY", path)
+                e["inline"] = False
+                e["data"] = b""
+            e["size"] = max(e["size"], req["size"])
+            e["mtime"] = time.time()
+            return _public(e)
         if op == "spill_commit":
             if e["inline"] and not e["frozen"]:
                 raise MDTError("NOT_FROZEN", path)
@@ -268,6 +279,9 @@ class MDTClient:
 
     def spill_commit(self, path: str) -> dict:
         return self._call(self.shard.mdt_for(path), {"op": "spill_commit", "path": path})
+
+    def spill_set_size(self, path: str, size: int) -> dict:
+        return self._call(self.shard.mdt_for(path), {"op": "spill_set_size", "path": path, "size": size})
 
     def set_size(self, path: str, size: int, *, mode: str = "max") -> dict:
         return self._call(self.shard.mdt_for(path), {"op": "set_size", "path": path, "size": size, "mode": mode})

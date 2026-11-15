@@ -176,6 +176,30 @@ plain Parquet writes reach 2 GB/s and reads 2.3 GB/s over both hosts. Small
 files are rocepool's cost here, not DuckDB and not the network (50 Gbps is
 used to a fraction).
 
+**Small files: fewer round trips per file (after the AWS run).**
+`tools/smallfile_bench.py` writes files the way the shuffle does (create,
+header, body, footer, close; many workers, many directories) and reads the
+FUSE client's per-opcode counters. A new file over the 32 KiB inline limit
+used to start inline and, at its first flush, take the whole spill path:
+freeze, version token, freeze again, PUT of the (empty) inline bytes,
+commit, a fresh lookup, the stripe write, set_size. Now an empty inline
+file's first flush writes its stripes and then one new MDT op,
+`spill_set_size` (fs/mdt_wire.py, both MDTs, logged and replayed like the
+others), makes it striped at its size; anything else (inline bytes
+appeared, a spill under way, an older MDT answering UNSUPPORTED_OP) falls
+back to the spill and writes again. A spill of an empty inline file also
+skips its PUT.
+
+| per 320 KiB file | MDT round trips | OST round trips | FLUSH (simulated, 2 cores) |
+|---|---|---|---|
+| before | 5.07 | 3.0 | 4.0 - 8.3 ms |
+| after | 2.07 | 1.0 | 2.7 - 3.7 ms |
+
+Files up to 32 KiB still stay inline (one MDT round trip each). On the
+simulated cluster the times are bound by the emulated RDMA's CPU use; on
+EFA each round trip saved is network latency off every file. Not yet
+measured on real hosts.
+
 **DuckDB 2.0 (the current Python package) and rocepool's FUSE client: I/O
 errors.** With DuckDB 2.0, writes on rocepool failed with EIO under load on
 AWS (about 150 per run, all recovered by the schedulers' retries; then

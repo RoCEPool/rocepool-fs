@@ -379,6 +379,8 @@ static int mdt_errno(const char *code) {
     if (!strcmp(code, "INLINE_FULL")) return E_INLINE_FULL;
     if (!strcmp(code, "FROZEN")) return E_FROZEN;
     if (!strcmp(code, "INLINE")) return E_INLINE;
+    if (!strcmp(code, "NOT_EMPTY")) return E_NOT_EMPTY;
+    if (!strcmp(code, "UNSUPPORTED_OP")) return E_UNSUPPORTED;
     {   /* anything else is an I/O error to the program: say which, a few times */
         static _Atomic int said;
         if (atomic_fetch_add(&said, 1) < 5) fprintf(stderr, "rocepool: MDT error %s\n", code);
@@ -564,6 +566,13 @@ int mdt_inline_read(const char *path, int freeze, uint64_t off, uint32_t len, at
 static int mdt_spill_commit(const char *path, attr_t *a) {
     uint8_t req[1] = {10};
     return mdt_entry_call(path, req, 1, a);
+}
+
+/* op 14: an empty inline file -> striped, size grown to `size` (fs/mdt_wire.py) */
+static int mdt_spill_set_size(const char *path, uint64_t size, attr_t *a) {
+    uint8_t req[9] = {14};
+    memcpy(req + 1, &size, 8);
+    return mdt_entry_call(path, req, 9, a);
 }
 
 int mdt_set_size(const char *path, uint64_t size, int exact, attr_t *a) {
@@ -1279,6 +1288,12 @@ int fs_spill(const char *path) {
         if (rc) return rc;
         resp_free(&r);
         if (!a.inl) { done = 1; break; }  /* someone committed already */
+        /* Frozen and empty: no inline bytes to move, so no stripe-0 PUT
+         * (and no version token for one) -- commit straight away. A new file
+         * whose first flush is above the inline limit (every shuffle output,
+         * every file over 32 KiB) took 3 MDT + 2 OST round trips here for
+         * nothing; frozen means no one can add inline bytes meanwhile. */
+        if (a.size == 0 && n == 0) { done = 1; break; }
         char key[4200];
         stripe_key(key, sizeof(key), path, 0);
         peer_t *p = &g_osts[ost_for_stripe(&a, 0)];
@@ -1305,6 +1320,41 @@ int fs_spill(const char *path) {
     return rc;
 }
 
+/* the stripes [off, off+len) of a file falls in, written together (by
+ * layout; the file's entry is not touched) */
+static int write_stripes(const char *path, const attr_t *a, uint64_t off, const wseg_t *segs, int nsegs) {
+    size_t len = 0;
+    for (int i = 0; i < nsegs; i++) len += segs[i].len;
+    if (!len) return 0;
+    if (!a->has_layout || !a->sc || !a->ss) return -EIO;
+    uint64_t end = off + len, first = off / a->ss, last = (end - 1) / a->ss;
+    int n = (int)(last - first + 1);
+    stripe_io_t *tasks = calloc((size_t)n, sizeof(*tasks));
+    void **args = xmalloc((size_t)n * sizeof(void *));
+    group_t g;
+    group_init(&g, n);
+    for (int i = 0; i < n; i++) {
+        uint64_t idx = first + (uint64_t)i, s0 = idx * a->ss;
+        uint64_t lo = off > s0 ? off : s0, hi = end < s0 + a->ss ? end : s0 + a->ss;
+        tasks[i] = (stripe_io_t){.g = &g, .path = path, .a = a, .idx = idx, .lo = lo - s0, .hi = hi - s0};
+        stripe_segments(&tasks[i], lo, hi, segs, nsegs, off);
+        args[i] = &tasks[i];
+    }
+    int rc = run_all(stripe_write_task, args, n, &g);
+    free(tasks);
+    free(args);
+    return rc;
+}
+
+static int segs_on_device(const wseg_t *segs, int nsegs) {
+    for (int i = 0; i < nsegs; i++)
+        if (segs[i].mem && roce_mem_is_device(segs[i].mem)) return 1;
+    return 0;
+}
+
+/* 0 once an MDT answered UNSUPPORTED_OP to spill_set_size (an older server) */
+static _Atomic int g_spill_set_size_ok = 1;
+
 static int fs_write_segs(const char *path, uint64_t off, const wseg_t *segs, int nsegs) {
     size_t len = 0;
     for (int i = 0; i < nsegs; i++) len += segs[i].len;
@@ -1314,6 +1364,24 @@ static int fs_write_segs(const char *path, uint64_t off, const wseg_t *segs, int
     if (rc == -ENOENT) rc = fs_create_file(path, &a);
     if (rc) return rc;
     if (a.is_dir) return -EISDIR;
+    if (a.inl && a.size == 0 && a.has_layout && a.sc && a.ss && off + len > inline_hint(&a) && g_spill_set_size_ok && !segs_on_device(segs, nsegs)) {
+        /* A new, empty file whose first write is past the inline limit (every
+         * shuffle output; every file over 32 KiB): stripes first, then one MDT
+         * op makes it striped at its size -- 2 round trips where the spill
+         * took 7. Anything else (inline bytes appeared, a spill under way, an
+         * older MDT) falls through to the spill path, which writes again. */
+        rc = write_stripes(path, &a, off, segs, nsegs);
+        if (rc) return rc;
+        attr_t na;
+        rc = mdt_spill_set_size(path, off + len, &na);
+        if (rc == 0) { ac_put(path, &na); return 0; }
+        if (rc == E_UNSUPPORTED) g_spill_set_size_ok = 0;
+        else if (rc != E_NOT_EMPTY && rc != E_FROZEN && rc != E_NOT_INLINE) return rc;
+        ac_del(path);
+        rc = fs_getattr(path, &a);
+        if (rc) return rc;
+        if (a.is_dir) return -EISDIR;
+    }
     while (a.inl) {  /* one MDT round trip, no OST at all */
         attr_t na;
         /* Only offer the MDT what could fit: a write ending past the inline
@@ -1336,32 +1404,19 @@ static int fs_write_segs(const char *path, uint64_t off, const wseg_t *segs, int
         }
         if (rc == 0) { ac_put(path, &na); return 0; }
         if (rc == E_INLINE_FULL || rc == E_FROZEN) {
-            rc = fs_spill(path);
+            rc = fs_spill(path);  /* its commit caches the striped attributes: no lookup again */
             if (rc) return rc;
         } else if (rc != E_NOT_INLINE) {
             return rc;
+        } else {
+            ac_del(path);
         }
-        ac_del(path);
         rc = fs_getattr(path, &a);
         if (rc) return rc;
     }
     if (!a.has_layout || !a.sc || !a.ss) return -EIO;
-    uint64_t end = off + len, first = off / a.ss, last = (end - 1) / a.ss;
-    int n = (int)(last - first + 1);
-    stripe_io_t *tasks = calloc((size_t)n, sizeof(*tasks));
-    void **args = xmalloc((size_t)n * sizeof(void *));
-    group_t g;
-    group_init(&g, n);
-    for (int i = 0; i < n; i++) {
-        uint64_t idx = first + (uint64_t)i, s0 = idx * a.ss;
-        uint64_t lo = off > s0 ? off : s0, hi = end < s0 + a.ss ? end : s0 + a.ss;
-        tasks[i] = (stripe_io_t){.g = &g, .path = path, .a = &a, .idx = idx, .lo = lo - s0, .hi = hi - s0};
-        stripe_segments(&tasks[i], lo, hi, segs, nsegs, off);
-        args[i] = &tasks[i];
-    }
-    rc = run_all(stripe_write_task, args, n, &g);
-    free(tasks);
-    free(args);
+    uint64_t end = off + len;
+    rc = write_stripes(path, &a, off, segs, nsegs);
     if (rc) return rc;
     if (end > a.size) {
         attr_t na;
@@ -1502,12 +1557,13 @@ int fs_truncate(const char *path, uint64_t size) {
         rc = mdt_set_size(path, size, 1, &na);  /* resizes the inline bytes */
         if (rc == 0) { ac_put(path, &na); return 0; }
         if (rc == E_INLINE_FULL || rc == E_FROZEN) {
-            rc = fs_spill(path);
+            rc = fs_spill(path);  /* its commit caches the striped attributes: no lookup again */
             if (rc) return rc;
         } else if (rc != E_NOT_INLINE) {
             return rc;
+        } else {
+            ac_del(path);
         }
-        ac_del(path);
         rc = fs_getattr(path, &a);
         if (rc) return rc;
     }
