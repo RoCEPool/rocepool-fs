@@ -100,7 +100,7 @@ jobs:
         run: |
           set -o pipefail
           for d in "" 500us 2ms; do
-            sudo -E env "PATH=$PATH" python3 tools/ofi_lane_bench.py ${d:+--delay $d} --clients 32 --objects 24 --eps 2 \
+            sudo -E env "PATH=$PATH" python3 tools/ofi_lane_bench.py ${d:+--delay $d} --procs 8 --clients 4 --objects 24 --eps 2 \
               --rounds 2 2>&1 | tee -a lanes.log
           done
       - name: summary
