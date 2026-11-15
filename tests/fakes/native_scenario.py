@@ -167,6 +167,22 @@ def mdt_script(cli):
     rec("create-inline-then-readdir", lambda: cli.create("d/u", is_dir=False, layout=lay, inline_ok=True)
         and cli.readdir("d"))
     rec("unlink-inline", lambda: cli.unlink("d/u", is_dir=False))
+    # spill_set_size: an empty inline file -> striped at a size, in one step
+    rec("sss-create", lambda: cli.create("d/v", is_dir=False, layout=lay, inline_ok=True))
+    rec("sss-empty", lambda: cli.spill_set_size("d/v", 320000))
+    rec("sss-again-striped-max", lambda: cli.spill_set_size("d/v", 100))
+    rec("sss-grow", lambda: cli.spill_set_size("d/v", 400000))
+    rec("sss-write-inline-after", lambda: cli.write_inline("d/v", 0, b"q"))
+    rec("sss-create-2", lambda: cli.create("d/w", is_dir=False, layout=lay, inline_ok=True))
+    rec("sss-has-bytes-write", lambda: cli.write_inline("d/w", 0, b"abc"))
+    rec("sss-not-empty", lambda: cli.spill_set_size("d/w", 320000))
+    rec("sss-create-3", lambda: cli.create("d/x", is_dir=False, layout=lay, inline_ok=True))
+    rec("sss-freeze", lambda: strip(cli.freeze("d/x")))
+    rec("sss-frozen", lambda: cli.spill_set_size("d/x", 320000))
+    rec("sss-missing", lambda: cli.spill_set_size("d/nope", 1))
+    rec("sss-dir", lambda: cli.spill_set_size("d", 1))
+    rec("sss-create-no-layout", lambda: cli.create("d/y", is_dir=False, layout=None, inline_ok=True))
+    rec("sss-no-layout", lambda: cli.spill_set_size("d/y", 320000))
     return out
 
 

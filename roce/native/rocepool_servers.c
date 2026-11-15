@@ -2331,6 +2331,30 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         }
         break;
     }
+    case 14: {  /* spill_set_size: u64 LE size. A new file's first flush past the
+                 * inline limit, its stripes already written by the client: an
+                 * EMPTY inline file becomes striped and grows to `size` in one
+                 * step (was: freeze, version token, PUT, freeze, commit, lookup,
+                 * set_size). NOT_EMPTY if it holds inline bytes, FROZEN while
+                 * a spill is under way: the client then spills as before and
+                 * writes again. A file no longer inline: set_size (max). */
+        if (f->val_len < 9) { out = frame_error(f, "MDT_INTERNAL", "short spill_set_size", out_len); break; }
+        md_entry *e = bk ? *md_find(bk, name, name_len, nh) : NULL;
+        if (!e) { out = frame_error(f, "NOT_FOUND", path, out_len); break; }
+        if (e->is_dir) { out = frame_error(f, "IS_DIR", path, out_len); break; }
+        if (e->inl) {
+            if (e->frozen) { out = frame_error(f, "FROZEN", path, out_len); break; }
+            if (e->size || !e->has_layout) { out = frame_error(f, "NOT_EMPTY", path, out_len); break; }
+            e->inl = 0;
+            free(e->idata);
+            e->idata = NULL;
+        }
+        uint64_t size = rd_u64le(f->val + 1);
+        if (size > e->size) e->size = size;
+        e->mtime = now_s();
+        out = entry_frame(f, e, out_len);
+        break;
+    }
     case 13: {  /* readdir by position (request: u8 13, u32 LE max reply bytes,
                  * u64 LE index): the records of the listing's snapshot from
                  * that index on, in the same name order as 5. Reply: u64 LE
@@ -2399,14 +2423,14 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         out = frame_error(f, "UNSUPPORTED_OP", msg, out_len);
     }
     }
-    if (pd && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10))
+    if (pd && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10 || op == 14))
         atomic_fetch_add_explicit(&pd->ver, 1, memory_order_release);
-    if (bk && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10)) {
+    if (bk && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10 || op == 14)) {
         /* keep the one-sided table in step while the bucket is still ours */
         md_entry *e = op == 4 ? NULL : *md_find(bk, name, name_len, nh);
         if (op == 4 || e) md_slot_sync(m, path, pl, e);
     }
-    if (m->wal && out && out[4] == OP_MDT_OK && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10)) {
+    if (m->wal && out && out[4] == OP_MDT_OK && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10 || op == 14)) {
         /* the request as it came, appended while the name's bucket is still
          * held: a name's records are in the order of its changes */
         uint8_t hdr[8];  /* u32 LE key length, u32 LE value length, key, value */

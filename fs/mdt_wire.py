@@ -9,13 +9,14 @@ tests/test_native_servers.py runs one test suite against both.
 
 Request value:
   u8 op   1 lookup | 2 create | 3 set_size | 4 unlink | 5 readdir | 6 child_count
-          7 write_inline | 8 read_inline | 9 freeze | 10 spill_commit
+          7 write_inline | 8 read_inline | 9 freeze | 10 spill_commit | 14 spill_set_size
   create:       u8 is_dir, u8 exclusive, u8 flags (bit0 has_layout, bit1 inline_ok),
                 [u32 stripe_count, u64 stripe_size, u32 stripe_offset]
   set_size:     u8 mode (0 = max, 1 = exact), u64 size
   unlink:       u8 is_dir
   write_inline: u64 offset, data
   read_inline:  u64 offset, u32 length
+  spill_set_size: u64 size
 
 Response value:
   entry:        u8 is_dir, u8 flags (bit0 has_layout, bit1 inline, bit2 frozen),
@@ -42,10 +43,17 @@ it to the OSTs without a lock and without losing concurrent writes:
 Any client that sees FROZEN runs 1-3 itself, so a crashed spiller never
 blocks a file. set_size(max) on an inline entry answers INLINE: a writer
 whose cached attributes wrongly said "striped" redoes its write inline.
+spill_set_size(size): the shortcut for an EMPTY inline file whose first
+write goes past the limit (every new file above it): the client writes the
+stripes first, then this makes the entry striped and grows it to `size` in
+one round trip. NOT_EMPTY if it holds inline bytes, FROZEN mid-spill (the
+client then spills as above and writes again); on a striped entry it is
+set_size(max).
   readdir:      u32 count, then count x (u16 name_len, name bytes, entry)
   child_count:  u64
 Errors: Frame op=ERROR, value "CODE\\0message" (NOT_FOUND, EXISTS, IS_DIR,
-NOT_DIR, UNSUPPORTED_OP, MDT_INTERNAL).
+NOT_DIR, UNSUPPORTED_OP, MDT_INTERNAL, and for Data-on-MDT INLINE, INLINE_FULL,
+NOT_INLINE, NOT_FROZEN, FROZEN, NOT_EMPTY).
 """
 from __future__ import annotations
 
@@ -53,9 +61,11 @@ import struct
 
 OP_LOOKUP, OP_CREATE, OP_SET_SIZE, OP_UNLINK, OP_READDIR, OP_CHILD_COUNT = 1, 2, 3, 4, 5, 6
 OP_WRITE_INLINE, OP_READ_INLINE, OP_FREEZE, OP_SPILL_COMMIT = 7, 8, 9, 10
+OP_SPILL_SET_SIZE = 14
 _OP_NAMES = {OP_LOOKUP: "lookup", OP_CREATE: "create", OP_SET_SIZE: "set_size", OP_UNLINK: "unlink",
              OP_READDIR: "readdir", OP_CHILD_COUNT: "child_count", OP_WRITE_INLINE: "write_inline",
-             OP_READ_INLINE: "read_inline", OP_FREEZE: "freeze", OP_SPILL_COMMIT: "spill_commit"}
+             OP_READ_INLINE: "read_inline", OP_FREEZE: "freeze", OP_SPILL_COMMIT: "spill_commit",
+             OP_SPILL_SET_SIZE: "spill_set_size"}
 _OP_CODES = {v: k for k, v in _OP_NAMES.items()}
 
 _ENTRY_HEAD = struct.Struct("<BBQdd")
@@ -86,6 +96,8 @@ def encode_request(req: dict) -> bytes:
         return bytes([op]) + _U64.pack(req["offset"]) + req["data"]
     if op == OP_READ_INLINE:
         return bytes([op]) + _U64.pack(req["offset"]) + _U32.pack(req["length"])
+    if op == OP_SPILL_SET_SIZE:
+        return bytes([op]) + _U64.pack(req["size"])
     return bytes([op])
 
 
@@ -113,6 +125,8 @@ def decode_request(path: str, value: bytes) -> dict:
     elif op == OP_READ_INLINE:
         req["offset"] = _U64.unpack_from(value, 1)[0]
         req["length"] = _U32.unpack_from(value, 9)[0]
+    elif op == OP_SPILL_SET_SIZE:
+        req["size"] = _U64.unpack_from(value, 1)[0]
     return req
 
 
