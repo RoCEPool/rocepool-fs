@@ -76,6 +76,8 @@ def main() -> int:
                     help="partitions one shuffle task writes; above it the shuffle takes two passes")
     ap.add_argument("--executor", default="process", help="process, ray, or process,ray (both, in turn)")
     ap.add_argument("--memory-limit", default="", help="per DuckDB, e.g. 2GiB (default: host memory / workers)")
+    ap.add_argument("--diagnose", action="store_true",
+                    help="first: every worker times the sort's I/O on local disk and on rocepool (see diagnose())")
     ap.add_argument("--slots", type=int, default=0, help="workers per node (default: the node's cores)")
     ap.add_argument("--threads", type=int, default=1, help="DuckDB threads per task")
     ap.add_argument("--ost-tier", default="ram", help="ram, or a ROCEPOOL_OST_TIER spec ({node} = node index)")
@@ -121,6 +123,8 @@ def main() -> int:
         report["rocepool"] = rp.describe()
         log(f"== rocepool up: {n} MDT, {n} OST, mounted at {MNT} on all {n} nodes (OST data: "
             f"{report['rocepool']['ost_data']})")
+        if args.diagnose:
+            report["diagnosis"] = diagnose(cluster, env, n, slots, duck, args)
         for kind in executors:
             # each run starts from an empty directory: the last one's data would hold the OSTs' memory
             cluster.run(0, ["rm", "-rf", f"{MNT}/rocepond"], env, net=False)
@@ -150,6 +154,58 @@ def host_facts() -> dict:
         pass
     if os.environ.get("ROCEPOOL_INSTANCE_TYPE"):
         out["instance_type"] = os.environ["ROCEPOOL_INSTANCE_TYPE"]
+    return out
+
+
+DIAG_STEPS = ["generate (local disk)", "copy local disk -> rocepool", "read (local disk)", "read (rocepool)",
+              "partitioned write (local disk)", "partitioned write (rocepool)"]
+
+
+def diagnose(cluster, env, n: int, slots: int, duck: str, args) -> dict:
+    """Where the sort's time goes: every worker (all at once, as in the
+    sort) takes its share of the data through the same DuckDB operations
+    twice -- on the host's local disk and on rocepool -- and times each:
+    plain Parquet write and read, and the shuffle's partitioned write into
+    --partitions directories. Same data, same DuckDB, same concurrency: the
+    difference is the file system."""
+    tasks_n = n * slots
+    records = int(args.gib * 2**30 / sort.RECORD_BYTES / tasks_n)
+    p = args.partitions
+    log(f"== diagnosis: {tasks_n} tasks at once, {records * sort.RECORD_BYTES / 2**20:.0f} MiB each, local disk vs rocepool")
+    tasks = []
+    for k in range(tasks_n):
+        loc, rp = f"/var/tmp/rocepond_diag/{k}", f"{MNT}/rocepond_diag"
+        gen = (f"SELECT left(a, 10) AS keys, a || b || c || left(d, 3) AS records FROM (SELECT md5(i::VARCHAR || 'a') AS a, "
+               f"md5(i::VARCHAR || 'b') AS b, md5(i::VARCHAR || 'c') AS c, md5(i::VARCHAR || 'd') AS d "
+               f"FROM range({k * records}, {(k + 1) * records}) t(i))")
+        bucket = f"*, ((('0x' || left(keys, 8))::BIGINT * {p}) >> 32)::INTEGER AS bucket"
+        pw = (f"(FORMAT parquet, PARTITION_BY (bucket), OVERWRITE_OR_IGNORE, FILENAME_PATTERN 'from-{k}-{{i}}', "
+              "COMPRESSION uncompressed)")
+        tasks.append({"name": f"diagnose {k}", "mkdirs": [loc, rp, f"{rp}/pw"], "sql": [
+            f"COPY ({gen}) TO '{loc}/in.parquet' (FORMAT parquet, COMPRESSION uncompressed)",
+            f"COPY (SELECT * FROM '{loc}/in.parquet') TO '{rp}/in-{k}.parquet' "
+            "(FORMAT parquet, COMPRESSION uncompressed, USE_TMP_FILE false)",
+            f"SELECT bit_xor(hash(records)) FROM '{loc}/in.parquet'",
+            f"SELECT bit_xor(hash(records)) FROM '{rp}/in-{k}.parquet'",
+            f"COPY (SELECT {bucket} FROM '{loc}/in.parquet') TO '{loc}/pw' {pw}",
+            f"COPY (SELECT {bucket} FROM '{loc}/in.parquet') TO '{rp}/pw' {pw}"]})
+    ex = process_executor(cluster, env, slots, args.threads, duck, memory_limit=args.memory_limit, max_retries=0)
+    out = {"tasks": tasks_n, "mib_per_task": round(records * sort.RECORD_BYTES / 2**20, 1), "partitions": p}
+    try:
+        res = ex.run_all(tasks, "diagnose")
+    finally:
+        ex.close()
+        for node in cluster.nodes:
+            cluster.run(node.index, ["rm", "-rf", "/var/tmp/rocepond_diag"], env, net=False)
+        cluster.run(0, ["rm", "-rf", f"{MNT}/rocepond_diag"], env, net=False)
+    mib = records * sort.RECORD_BYTES / 2**20
+    for j, name in enumerate(DIAG_STEPS):
+        secs = sorted(r["step_s"][j] for r in res)
+        out[name] = {"median_s": secs[len(secs) // 2], "max_s": secs[-1],
+                     "mib_per_s_per_task": round(mib / secs[len(secs) // 2], 1),
+                     "mib_per_s_all_tasks": round(mib * tasks_n / secs[len(secs) // 2], 0)}
+        log(f"   {name:<34} median {secs[len(secs) // 2]:>7.2f} s  max {secs[-1]:>7.2f} s  "
+            f"{out[name]['mib_per_s_per_task']:>7} MiB/s per task  {out[name]['mib_per_s_all_tasks']:>8.0f} MiB/s all")
     return out
 
 

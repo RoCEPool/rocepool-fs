@@ -40,6 +40,9 @@ import time
 WORKER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worker.py")
 
 
+MAX_ERROR_SAMPLES = 12
+
+
 class TaskError(RuntimeError):
     pass
 
@@ -48,10 +51,12 @@ def describe(task: dict) -> str:
     return task.get("name") or (task.get("sql") or ["(no sql)"])[-1][:200]
 
 
-def summarize(stage: str, n: int, t0: float, results: list, retries: int, parallelism: int) -> dict:
+def summarize(stage: str, n: int, t0: float, results: list, retries: int, parallelism: int,
+              retry_errors: list | None = None) -> dict:
     wall = time.monotonic() - t0
     busy = sum(r["wall_s"] for r in results if r)
     return {"stage": stage, "tasks": n, "wall_s": round(wall, 3), "retries": retries,
+            "retry_errors": (retry_errors or [])[:MAX_ERROR_SAMPLES],  # what the retried attempts failed with
             "tasks_per_s": round(n / wall, 1) if wall > 0 else None,
             "task_s_total": round(busy, 3), "duck_s_total": round(sum(r["duck_s"] for r in results if r), 3),
             # the part of the workers' time not spent inside tasks: scheduling, pipes, idle tails
@@ -160,10 +165,15 @@ class _Slot:
 class ProcessExecutor(Executor):
     def __init__(self, launch, nodes: list, duckdb: str = "", threads: int = 1, slots_per_node: int = 1,
                  engine: str = "auto", memory_limit: str = "", workers_per_host: int | None = None,
-                 max_retries: int = 3, task_timeout: float | None = None, start_timeout: float = 120):
+                 max_retries: int = 3, task_timeout: float | None = None, start_timeout: float = 300,
+                 starts_per_node: int = 6):
         """memory_limit: per DuckDB, e.g. "4GiB"; "" = a host's memory (less a
         third) divided by workers_per_host (default: slots_per_node; more
-        when several simulated nodes are one host); "none" = DuckDB's default."""
+        when several simulated nodes are one host); "none" = DuckDB's default.
+        starts_per_node: workers started at the same time on one node: on
+        real hosts each start is an ssh login, and sshd drops logins beyond
+        its MaxStartups (10 by default) -- 32 at once on AWS left most
+        workers unstarted."""
         super().__init__()
         self.max_retries, self.task_timeout = max_retries, task_timeout
         argv = [sys.executable, WORKER, "--engine", engine, "--threads", str(threads),
@@ -176,9 +186,12 @@ class ProcessExecutor(Executor):
         self.slots: list[_Slot] = [None] * len(specs)
         errors = []
 
+        gates = self._gates = {node: threading.BoundedSemaphore(max(1, starts_per_node)) for node in nodes}
+
         def start(i, name, node):
             try:
-                self.slots[i] = _Slot(name, node, launch, argv, start_timeout)
+                with gates[node]:
+                    self.slots[i] = _Slot(name, node, launch, argv, start_timeout)
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"{name}: {exc}")
         threads_ = [threading.Thread(target=start, args=(i, n, nd)) for i, (n, nd) in enumerate(specs)]
@@ -201,7 +214,7 @@ class ProcessExecutor(Executor):
         todo: queue.Queue = queue.Queue()
         for i, t in enumerate(tasks):
             todo.put((i, t, 0, []))
-        state = {"left": n, "retries": 0, "failure": None}
+        state = {"left": n, "retries": 0, "failure": None, "samples": []}
         lock = threading.Lock()
         t0 = time.monotonic()
 
@@ -234,7 +247,8 @@ class ProcessExecutor(Executor):
                     res = {"ok": False, "error": f"{type(exc).__name__}: {exc}", "rows": [], "duck_s": 0.0,
                            "wall_s": 0.0}
                     try:
-                        slot.start()
+                        with self._gates[slot.node]:
+                            slot.start()
                     except Exception as exc2:  # noqa: BLE001
                         with lock:
                             if not state["failure"]:
@@ -253,6 +267,8 @@ class ProcessExecutor(Executor):
                 with lock:
                     if attempts < self.max_retries:
                         state["retries"] += 1
+                        if len(state["samples"]) < MAX_ERROR_SAMPLES:
+                            state["samples"].append(f"{describe(task)}: {errs[-1]}"[:600])
                         todo.put((i, task, attempts + 1, errs))
                     elif not state["failure"]:
                         state["failure"] = TaskError(f"task failed {attempts + 1} times: {describe(task)}\n  "
@@ -264,7 +280,7 @@ class ProcessExecutor(Executor):
             t.start()
         for t in threads_:
             t.join()
-        self.stats.append(summarize(stage, n, t0, results, state["retries"], self.parallelism))
+        self.stats.append(summarize(stage, n, t0, results, state["retries"], self.parallelism, state["samples"]))
         if state["failure"]:
             raise state["failure"]
         return results
