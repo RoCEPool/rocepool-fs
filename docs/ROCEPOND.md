@@ -147,6 +147,47 @@ the second shuffle pass, not data: 9.7 MiB/s per core here, against 45
 MiB/s per core for the same 1 GiB in 16 partitions (11.4 s). Partition
 counts in the thousands belong to data in the hundreds of GiB.
 
+## On real hosts: AWS, 2 x c5n.9xlarge with EFA
+
+    python3 tools/aws_cluster.py run --mode efa --type c5n.9xlarge --nodes 2 \
+        --command "python3 tools/rocepond_sort.py --engine cli --executor process,ray --gib 20 --partitions 1024 --slots 32"
+
+tools/rocepond_sort.py brings the real cluster up itself (rocepool's setup as
+run.sh does it, then duckdb, ray and the DuckDB CLI in `/opt/rocepond-venv`
+on every host), runs each scheduler on a fresh rocepool, validates, and
+reports. 2026-11-15 (`docs/reports/rocepond_sort_aws_c5n9x2.json`): 2 hosts x
+36 vCPUs (18 physical cores, Xeon 8124M), 96 GiB, 50 Gbps EFA; rocepool's
+OSTs keep data in RAM; 32 workers per host; DuckDB 1.5.6 CLI.
+
+| 20 GiB, 1,024 partitions | shuffle | sort | shuffle + sort | per physical core | retries |
+|---|---|---|---|---|---|
+| ProcessExecutor | 122 s | 102 s | 224 s (5.4 GiB/min) | 2.54 MiB/s | 0 |
+| RayExecutor (2-node Ray) | 122 s | 102 s | 224 s (5.3 GiB/min) | 2.54 MiB/s | 0 |
+| smallpond + 3FS, published (110.5 TiB, 8,192 partitions) | | | 30 min 14 s | 6.65 MiB/s per compute core | |
+
+Both valid: every record, in order, checksum equal. ~3,200 tasks per run.
+
+What it says: the schedulers place and run thousands of tasks over real
+hosts, and the work on rocepool over EFA is correct. Where the time goes,
+from `--diagnose` (64 workers at once, the same data on local disk and on
+rocepool): the shuffle's partitioned write -- every task writing 1,024 small
+files -- runs at 3.2 MiB/s per task on rocepool against 20 on local disk;
+plain Parquet writes reach 2 GB/s and reads 2.3 GB/s over both hosts. Small
+files are rocepool's cost here, not DuckDB and not the network (50 Gbps is
+used to a fraction).
+
+**DuckDB 2.0 (the current Python package) and rocepool's FUSE client: I/O
+errors.** With DuckDB 2.0, writes on rocepool failed with EIO under load on
+AWS (about 150 per run, all recovered by the schedulers' retries; then
+4.1-4.5 MiB/s per physical core, since 2.0 writes faster). The FUSE client
+itself never answered EIO (it now logs every such reply), so the error comes
+from the kernel side of DuckDB 2.0's asynchronous writes on FUSE; DuckDB
+1.5.6 (synchronous writes) gave none with the same data and concurrency. Not
+reproduced on the simulated cluster. Until it is understood, real-host runs
+use `--engine cli` (DuckDB 1.5.6 on every host). The kernel log also shows
+EFA `DEREG_MR` failures (err -22) under this load, without errors reaching
+the applications.
+
 ## The 11 TPC-H queries (first prototype)
 
     sudo python3 tools/rocepond_tpch.py --rapidsse <RapidsSE tree | auto> --duckdb <DuckDB CLI | auto>
