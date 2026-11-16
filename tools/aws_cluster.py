@@ -65,6 +65,7 @@ DLAMI_SSM = ["/aws/service/deeplearning/ami/{arch}/base-oss-nvidia-driver-gpu-ub
 DEFAULT_TYPE = {"efa": "c6in.32xlarge", "rxe": "c6in.16xlarge", "gpu": "g6e.2xlarge"}
 EFA_INSTALLER = "https://efa-installer.amazonaws.com/aws-efa-installer-latest.tar.gz"
 # what goes to the head node: the tree minus caches, results, VCS
+FETCH_MARGIN_S = 180    # stop following this long before the safety limit, to fetch the reports
 EXCLUDE = {".git", ".bench_cache", "aws_runs", "__pycache__", "stress_reports", "mnt"}
 
 
@@ -168,7 +169,8 @@ class Run:
 
     def scp(self, src: str, dst: str) -> None:
         r = subprocess.run([self.args.scp, "-q", "-i", self.key_file, "-o", "StrictHostKeyChecking=no",
-                            "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", src, dst],
+                            "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=10",
+                            "-o", "ServerAliveInterval=30", src, dst],
                            capture_output=True, text=True, timeout=3600)
         if r.returncode:
             raise RuntimeError(f"scp {src} {dst}: {(r.stdout + r.stderr)[-800:]}")
@@ -453,6 +455,9 @@ class Run:
                 raise RuntimeError(f"no capacity for {what} in {self.aws.region} (tried {', '.join(why)}): "
                                    "try later, another --type or --region")
             log(f"launched {', '.join(st['instances'])}")
+            # the earliest moment the safety limit can power them off (it counts from boot, later than this)
+            st["poweroff_at"] = time.time() + shutdown_min * 60
+            self.save()
         self.aws("ec2", "wait", "instance-running", "--instance-ids", *st["instances"], parse=False)
         if rails > 1:
             self.attach_public_ips()
@@ -637,6 +642,10 @@ class Run:
         self.ssh(head, f"setsid bash -c {shlex.quote(cmd)} >/dev/null 2>&1 < /dev/null &")
         log(f"{'command' if a.command else 'run.sh'} started on {head} ({len(st['hosts'])} hosts); following its progress")
         seen, end = 0, time.monotonic() + a.max_hours * 3600
+        # stop following before the safety limit powers the hosts off: the reports
+        # are fetched from a running head, never from a terminated one
+        if self.state.get("poweroff_at"):
+            end = min(end, time.monotonic() + self.state["poweroff_at"] - FETCH_MARGIN_S - time.time())
         rc = None
         while time.monotonic() < end:
             r = self.ssh(head, "cd /root/rocepool; wc -l < aws_run.out 2>/dev/null || echo 0; "
@@ -655,6 +664,8 @@ class Run:
                 rc = int(lines[-1]) if lines[-1].lstrip("-").isdigit() else 1
                 break
             time.sleep(a.poll)
+        if rc is None:
+            log(f"no exit code before the hosts' safety limit (--max-hours {a.max_hours}): fetching what is there")
         self.fetch()
         return 1 if rc is None else rc
 
