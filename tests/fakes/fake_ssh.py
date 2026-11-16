@@ -32,7 +32,7 @@ elif "ROCEPOOL_SETUP" in cmd:
 elif "ssh-keygen" in cmd:
     print("ssh-ed25519 AAAAfake rocepool-cluster")
 elif "wc -l < aws_run.out" in cmd:
-    print("3\n0")
+    print("3\nrunning" if os.environ.get("FAKE_SSH_RUNNING") else "3\n0")   # running: the command never ends
 elif cmd.startswith("sed -n"):
     print("== 3/4 运行\n[PASS] io500  score 123.4\nverdict: PASS")
 sys.exit(0)

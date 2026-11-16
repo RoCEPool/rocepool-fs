@@ -121,6 +121,25 @@ class AwsClusterTests(unittest.TestCase):
         r2 = self.run_tool("--mode", "efa", "--nodes", "2", "--command", "true", run_id="rp-loud")
         self.assertIn("  | [PASS] io500", r2.stdout)
 
+    def test_a_run_that_outlasts_the_safety_limit_is_fetched_before_the_hosts_power_off(self):
+        # the hosts power off --max-hours after boot; following the command until
+        # --max-hours after it *started* meant fetching from terminated hosts
+        import time
+        t0 = time.monotonic()
+        r = self.run_tool("--mode", "efa", "--nodes", "2", "--command", "sleep infinity", "--max-hours", "0.06",
+                          "--fetch", "private_out.tgz", env_extra={"FAKE_SSH_RUNNING": "1",
+                                                                     "FAKE_SCP_EXTRA": "private_out.tgz"},
+                          run_id="rp-limit")
+        self.assertLess(time.monotonic() - t0, 120, "stopped following at the margin, not at 0.06 h after start")
+        self.assertNotEqual(r.returncode, 0, "no exit code: not a success")
+        self.assertIn("no exit code before the hosts' safety limit", r.stdout)
+        self.assertTrue(os.path.exists(os.path.join(ROOT, "aws_runs", "rp-limit", "private_out.tgz")),
+                        "what the head had is fetched")
+        scps = [c for c in self.calls(self.ssh_log) if c[0] == "scp"]
+        self.assertTrue(scps and all("ConnectTimeout=10" in c for c in scps),
+                        "an unreachable host costs seconds per file, not the TCP connect timeout")
+        self.assertTrue(self.aws_calls("ec2", "terminate-instances"), "released as always")
+
     def test_rxe_mode_sets_up_soft_roce_without_efa(self):
         r = self.run_tool("--mode", "rxe", "--nodes", "2")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
