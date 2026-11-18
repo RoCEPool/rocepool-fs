@@ -71,6 +71,7 @@ void rp_bulk_stats(uint64_t *bytes, uint64_t *in_use, uint64_t *zero_copy_bytes,
 
 extern size_t rp_frame_bytes;   /* max frame, default 16 MiB (env ROCE_MAX_FRAME_BYTES) */
 extern int rp_timeout_ms;       /* per request, default 5000 */
+extern int rp_pair_connect_ms;  /* a server pair: connect timeout (ROCEPOOL_PAIR_CONNECT_MS, default 1000) */
 extern int rp_failover_ms;      /* a server pair: how long to keep trying the two (ROCEPOOL_FAILOVER_S, default 60) */
 
 void rp_peer_init(rp_peer_t *p, const char *addr);
@@ -79,6 +80,7 @@ void rp_peer_close_idle(rp_peer_t *p);
  * (then cleared): RP_RQF_ASYNC, RP_RQF_REPLAY (rocepool_servers.c) */
 #define RP_RQF_ASYNC 1
 #define RP_RQF_REPLAY 2
+#define RP_RQF_TAG 4    /* set by rp_rpc for a server pair: client id + sequence number lead the value */
 extern __thread uint8_t rp_next_flags;
 
 /* value = v1 ++ v2. 0 = reply in *out (maybe RP_ERROR), -EIO/-EFBIG otherwise. */

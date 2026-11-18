@@ -3,6 +3,8 @@
 #include "rocepool_client.h"
 
 #include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -176,6 +178,20 @@ void rp_bulk_stats(uint64_t *bytes, uint64_t *in_use, uint64_t *zero_copy_bytes,
 
 /* ---------------------------------------------------------------- pooled RPC */
 int rp_failover_ms = 60000;
+int rp_pair_connect_ms = 1000;
+static atomic_ullong g_tagseq;
+static uint64_t rp_client_id(void) {
+    static _Atomic uint64_t id;
+    uint64_t v = atomic_load(&id);
+    if (v) return v;
+    int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+    if (fd < 0 || read(fd, &v, sizeof(v)) != sizeof(v)) v = (uint64_t)getpid() << 32 ^ (uint64_t)time(NULL);
+    if (fd >= 0) close(fd);
+    if (!v) v = 1;
+    uint64_t zero = 0;
+    atomic_compare_exchange_strong(&id, &zero, v);
+    return atomic_load(&id);
+}
 
 void rp_peer_init(rp_peer_t *p, const char *addr) {
     memset(p, 0, sizeof(*p));
@@ -190,6 +206,8 @@ void rp_peer_init(rp_peer_t *p, const char *addr) {
     }
     p->addr = p->addrs[0];
     pthread_mutex_init(&p->lk, NULL);
+    const char *pc = getenv("ROCEPOOL_PAIR_CONNECT_MS");
+    if (pc && atoi(pc) > 0) rp_pair_connect_ms = atoi(pc);
     const char *fo = getenv("ROCEPOOL_FAILOVER_S");
     if (fo && atof(fo) > 0) rp_failover_ms = (int)(atof(fo) * 1000);
     const char *fe = getenv("ROCE_MAX_FRAME_BYTES");
@@ -267,23 +285,33 @@ int rp_rpc_v(rp_peer_t *p, uint8_t op, const char *key, const void *v1, size_t n
              rp_resp_t *out) {
     size_t klen = strlen(key), body = 0;
     for (int i = 0; i < nsegs; i++) body += segs[i].len;
-    size_t head_len = 24 + klen + n1, len = head_len + body;
+    /* a server pair: the request carries this process's id and its own
+     * sequence number, the same on every retry -- a server that did it
+     * already (or the standby it shipped the change to) answers with that
+     * reply instead of doing it twice */
+    size_t tag = p->naddr == 2 ? 16 : 0;
+    size_t head_len = 24 + klen + tag + n1, len = head_len + body;
     if (len > rp_frame_bytes || nsegs > 4) return -EFBIG;
     uint8_t stack[4096];
     uint8_t *buf = head_len <= sizeof(stack) ? stack : malloc(head_len);
     if (!buf) return -ENOMEM;
     uint64_t id = atomic_fetch_add(&g_reqid, 1);
-    uint32_t kl = (uint32_t)klen, vl = (uint32_t)(n1 + body);
+    uint32_t kl = (uint32_t)klen, vl = (uint32_t)(tag + n1 + body);
     memcpy(buf, "RCP1", 4);
     buf[4] = op;
-    buf[5] = rp_next_flags;
+    buf[5] = rp_next_flags | (tag ? RP_RQF_TAG : 0);
     rp_next_flags = 0;
     buf[6] = buf[7] = 0;
     memcpy(buf + 8, &id, 8);   /* little-endian hosts only (x86_64/aarch64) */
     memcpy(buf + 16, &kl, 4);
     memcpy(buf + 20, &vl, 4);
     memcpy(buf + 24, key, klen);
-    if (n1) memcpy(buf + 24 + klen, v1, n1);
+    if (tag) {
+        uint64_t cid = rp_client_id(), seq = atomic_fetch_add(&g_tagseq, 1) + 1;
+        memcpy(buf + 24 + klen, &cid, 8);
+        memcpy(buf + 24 + klen + 8, &seq, 8);
+    }
+    if (n1) memcpy(buf + 24 + klen + tag, v1, n1);
     roce_seg_t rs[4];
     for (int i = 0; i < nsegs; i++) {
         rs[i] = (roce_seg_t){ segs[i].data, segs[i].len, segs[i].mem ? segs[i].mem : rp_bulk_mem(segs[i].data, segs[i].len) };
@@ -298,7 +326,9 @@ again:;
     rc = -EIO;
     for (int attempt = 0; attempt < 1 + RP_POOL_IDLE_MAX; attempt++) {
         roce_conn_t *c = peer_checkout(p);
-        if (!c) c = roce_client_connect_shared(p->addr, rp_timeout_ms < 10000 ? rp_timeout_ms : 10000, rp_frame_bytes);
+        /* a pair: a dead server is found out in a second, not ten */
+        if (!c) c = roce_client_connect_shared(p->addr, p->naddr == 2 ? rp_pair_connect_ms : rp_timeout_ms < 10000 ? rp_timeout_ms : 10000,
+                                               rp_frame_bytes);
         if (!c) {
             fprintf(stderr, "rocepool: connect %s: %s\n", p->addr, roce_last_error());
             break;

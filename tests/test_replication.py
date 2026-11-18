@@ -30,7 +30,7 @@ class _Side(td._Servers):
     def __init__(self, lib, d, port, peer_port, role, extra=None):
         peers = {"ROCEPOOL_MDT_REPLICAS": ",".join(f"127.0.0.1:{peer_port + i}" for i in range(NM)),
                  "ROCEPOOL_OST_REPLICAS": ",".join(f"127.0.0.1:{peer_port + 50 + i}" for i in range(NO)),
-                 "ROCEPOOL_REPL_ROLE": role, "ROCEPOOL_REPL_PROMOTE_S": "1.5", **(extra or {})}
+                 "ROCEPOOL_REPL_ROLE": role, **(extra or {})}
         os.makedirs(d, exist_ok=True)
         super().__init__(lib, d, port, nm=NM, no=NO, env=peers)
 
@@ -234,6 +234,63 @@ print(repr(got)); print(repr(dirs))
         got, _, _ = self.read()
         self.assertEqual(got, sums)
         self.wait_role(self.a, "primary")
+
+    def test_takeover_is_quick(self):
+        """defaults: a hello every 200 ms, a standby takes over after 2 s of
+        silence, a client finds a dead server within a second"""
+        self.py(f"import os; os.makedirs({self.prefix!r} + '/q'); open({self.prefix!r} + '/q/a', 'wb').write(b'a' * 5000)")
+        self.wait_synced(self.a)
+        self.a.kill()
+        t0 = time.monotonic()
+        out = self.py(f"print(open({self.prefix!r} + '/q/a', 'rb').read() == b'a' * 5000)")
+        took = time.monotonic() - t0
+        self.assertEqual(out.stdout.strip(), "True")
+        self.assertLess(took, 6.0, took)
+        print(f"takeover: first read answered {took:.2f} s after the kill", file=sys.stderr)
+
+    def test_a_retried_change_is_not_done_twice(self):
+        """A request carries the client's id and sequence number: sent again
+        -- to the same primary, or to the standby after it took over -- it
+        gets its first reply, not a second execution (an exclusive create
+        would say EXISTS)"""
+        from roce.protocol import Frame, Op
+        from roce.roce_transport import RoCETransport
+        os.environ["ROCE_TRANSPORT_LIB"] = self.lib
+        import struct
+
+        class Tagged(Frame):
+            tag = (0, 0)
+
+            def encode(self):
+                b = bytearray(Frame(self.op, self.request_id, self.key, struct.pack("<QQ", *self.tag) + self.value).encode())
+                b[5] = 4  # RQF_TAG
+                return bytes(b)
+
+        t = RoCETransport()
+        create = bytes([2, 0, 1, 0])  # MDT create: a file, exclusive
+
+        def send(addr, tag, rid):
+            f = Tagged(op=Op.MDT, request_id=rid, key="dd/one", value=create)
+            f.tag = tag
+            return t.send_request(addr, f)
+
+        a0, b0 = self.a.mdts.split(",")[0], self.b.mdts.split(",")[0]
+        r1 = send(a0, (77, 1), 1)
+        self.assertEqual(r1.op, Op.MDT_OK, r1.value)
+        r2 = send(a0, (77, 1), 2)  # the same request again
+        self.assertEqual((r2.op, r2.value), (r1.op, r1.value))
+        r3 = send(a0, (77, 2), 3)  # another request: it does exist now
+        self.assertEqual(r3.op, Op.ERROR)
+        self.assertTrue(r3.value.startswith(b"EXISTS"), r3.value)
+        self.wait_synced(self.a)
+        self.a.kill()
+        self.wait_role(self.b, "primary")
+        r4 = send(b0, (77, 1), 4)  # the first request, to the server that took over
+        self.assertEqual((r4.op, r4.value), (r1.op, r1.value))
+        r5 = send(b0, (77, 3), 5)
+        self.assertTrue(r5.value.startswith(b"EXISTS"), r5.value)
+        st = td._stats(self.lib, b0)
+        self.assertGreaterEqual(st["repl"]["replies_reused"], 1, st["repl"])
 
     def test_a_standby_refuses_clients(self):
         from roce.protocol import Frame, Op

@@ -73,10 +73,13 @@ another host, with its own log, tier and checkpoints.
 |---|---|
 | `ROCEPOOL_MDT_REPLICAS`, `ROCEPOOL_OST_REPLICAS` | Comma lists; the n-th server of a kind in a process pairs with the n-th address |
 | `ROCEPOOL_REPL_ROLE` | `primary` (default) or `standby`, for the first start |
-| `ROCEPOOL_REPL_PROMOTE_S` | Default 10; 0 means never promote on its own |
+| `ROCEPOOL_REPL_PROMOTE_S` | Default 2; 0 means never promote on its own |
+| `ROCEPOOL_REPL_HEARTBEAT_MS` | Hello interval, default 200 |
+| `ROCEPOOL_REPL_REPLY_CACHE` | Replies kept for request dedupe, default 65536 |
 | `ROCEPOOL_REPL_MAX_QUEUE` | Keys queued at most (default 1 M) |
 | `ROCEPOOL_MDTS` / `ROCEPOOL_OSTS` (client) | Each entry `primary|standby` |
 | `ROCEPOOL_FAILOVER_S` (client) | How long a request keeps trying the two (default 60) |
+| `ROCEPOOL_PAIR_CONNECT_MS` (client) | Connect timeout towards a pair's server, default 1000 |
 
 Both sides are configured with each other's address, so either can be the
 primary. Replication needs the server's log (`ROCEPOOL_*_LOG`).
@@ -97,7 +100,8 @@ primary. Replication needs the server's log (`ROCEPOOL_*_LOG`).
    and tier) before it replies.
 4. **A failed send puts the keys back** in the queue.
 
-**Resync.** A manager thread says hello every half second. When the
+**Resync.** A heartbeat thread says hello every 200 ms on a connection of
+its own, so a long resync step never delays it. When the
 standby's copy is not complete for this primary's run, it resyncs. That
 happens with a new standby, after either side restarts, or after a queue
 overflow while the standby was away. It goes in three steps:
@@ -120,6 +124,22 @@ drains: no resync is needed.
 - **A standby takes over by itself** when it holds a complete copy and has
   not heard from its primary for `ROCEPOOL_REPL_PROMOTE_S`. It becomes
   primary with term + 1.
+  - A standby still handling a request from its primary, such as a long
+    resync step, is never "silent".
+  - Measured locally: the first read answered 1.8 s after the primaries
+    were killed.
+
+**Request dedupe across a takeover (as NonStop process pairs do with
+their sync IDs).**
+- A client of a server pair tags every request with its process id and a
+  sequence number. The tag stays the same on every retry.
+- The primary keeps its replies to changes by tag, and ships each reply in
+  the same batch as the change's state.
+- A request sent again, to the same server or to the standby that took
+  over, gets its first reply instead of being done twice. Without this, an
+  exclusive create would answer `EXISTS` and a CAS would answer a conflict.
+- Within an OST `BATCH`, the reply travels with the batch's last change,
+  so a partial batch lost in a failover is answered as done.
 - **A primary that hears from a primary of a higher term steps down** and is
   resynced by it. A returning old primary therefore becomes the standby.
 - **Role, term and the copy's completeness are kept in `<log>.repl`**, so a

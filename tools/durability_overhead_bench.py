@@ -65,7 +65,7 @@ class Side:
 
     def start(self):
         env = dict(os.environ, ROCE_TRANSPORT_LIB=self.lib, PYTHONPATH=ROOT,
-                   ROCEPOOL_OST_TIER=f"file:{self.d}/ost{{n}}.tier:4", ROCEPOOL_OST_RAM_CACHE_MIB="256",
+                   ROCEPOOL_OST_TIER=f"file:{self.d}/ost{{n}}.tier:1", ROCEPOOL_OST_RAM_CACHE_MIB="256",
                    ROCEPOOL_OST_LOG=f"{self.d}/ost{{n}}.log", ROCEPOOL_MDT_LOG=f"{self.d}/mdt{{n}}.log", **self.env)
         t0 = time.monotonic()
         self.p = subprocess.Popen([sys.executable, "-u", os.path.join(ROOT, "tests", "fakes", "native_cluster.py"), ROOT,
@@ -99,7 +99,7 @@ def peers(port):
 
 def client_env(lib, icp, prefix, a: Side):
     return dict(os.environ, ROCE_TRANSPORT_LIB=lib, PYTHONPATH=ROOT, LD_PRELOAD=icp, ROCEPOOL_PREFIX=prefix,
-                ROCEPOOL_MDTS=a.mdts, ROCEPOOL_OSTS=a.osts)
+                ROCEPOOL_MDTS=a.mdts, ROCEPOOL_OSTS=a.osts, ROCEPOOL_INTERCEPT_LOG="1")
 
 
 def run_load(env, prefix, kind, workers, n):

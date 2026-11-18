@@ -206,7 +206,6 @@ static int buf_printf(buf_t *b, const char *fmt, ...) {
 
 /* asynchronous replication (repl_*, after the stores) */
 struct repl;
-static void repl_mark(struct repl *r, const char *key, size_t kl, uint64_t lo, uint64_t hi, int all);
 static uint64_t repl_vfloor(const struct repl *r);
 
 /* ---- log segments and checkpoints (wal.h) ----
@@ -1449,7 +1448,6 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
             if (data) { atomic_fetch_add(&s->ram_bytes, cap_mem(cap)); lru_touch(s, e); } else lru_drop(s, e);
         }
         if (!rc) ost_log_set(s, e);
-        if (!rc && s->repl) repl_mark(s->repl, e->key, e->key_len, 0, 0, 1);
         uint64_t version = e->version;
         pthread_mutex_unlock(&st->lock);
         ent_free_data(s, old, old_cap);
@@ -1497,7 +1495,6 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         st->count--;
         if (*wm < e->version + 1) *wm = e->version + 1;
         ost_log_del(s, e->key, e->key_len);
-        if (s->repl) repl_mark(s->repl, e->key, e->key_len, 0, 0, 1);
         pthread_mutex_unlock(&st->lock);
         atomic_fetch_sub(&s->bytes, e->size);
         atomic_fetch_sub(&s->objects, 1);
@@ -1658,7 +1655,6 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
             return frame_error(f, "STORAGE_ERROR", "object not on the tier", out_len);
         }
         ost_log_set(s, e);
-        if (s->repl) repl_mark(s->repl, e->key, e->key_len, off, off + dlen, 0);
         uint64_t version = e->version;
         pthread_mutex_unlock(&st->lock);
         atomic_fetch_add(&s->bytes, new_size - old_size);
@@ -1717,7 +1713,6 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
                 e->updated_at = now_s();
                 if (e->data) { obj_begin(e->data); obj_publish(&s->arena, e->data, e->size); }
                 ost_log_set(s, e);
-                if (s->repl) repl_mark(s->repl, e->key, e->key_len, 0, 0, 0);  /* the size alone */
             }
             version = e->version;
             cur = e->size;
@@ -2829,10 +2824,6 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         md_entry *x = *md_find(bk, name, name_len, nh);
         if (x) x->lsn = stamp;
     }
-    /* a primary's change goes to its standby, asynchronously (not a
-     * replay: a restart's resync compares everything instead) */
-    if (!skip && m->repl && !tl_replay_lsn && out && out[4] == OP_MDT_OK && md_is_change(op) && op < 40)
-        repl_mark(m->repl, path, pl, 0, 0, 1);
     if (bk) {
         uint64_t tu = mono_ns();
         pthread_mutex_unlock(&bk->lock);
@@ -3221,13 +3212,41 @@ enum { RS_HELLO = 1, RS_BATCH = 2, RS_BEGIN = 3, RS_CHECK = 4, RS_END = 5, RS_PR
 #define REPL_CHUNK (1u << 20)       /* an OST object's bytes per item */
 #define REPL_TERM_SHIFT 40
 
+/* a client's reply to a change, kept with the change's key so the standby
+ * gets both in one batch (request dedupe across a takeover) */
+typedef struct repl_reply {
+    struct repl_reply *next;
+    uint64_t tc, ts;  /* the client's id, the request's sequence number */
+    size_t len;
+    uint8_t data[];
+} repl_reply;
+
 typedef struct repl_node {
     struct repl_node *hnext, *qnext;
     uint64_t h, lo, hi;
     uint8_t all;   /* the whole object (else [lo, hi) and its size) */
+    repl_reply *replies;
     size_t kl;
     char key[];
 } repl_node;
+
+static void repl_node_free(repl_node *x) {
+    for (repl_reply *y = x->replies, *ny; y; y = ny) { ny = y->next; free(y); }
+    free(x);
+}
+
+/* Replies to changes by client request (id, sequence number): a request the
+ * client sends again -- after a timeout, or to the standby that took over
+ * -- is answered with its first reply instead of being done twice (an
+ * exclusive create would answer EXISTS, a CAS a conflict). A ring of the
+ * last ROCEPOOL_REPL_REPLY_CACHE (default 65536). */
+typedef struct rc_ent { struct rc_ent *hnext; uint64_t tc, ts; size_t len; uint8_t data[]; } rc_ent;
+typedef struct {
+    pthread_mutex_t lk;
+    rc_ent **tab, **ring;
+    size_t nslots, cap, head, n;
+    atomic_ullong hits, puts;
+} rcache_t;
 
 typedef struct {
     pthread_mutex_t lk;
@@ -3256,7 +3275,65 @@ typedef struct repl {
     uint64_t max_queue;
     atomic_ullong queued, marked, items, bytes, rpcs, errors, resyncs, checked, mismatched, swept, applied;
     atomic_ullong promotions, demotions, overflows, resync_ns;
+    /* fast takeover: hello every hb_ms from its own thread; a standby busy
+     * with its primary's requests (a long resync step) is not "silent" */
+    uint64_t hb_ms;
+    _Atomic int busy;
+    _Atomic uint64_t peer_synced;  /* what the standby last said its copy is complete for */
+    rcache_t rc;
 } repl_t;
+
+static uint64_t rc_slot(const rcache_t *c, uint64_t tc, uint64_t ts) { return (tc * 0x9E3779B97F4A7C15ull ^ ts) % c->nslots; }
+
+static void rcache_put(rcache_t *c, uint64_t tc, uint64_t ts, const uint8_t *data, size_t len) {
+    if (!c->cap || !tc) return;
+    rc_ent *e = malloc(sizeof(*e) + len);
+    if (!e) return;
+    e->tc = tc; e->ts = ts; e->len = len;
+    memcpy(e->data, data, len);
+    pthread_mutex_lock(&c->lk);
+    rc_ent **pp = &c->tab[rc_slot(c, tc, ts)];
+    for (; *pp; pp = &(*pp)->hnext)
+        if ((*pp)->tc == tc && (*pp)->ts == ts) break;
+    if (*pp) {  /* the same request again: the first reply stays */
+        pthread_mutex_unlock(&c->lk);
+        free(e);
+        return;
+    }
+    if (c->n == c->cap) {  /* the oldest goes */
+        rc_ent *old = c->ring[c->head];
+        rc_ent **qq = &c->tab[rc_slot(c, old->tc, old->ts)];
+        for (; *qq; qq = &(*qq)->hnext) if (*qq == old) { *qq = old->hnext; break; }
+        free(old);
+        c->head = (c->head + 1) % c->cap;
+        c->n--;
+    }
+    e->hnext = c->tab[rc_slot(c, tc, ts)];
+    c->tab[rc_slot(c, tc, ts)] = e;
+    c->ring[(c->head + c->n) % c->cap] = e;
+    c->n++;
+    pthread_mutex_unlock(&c->lk);
+    atomic_fetch_add(&c->puts, 1);
+}
+
+/* a copy of the reply to (tc, ts) for request f (its id), or NULL */
+static uint8_t *rcache_get(rcache_t *c, uint64_t tc, uint64_t ts, const frame_t *f, size_t *out_len) {
+    if (!c->cap || !tc) return NULL;
+    uint8_t *out = NULL;
+    pthread_mutex_lock(&c->lk);
+    for (rc_ent *e = c->tab[rc_slot(c, tc, ts)]; e; e = e->hnext)
+        if (e->tc == tc && e->ts == ts) {
+            if ((out = roce_reply_alloc(e->len))) {
+                memcpy(out, e->data, e->len);
+                wr_u64le(out + 8, f->req_id);
+                *out_len = e->len;
+            }
+            break;
+        }
+    pthread_mutex_unlock(&c->lk);
+    if (out) atomic_fetch_add(&c->hits, 1);
+    return out;
+}
 
 static uint64_t repl_vfloor(const struct repl *r) {
     return atomic_load(&r->role) == ROLE_PRIMARY ? atomic_load(&r->term) << REPL_TERM_SHIFT : 0;
@@ -3298,7 +3375,7 @@ static void repl_clear_queue(repl_t *r) {
     for (int i = 0; i < REPL_SHARDS; i++) {
         repl_shard *sh = &r->sh[i];
         pthread_mutex_lock(&sh->lk);
-        for (repl_node *x = sh->qh, *nx; x; x = nx) { nx = x->qnext; free(x); }
+        for (repl_node *x = sh->qh, *nx; x; x = nx) { nx = x->qnext; repl_node_free(x); }
         sh->qh = sh->qt = NULL;
         memset(sh->tab, 0, sh->nslots * sizeof(*sh->tab));
         atomic_fetch_sub(&r->queued, sh->n);
@@ -3339,7 +3416,10 @@ static void repl_demote(repl_t *r, uint64_t term) {
 }
 
 /* ---- the dirty set ---- */
-static void repl_mark(struct repl *r, const char *key, size_t kl, uint64_t lo, uint64_t hi, int all) {
+/* key changed ([lo, hi) of an object, or all of it); with a client's reply
+ * to the change (tc != 0), which ships with it */
+static void repl_mark_r(struct repl *r, const char *key, size_t kl, uint64_t lo, uint64_t hi, int all, uint64_t tc,
+                        uint64_t ts, const uint8_t *rep, size_t rlen) {
     if (!r || atomic_load_explicit(&r->role, memory_order_relaxed) != ROLE_PRIMARY) return;
     if (atomic_load_explicit(&r->queued, memory_order_relaxed) >= r->max_queue) {
         /* the standby is gone for long: forget the queue, resync later */
@@ -3353,7 +3433,13 @@ static void repl_mark(struct repl *r, const char *key, size_t kl, uint64_t lo, u
     for (; *pp; pp = &(*pp)->hnext)
         if ((*pp)->h == h && (*pp)->kl == kl && !memcmp((*pp)->key, key, kl)) break;
     repl_node *x = *pp;
+    repl_reply *ry = NULL;
+    if (tc && (ry = malloc(sizeof(*ry) + rlen))) {
+        ry->tc = tc; ry->ts = ts; ry->len = rlen; ry->next = NULL;
+        memcpy(ry->data, rep, rlen);
+    }
     if (x) {
+        if (ry) { ry->next = x->replies; x->replies = ry; }
         if (all) x->all = 1;
         else if (!x->all && hi > lo) {
             if (x->hi <= x->lo) { x->lo = lo; x->hi = hi; }
@@ -3363,6 +3449,7 @@ static void repl_mark(struct repl *r, const char *key, size_t kl, uint64_t lo, u
         x->h = h; x->kl = kl; memcpy(x->key, key, kl);
         x->all = (uint8_t)(all != 0); x->lo = lo; x->hi = hi;
         x->hnext = NULL; x->qnext = NULL;
+        x->replies = ry;
         *pp = x;
         if (sh->qt) sh->qt->qnext = x; else sh->qh = x;
         sh->qt = x;
@@ -3386,8 +3473,13 @@ static void repl_mark(struct repl *r, const char *key, size_t kl, uint64_t lo, u
             }
         }
         pthread_cond_signal(&sh->cv);
+    } else {
+        free(ry);
     }
     pthread_mutex_unlock(&sh->lk);
+}
+static void repl_mark(struct repl *r, const char *key, size_t kl, uint64_t lo, uint64_t hi, int all) {
+    repl_mark_r(r, key, kl, lo, hi, all, 0, 0, NULL, 0);
 }
 
 /* take x out of the set (lock held) */
@@ -3406,12 +3498,19 @@ static void repl_putback(repl_t *r, repl_shard *sh, repl_node **v, int n) {
             if ((*pp)->h == x->h && (*pp)->kl == x->kl && !memcmp((*pp)->key, x->key, x->kl)) break;
         if (*pp) {  /* marked again meanwhile: one node with both */
             repl_node *y = *pp;
+            if (x->replies) {  /* both nodes' replies go */
+                repl_reply *t = x->replies;
+                while (t->next) t = t->next;
+                t->next = y->replies;
+                y->replies = x->replies;
+                x->replies = NULL;
+            }
             if (x->all) y->all = 1;
             else if (!y->all && x->hi > x->lo) {
                 if (y->hi <= y->lo) { y->lo = x->lo; y->hi = x->hi; }
                 else { if (x->lo < y->lo) y->lo = x->lo; if (x->hi > y->hi) y->hi = x->hi; }
             }
-            free(x);
+            repl_node_free(x);
             continue;
         }
         x->hnext = NULL;
@@ -3825,8 +3924,16 @@ static uint64_t repl_sweep(struct rocepool_native *n) {
 }
 
 /* ---- the standby's side of the conversation ---- */
+static uint8_t *repl_handle_in(struct rocepool_native *n, repl_t *r, const frame_t *f, size_t *out_len);
 static uint8_t *repl_handle(struct rocepool_native *n, repl_t *r, const frame_t *f, size_t *out_len) {
     if (!r) return frame_error(f, "NO_REPL", "this server has no replication configured", out_len);
+    atomic_fetch_add(&r->busy, 1);
+    uint8_t *out = repl_handle_in(n, r, f, out_len);
+    atomic_store(&r->heard_ns, mono_ns());
+    atomic_fetch_sub(&r->busy, 1);
+    return out;
+}
+static uint8_t *repl_handle_in(struct rocepool_native *n, repl_t *r, const frame_t *f, size_t *out_len) {
     if (f->val_len < 1) return frame_error(f, "STORAGE_ERROR", "empty repl request", out_len);
     const uint8_t *v = f->val + 1;
     size_t vl = f->val_len - 1;
@@ -3866,7 +3973,12 @@ static uint8_t *repl_handle(struct rocepool_native *n, repl_t *r, const frame_t 
             uint8_t type = v[o];
             size_t il = rd_u32le(v + o + 1);
             if (o + 5 + il > vl) return frame_error(f, "STORAGE_ERROR", "malformed batch", out_len);
-            int rc = n->ost ? ost_repl_apply(r, n, type, v + o + 5, il) : mdt_repl_apply(r, n, type, v + o + 5, il);
+            int rc = 0;
+            if (type == 'R') {  /* a client's reply to the change before it */
+                if (il >= 16) rcache_put(&r->rc, rd_u64le(v + o + 5), rd_u64le(v + o + 13), v + o + 21, il - 16);
+            } else {
+                rc = n->ost ? ost_repl_apply(r, n, type, v + o + 5, il) : mdt_repl_apply(r, n, type, v + o + 5, il);
+            }
             if (rc) return frame_error(f, "STORAGE_ERROR", "applying a replicated change failed", out_len);
             atomic_fetch_add(&r->applied, 1);
             o += 5 + il;
@@ -3964,6 +4076,14 @@ static void *repl_shipper(void *arg) {
             size_t before = b.len;
             rc = r->kind == ROCEPOOL_NATIVE_OST ? ost_repl_item(r, r->store, v[used], &b) : mdt_repl_item(r, r->store, v[used], &b);
             if (!rc && b.len > before) cnt++;
+            /* the clients' replies to these changes, right after them */
+            for (repl_reply *y = v[used]->replies; y && !rc; y = y->next) {
+                uint8_t t[16];
+                wr_u64le(t, y->tc);
+                wr_u64le(t + 8, y->ts);
+                rc = item_put(&b, 'R', t, 16, y->data, y->len, NULL, 0);
+                if (!rc) cnt++;
+            }
         }
         if (!rc && used < nv) { repl_putback(r, sh, v + used, nv - used); nv = used; }  /* the next batch's */
         wr_u32le(b.p + 1, cnt);
@@ -3986,7 +4106,7 @@ static void *repl_shipper(void *arg) {
             repl_putback(r, sh, v, nv);
             repl_link_close(&l);
         } else {
-            for (int i = 0; i < nv; i++) free(v[i]);
+            for (int i = 0; i < nv; i++) repl_node_free(v[i]);
             atomic_fetch_add(&r->items, cnt);
         }
         pthread_mutex_lock(&sh->lk);
@@ -4137,17 +4257,22 @@ static int repl_hello(repl_t *r, repl_link *l, int *role, uint64_t *term, uint64
     return 0;
 }
 
-static void *repl_manager(void *arg) {
+/* A primary's hello, every hb_ms on a link of its own (a resync's long
+ * steps run on the manager's): the standby hears it is alive, this one
+ * hears what the standby holds -- or that it took over. A standby checks
+ * here whether its primary went silent. */
+static void *repl_heartbeat(void *arg) {
     repl_t *r = arg;
-    pthread_setname_np(pthread_self(), "rp-repl-mgr");
+    pthread_setname_np(pthread_self(), "rp-repl-hb");
     repl_link l = {0};
     for (;;) {
-        struct timespec ts = {0, 500 * 1000000L};
+        struct timespec ts = {(time_t)(r->hb_ms / 1000), (long)(r->hb_ms % 1000) * 1000000L};
         nanosleep(&ts, NULL);
         if (atomic_load(&r->role) == ROLE_STANDBY) {
             repl_link_close(&l);
             atomic_store(&r->peer_up, 0);
             if (r->promote_s <= 0) continue;
+            if (atomic_load(&r->busy)) { atomic_store(&r->heard_ns, mono_ns()); continue; }  /* its primary is talking to it */
             uint64_t last = atomic_load(&r->heard_ns);
             if (!last) last = atomic_load(&r->started_ns);
             int complete = atomic_load(&r->synced) != 0 || getenv("ROCEPOOL_REPL_PROMOTE_PARTIAL");
@@ -4166,6 +4291,7 @@ static void *repl_manager(void *arg) {
             if (term > atomic_load(&r->term)) repl_demote(r, term);  /* it took over: this one steps down */
             continue;  /* lower: it steps down on this hello */
         }
+        atomic_store(&r->peer_synced, synced);
         if (!atomic_exchange(&r->peer_up, 1)) {
             fprintf(stderr, "rocepool %s repl: standby %s reachable\n", repl_who(r), r->peer);
             for (int i = 0; i < REPL_SHARDS; i++) {
@@ -4174,9 +4300,22 @@ static void *repl_manager(void *arg) {
                 pthread_mutex_unlock(&r->sh[i].lk);
             }
         }
-        if (synced != r->life || !atomic_load(&r->in_sync)) {
+    }
+    return NULL;
+}
+
+/* resyncs the standby whenever its copy is not complete for this life */
+static void *repl_manager(void *arg) {
+    repl_t *r = arg;
+    pthread_setname_np(pthread_self(), "rp-repl-mgr");
+    repl_link l = {0};
+    for (;;) {
+        struct timespec ts = {(time_t)(r->hb_ms / 1000), (long)(r->hb_ms % 1000) * 1000000L};
+        nanosleep(&ts, NULL);
+        if (atomic_load(&r->role) != ROLE_PRIMARY || !atomic_load(&r->peer_up)) { repl_link_close(&l); continue; }
+        if (atomic_load(&r->peer_synced) != r->life || !atomic_load(&r->in_sync)) {
             atomic_store(&r->in_sync, 0);
-            repl_resync(r, &l);
+            if (!repl_resync(r, &l)) atomic_store(&r->peer_synced, r->life);
         }
     }
     return NULL;
@@ -4220,7 +4359,15 @@ static repl_t *repl_start(int kind, void *store, const char *log_base, int idx) 
         if (!r->sh[i].tab) return NULL;
     }
     const char *ps = getenv("ROCEPOOL_REPL_PROMOTE_S");
-    r->promote_s = ps && *ps ? atof(ps) : 10.0;
+    r->promote_s = ps && *ps ? atof(ps) : 2.0;
+    r->hb_ms = env_u64("ROCEPOOL_REPL_HEARTBEAT_MS", 200);
+    if (!r->hb_ms) r->hb_ms = 1;
+    pthread_mutex_init(&r->rc.lk, NULL);
+    r->rc.cap = env_u64("ROCEPOOL_REPL_REPLY_CACHE", 65536);
+    r->rc.nslots = r->rc.cap ? r->rc.cap * 2 : 1;
+    r->rc.tab = calloc(r->rc.nslots, sizeof(rc_ent *));
+    r->rc.ring = calloc(r->rc.cap ? r->rc.cap : 1, sizeof(rc_ent *));
+    if (!r->rc.tab || !r->rc.ring) return NULL;
     r->max_queue = env_u64("ROCEPOOL_REPL_MAX_QUEUE", 1u << 20);
     r->life = rand64();
     atomic_store(&r->started_ns, mono_ns());
@@ -4264,6 +4411,7 @@ static repl_t *repl_start(int kind, void *store, const char *log_base, int idx) 
     }
     pthread_t t;
     if (!pthread_create(&t, NULL, repl_manager, r)) pthread_detach(t);
+    if (!pthread_create(&t, NULL, repl_heartbeat, r)) pthread_detach(t);
     fprintf(stderr, "rocepool %s repl: %s, term %llu, its %s %s%s\n", who,
             atomic_load(&r->role) == ROLE_PRIMARY ? "primary" : "standby", (unsigned long long)atomic_load(&r->term),
             atomic_load(&r->role) == ROLE_PRIMARY ? "standby" : "primary", peer,
@@ -4271,12 +4419,69 @@ static repl_t *repl_start(int kind, void *store, const char *log_base, int idx) 
     return r;
 }
 
+/* After a client's change on a primary: its key(s) to the standby, with
+ * the reply when the client tagged the request (tc != 0). Marked before
+ * the reply leaves, so a reply the client saw is never of a change that
+ * was not queued. */
+static int repl_mark_req(repl_t *r, struct rocepool_native *n, const frame_t *f, const uint8_t *out, size_t out_len,
+                         uint64_t tc, uint64_t ts) {
+    if (!r || atomic_load_explicit(&r->role, memory_order_relaxed) != ROLE_PRIMARY || !out) return 0;
+    if (n->ost) {
+        switch (f->op) {
+        case OP_PUT:
+        case OP_DELETE:
+            repl_mark_r(r, f->key, f->key_len, 0, 0, 1, tc, ts, out, out_len);
+            break;
+        case OP_WRITE_AT:
+            if (f->val_len >= 8) {
+                uint64_t off = rd_u64le(f->val);
+                repl_mark_r(r, f->key, f->key_len, off, off + (f->val_len - 8), 0, tc, ts, out, out_len);
+            }
+            break;
+        case OP_TRUNCATE:
+            repl_mark_r(r, f->key, f->key_len, 0, 0, 0, tc, ts, out, out_len);  /* the size alone */
+            break;
+        case OP_BATCH: {  /* every change in it; the reply with the last */
+            if (f->val_len < 4) break;
+            uint32_t cnt = rd_u32le(f->val);
+            size_t o = 4, last = 0, last_kl = 0;
+            for (uint32_t i = 0; i < cnt && o + 9 <= f->val_len; i++) {
+                uint8_t op = f->val[o];
+                size_t kl = rd_u32le(f->val + o + 1), vl = rd_u32le(f->val + o + 5);
+                if (o + 9 + kl + vl > f->val_len) break;
+                const char *k = (const char *)f->val + o + 9;
+                const uint8_t *v = f->val + o + 9 + kl;
+                if (op == OP_PUT || op == OP_DELETE) repl_mark(r, k, kl, 0, 0, 1);
+                else if (op == OP_WRITE_AT && vl >= 8) repl_mark(r, k, kl, rd_u64le(v), rd_u64le(v) + (vl - 8), 0);
+                else if (op == OP_TRUNCATE) repl_mark(r, k, kl, 0, 0, 0);
+                else { o += 9 + kl + vl; continue; }
+                last = o + 9;
+                last_kl = kl;
+                o += 9 + kl + vl;
+            }
+            if (tc && last_kl) repl_mark_r(r, (const char *)f->val + last, last_kl, 0, 0, 0, tc, ts, out, out_len);
+            break;
+        }
+        default:
+            return 0;
+        }
+        return 1;
+    }
+    if (f->op != OP_MDT || !f->val_len || !md_is_change(f->val[0]) || f->val[0] >= 40) return 0;
+    char *path = malloc(f->key_len + 1);
+    if (!path) return 0;
+    size_t pl = norm_path(f->key, f->key_len, path);
+    repl_mark_r(r, path, pl, 0, 0, 1, tc, ts, out, out_len);
+    free(path);
+    return 1;
+}
+
 static int repl_stats_json(buf_t *b, repl_t *r) {
     return buf_printf(b, ", \"repl\": {\"role\": \"%s\", \"term\": %llu, \"peer\": \"%s\", \"peer_up\": %s, \"in_sync\": %s, "
                       "\"resyncing\": %s, \"synced\": %s, \"queued\": %llu, \"marked\": %llu, \"items\": %llu, \"bytes\": %llu, "
                       "\"rpcs\": %llu, \"errors\": %llu, \"resyncs\": %llu, \"checked\": %llu, \"mismatched\": %llu, "
                       "\"swept\": %llu, \"applied\": %llu, \"promotions\": %llu, \"demotions\": %llu, \"overflows\": %llu, "
-                      "\"last_resync_s\": %.3f}",
+                      "\"last_resync_s\": %.3f, \"replies_cached\": %llu, \"replies_reused\": %llu}",
                       atomic_load(&r->role) == ROLE_PRIMARY ? "primary" : "standby", (unsigned long long)atomic_load(&r->term),
                       r->peer, atomic_load(&r->peer_up) ? "true" : "false", atomic_load(&r->in_sync) ? "true" : "false",
                       atomic_load(&r->resyncing) ? "true" : "false", atomic_load(&r->synced) ? "true" : "false",
@@ -4287,7 +4492,8 @@ static int repl_stats_json(buf_t *b, repl_t *r) {
                       (unsigned long long)atomic_load(&r->mismatched), (unsigned long long)atomic_load(&r->swept),
                       (unsigned long long)atomic_load(&r->applied), (unsigned long long)atomic_load(&r->promotions),
                       (unsigned long long)atomic_load(&r->demotions), (unsigned long long)atomic_load(&r->overflows),
-                      (double)atomic_load(&r->resync_ns) / 1e9);
+                      (double)atomic_load(&r->resync_ns) / 1e9, (unsigned long long)atomic_load(&r->rc.puts),
+                      (unsigned long long)atomic_load(&r->rc.hits));
 }
 
 
@@ -4443,6 +4649,7 @@ static int defer_allowed(void) {
     return v;
 }
 
+#define RQF_TAG 4     /* a client id + sequence number lead the value (a server pair's request dedupe) */
 #define RQF_ASYNC 1   /* the client keeps a change until committed: create/unlink may be replied to first */
 #define RQF_REPLAY 2  /* a change the client kept, replayed after the MDT restarted */
 #define MDT_OP_COMMIT 20  /* a barrier: replied to once everything appended so far is durable */
@@ -4472,6 +4679,15 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
     struct rocepool_native *n = user;
     frame_t f;
     if (frame_decode(req, req_len, &f)) return NULL;  /* malformed: drop this connection */
+    /* a client of a server pair tags each request: u64 client id, u64
+     * sequence number, ahead of the value (request dedupe) */
+    uint64_t tag_c = 0, tag_s = 0;
+    if ((f.flags & RQF_TAG) && f.val_len >= 16) {
+        tag_c = rd_u64le(f.val);
+        tag_s = rd_u64le(f.val + 8);
+        f.val += 16;
+        f.val_len -= 16;
+    }
     if (f.op == OP_STATS) return stats_frame(n, &f, resp_len);
     unsigned long long cur = atomic_fetch_add(&n->inflight, 1) + 1, mx = atomic_load(&n->inflight_max);
     while (cur > mx && !atomic_compare_exchange_weak(&n->inflight_max, &mx, cur)) {}
@@ -4496,7 +4712,15 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
         out = frame_error(&f, "STANDBY", "a standby: its primary serves", resp_len);
         goto done;
     }
-    if (f.op == OP_REPL) {
+    int cached = 0;
+    if (rp && tag_c && f.op != OP_REPL && (out = rcache_get(&rp->rc, tag_c, tag_s, &f, resp_len))) {
+        cached = 1;
+        /* done before (here, or on the primary this one took over from):
+         * its reply, once what is logged so far is durable */
+        wal_t *w = n->ost ? n->ost->wal : n->mdt->wal;
+        if (w) { tl_wal = w; tl_wal_lsn = wal_last(w); }
+        md = NULL;
+    } else if (f.op == OP_REPL) {
         if (n->ost) slab_reap(n->ost);
         out = repl_handle(n, rp, &f, resp_len);  /* a standby's apply: durable before the reply, like a client's change */
         if (n->ost) slab_release_queue(tl_wal_lsn);
@@ -4561,6 +4785,9 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
         }
         tl_wal_lsn = 0;
     }
+    /* a primary's change: to its standby (with the reply, for dedupe) */
+    if (rp && !cached && f.op != OP_REPL && out && repl_mark_req(rp, n, &f, out, *resp_len, tag_c, tag_s) && tag_c)
+        rcache_put(&rp->rc, tag_c, tag_s, out, *resp_len);
 done:
     atomic_fetch_add(&n->cpu_ns, thread_cpu_ns() - c0);
     atomic_fetch_add(&n->wall_ns, mono_ns() - w0);
