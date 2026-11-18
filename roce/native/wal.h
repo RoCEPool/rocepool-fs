@@ -89,6 +89,40 @@ void wal_calibration(wal_t *w, double *append, double *direct, double *direct4);
  * for is durable already) */
 void wal_close(wal_t *w);
 
+/* ---- segments and checkpoints (ROCEPOOL_LOG_CHECKPOINT_MIB) ----
+ * A log may be split into segment files: each after the first starts with
+ * a header record holding the LSN before its first record, so LSNs go on
+ * across files (and, opened with wal_open_base, across restarts). */
+
+/* like wal_replay, with each record's LSN: base + its number, or the
+ * segment header's base; *last = the LSN of the file's last record */
+long wal_replay_lsn(const char *path, uint64_t base, int (*cb)(void *user, uint64_t lsn, const uint8_t *rec, size_t len),
+                    void *user, uint64_t *last);
+/* wal_open_as whose LSNs continue after `base` (the last one replayed) */
+wal_t *wal_open_base(const char *path, int as_direct, int as_pipe, uint64_t base, char *err, size_t err_len);
+/* Switch to a new segment file at path: every record appended before the
+ * call (up to *cut, the LSN returned) is committed to the current file
+ * first; later ones go to the new file. Appends never wait for it; a
+ * commit of a record after the cut waits for the switch (one commit's
+ * time). The new file and its header are synced before the switch. */
+int wal_rotate(wal_t *w, const char *path, uint64_t *cut);
+/* bytes in the current segment file (where the next commit starts) */
+uint64_t wal_file_bytes(wal_t *w);
+uint64_t wal_rotations(wal_t *w);
+
+/* A checkpoint file: records in the log's framing, written to <path>.tmp
+ * and renamed into place by ckpt_commit once whole and synced. mbps: at
+ * most that many MiB/s written on average (0: unthrottled). */
+typedef struct ckpt_writer ckpt_writer_t;
+ckpt_writer_t *ckpt_begin(const char *path, uint64_t mbps);
+int ckpt_add(ckpt_writer_t *c, const void *a, size_t alen, const void *b, size_t blen, const void *d, size_t dlen);
+uint64_t ckpt_bytes(const ckpt_writer_t *c);
+int ckpt_commit(ckpt_writer_t *c);  /* frees c */
+void ckpt_abort(ckpt_writer_t *c);  /* frees c, removes the .tmp */
+/* every record of a whole checkpoint file to cb, in order (none unless the
+ * file checks out to its end); 0 when there is none, -errno when broken */
+long ckpt_load(const char *path, int (*cb)(void *user, const uint8_t *rec, size_t len), void *user);
+
 /* "{n}" in spec replaced by n (one log per server in a process) */
 void wal_path(const char *spec, int n, char *out, size_t out_len);
 

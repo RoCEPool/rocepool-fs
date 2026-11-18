@@ -52,6 +52,7 @@ enum {
     OP_BATCH = 40, OP_BATCH_OK = 41, OP_VTOKEN = 42, OP_VTOKEN_OK = 43,
     OP_LEASE = 44, OP_LEASE_OK = 45,
     OP_STATS = 50, OP_STATS_OK = 51,
+    OP_REPL = 60, OP_REPL_OK = 61,  /* asynchronous replication, server to server (repl_handle) */
     OP_MDT = 30, OP_MDT_OK = 31, OP_ERROR = 255,
     /* an MDT reply to a request flagged RQF_ASYNC: u64 LE epoch, u64 LE
      * transno, u64 LE committed, then OP_MDT_OK's value (see mdt_async) */
@@ -202,6 +203,216 @@ static int buf_printf(buf_t *b, const char *fmt, ...) {
     if (n < 0 || (size_t)n >= sizeof(tmp)) return -1;
     return buf_put(b, tmp, (size_t)n);
 }
+
+/* asynchronous replication (repl_*, after the stores) */
+struct repl;
+static void repl_mark(struct repl *r, const char *key, size_t kl, uint64_t lo, uint64_t hi, int all);
+static uint64_t repl_vfloor(const struct repl *r);
+
+/* ---- log segments and checkpoints (wal.h) ----
+ * A server's log is a chain of segment files: <log> (the first), <log>.1,
+ * <log>.2, ... Each checkpoint, by a background thread: switch the log to
+ * a new segment (wal_rotate: no request waits for it), write the whole
+ * store to <log>.ckpt while it keeps serving (each entry copied under its
+ * own lock, a few thousand at a time), make sure everything it copied is
+ * durable in the log, rename the file into place, delete the segments
+ * before the new one. A restart loads the checkpoint, then replays the
+ * segments from its own on: the log no longer grows without bound, nor
+ * does the time a restart takes.
+ *
+ * The copy is not a point in time -- entries change while it is made --
+ * so a log record after the cut may already be in it. The OST's records
+ * are an object's whole state (the last one wins); an MDT entry carries
+ * the LSN of its last change, and a replayed record at or below it is
+ * skipped. On with ROCEPOOL_LOG_CHECKPOINT_MIB=<segment size that starts
+ * one>; ROCEPOOL_LOG_CHECKPOINT_MBPS caps the checkpoint's writes (MiB/s,
+ * default 256). Off, nothing changes but that LSNs go on across restarts. */
+typedef struct logmgr {
+    char base[1024];
+    unsigned gen, first_gen;     /* the current segment, the oldest on disk */
+    wal_t *wal;
+    void *store;
+    const char *who;
+    /* the store: its header bytes at the cut (MDT: its lives), and every
+     * entry as checkpoint records */
+    size_t (*header)(void *store, uint64_t cut, uint8_t *out, size_t cap);
+    int (*snapshot)(void *store, ckpt_writer_t *ck, uint64_t *entries);
+    int (*busy)(void *store);    /* not now (an MDT's recovery window) */
+    uint64_t trigger, mbps, poll_ms;
+    int started;
+    atomic_ullong checkpoints, failures, last_ns, last_entries, last_bytes, last_cut, segments_deleted;
+} logmgr_t;
+
+static void lm_seg_path(const logmgr_t *lm, unsigned g, char *out, size_t n) {
+    if (g == 0) snprintf(out, n, "%s", lm->base);
+    else snprintf(out, n, "%s.%u", lm->base, g);
+}
+
+struct lm_load {
+    logmgr_t *lm;
+    int (*hdr)(void *store, const uint8_t *p, size_t n);
+    int (*rec)(void *store, const uint8_t *r, size_t n);
+    int got_hdr;
+    unsigned gen;
+    uint64_t cut;
+};
+#define LM_CKPT_VERSION 1u
+/* the checkpoint's first record: "RPCH" u32 version, u32 segment, u64 cut, the store's bytes */
+static int lm_load_rec(void *u, const uint8_t *r, size_t n) {
+    struct lm_load *L = u;
+    if (!L->got_hdr) {
+        if (n < 20 || memcmp(r, "RPCH", 4) || rd_u32le(r + 4) != LM_CKPT_VERSION) return 1;
+        L->gen = rd_u32le(r + 8);
+        L->cut = rd_u64le(r + 12);
+        L->got_hdr = 1;
+        return L->hdr ? L->hdr(L->lm->store, r + 20, n - 20) : 0;
+    }
+    return L->rec(L->lm->store, r, n);
+}
+
+/* Restore the store from the checkpoint and the segments after it; then
+ * the current segment's path, the last LSN, and the number of records.
+ * Returns -errno on a broken checkpoint or log. */
+static long lm_recover(logmgr_t *lm, const char *base, void *store, const char *who,
+                       int (*hdr)(void *store, const uint8_t *p, size_t n),
+                       int (*ckrec)(void *store, const uint8_t *r, size_t n),
+                       int (*rec)(void *store, uint64_t lsn, const uint8_t *r, size_t n),
+                       char *cur, size_t cur_len, uint64_t *last) {
+    snprintf(lm->base, sizeof(lm->base), "%s", base);
+    lm->store = store;
+    lm->who = who;
+    char p[1100];
+    snprintf(p, sizeof(p), "%s.ckpt.tmp", base);
+    unlink(p);  /* a checkpoint a crash cut short */
+    snprintf(p, sizeof(p), "%s.ckpt", base);
+    struct lm_load L = {lm, hdr, ckrec, 0, 0, 0};
+    long n = ckpt_load(p, lm_load_rec, &L);
+    if (n < 0) { fprintf(stderr, "rocepool %s: checkpoint %s: %s\n", who, p, strerror((int)-n)); return n; }
+    long total = n > 0 ? n - 1 : 0;  /* the header is not an entry */
+    unsigned g = n > 0 ? L.gen : 0;
+    uint64_t lsn = n > 0 ? L.cut : 0;
+    if (n > 0) {
+        fprintf(stderr, "rocepool %s: checkpoint %s: %ld entries, log from segment %u (after LSN %llu)\n", who, p,
+                total, g, (unsigned long long)lsn);
+        for (unsigned k = 0; k < g; k++) {  /* a crash between the rename and their deletion */
+            lm_seg_path(lm, k, p, sizeof(p));
+            if (!unlink(p)) fprintf(stderr, "rocepool %s: %s removed (before the checkpoint)\n", who, p);
+        }
+    }
+    lm->first_gen = g;
+    unsigned last_gen = g;
+    for (;; g++) {
+        lm_seg_path(lm, g, p, sizeof(p));
+        if (access(p, F_OK)) break;
+        long k = wal_replay_lsn(p, lsn, rec, store, &lsn);
+        if (k < 0) { fprintf(stderr, "rocepool %s: replaying %s: %s\n", who, p, strerror((int)-k)); return k; }
+        total += k;
+        last_gen = g;
+    }
+    lm->gen = last_gen;
+    lm_seg_path(lm, last_gen, cur, cur_len);
+    *last = lsn;
+    return total;
+}
+
+static uint64_t env_u64(const char *name, uint64_t dflt) {
+    const char *v = getenv(name);
+    return v && *v ? (uint64_t)strtoull(v, NULL, 10) : dflt;
+}
+
+static int lm_checkpoint(logmgr_t *lm) {
+    uint64_t t0 = mono_ns(), cut = 0, entries = 0;
+    unsigned ng = lm->gen + 1;
+    char p[1100];
+    lm_seg_path(lm, ng, p, sizeof(p));
+    int rc = wal_rotate(lm->wal, p, &cut);
+    if (rc) { fprintf(stderr, "rocepool %s: starting segment %s: %s\n", lm->who, p, strerror(-rc)); return rc; }
+    lm->gen = ng;
+    snprintf(p, sizeof(p), "%s.ckpt", lm->base);
+    ckpt_writer_t *ck = ckpt_begin(p, lm->mbps);
+    if (!ck) { rc = -errno ? -errno : -EIO; goto fail; }
+    uint8_t h[20 + 1024];
+    memcpy(h, "RPCH", 4);
+    wr_u32le(h + 4, LM_CKPT_VERSION);
+    wr_u32le(h + 8, ng);
+    for (int i = 0; i < 8; i++) h[12 + i] = (uint8_t)(cut >> (8 * i));
+    size_t hn = lm->header ? lm->header(lm->store, cut, h + 20, sizeof(h) - 20) : 0;
+    rc = ckpt_add(ck, h, 20 + hn, NULL, 0, NULL, 0);
+    if (!rc) rc = lm->snapshot(lm->store, ck, &entries);
+    /* every change the copy may hold is in the log, durable, before the
+     * checkpoint replaces the segments that had it */
+    if (!rc) rc = wal_wait(lm->wal, wal_last(lm->wal));
+    uint64_t bytes = rc ? 0 : ckpt_bytes(ck);
+    if (rc) { ckpt_abort(ck); goto fail; }
+    rc = ckpt_commit(ck);
+    if (rc) goto fail;
+    for (unsigned k = lm->first_gen; k < ng; k++) {
+        lm_seg_path(lm, k, p, sizeof(p));
+        if (!unlink(p)) atomic_fetch_add(&lm->segments_deleted, 1);
+    }
+    lm->first_gen = ng;
+    atomic_fetch_add(&lm->checkpoints, 1);
+    atomic_store(&lm->last_ns, mono_ns() - t0);
+    atomic_store(&lm->last_entries, entries);
+    atomic_store(&lm->last_bytes, bytes);
+    atomic_store(&lm->last_cut, cut);
+    return 0;
+fail:
+    atomic_fetch_add(&lm->failures, 1);
+    fprintf(stderr, "rocepool %s: checkpoint failed: %s (the log is kept whole)\n", lm->who, strerror(rc < 0 ? -rc : EIO));
+    return rc;
+}
+
+static void *lm_main(void *arg) {
+    logmgr_t *lm = arg;
+    pthread_setname_np(pthread_self(), "rp-ckpt");
+    for (;;) {
+        struct timespec ts = {(time_t)(lm->poll_ms / 1000), (long)(lm->poll_ms % 1000) * 1000000L};
+        nanosleep(&ts, NULL);
+        if (lm->busy && lm->busy(lm->store)) continue;
+        if (wal_file_bytes(lm->wal) < lm->trigger) continue;
+        if (lm_checkpoint(lm)) {  /* back off: a failing drive is not hammered */
+            struct timespec b = {5, 0};
+            nanosleep(&b, NULL);
+        }
+    }
+    return NULL;
+}
+
+/* after the log is open: the checkpoint thread, when configured */
+static void lm_start(logmgr_t *lm, wal_t *w,
+                     size_t (*header)(void *, uint64_t, uint8_t *, size_t),
+                     int (*snapshot)(void *, ckpt_writer_t *, uint64_t *), int (*busy)(void *)) {
+    lm->wal = w;
+    lm->header = header;
+    lm->snapshot = snapshot;
+    lm->busy = busy;
+    uint64_t mib = env_u64("ROCEPOOL_LOG_CHECKPOINT_MIB", 0);
+    lm->trigger = env_u64("ROCEPOOL_LOG_CHECKPOINT_BYTES", mib << 20);  /* tests: in bytes */
+    lm->mbps = env_u64("ROCEPOOL_LOG_CHECKPOINT_MBPS", 256);
+    lm->poll_ms = env_u64("ROCEPOOL_LOG_CHECKPOINT_POLL_MS", 1000);
+    if (!lm->poll_ms) lm->poll_ms = 1;
+    if (!lm->trigger) return;
+    pthread_t t;
+    if (pthread_create(&t, NULL, lm_main, lm)) { fprintf(stderr, "rocepool %s: no checkpoint thread\n", lm->who); return; }
+    pthread_detach(t);
+    lm->started = 1;
+    fprintf(stderr, "rocepool %s: checkpoints: a new one once a log segment reaches %llu bytes, written at most %llu MiB/s\n",
+            lm->who, (unsigned long long)lm->trigger, (unsigned long long)lm->mbps);
+}
+
+static int lm_stats_json(buf_t *b, logmgr_t *lm) {
+    return buf_printf(b, ", \"checkpoint\": {\"enabled\": %s, \"segment\": %u, \"segment_bytes\": %llu, \"checkpoints\": %llu, "
+                      "\"failures\": %llu, \"last_s\": %.3f, \"last_entries\": %llu, \"last_bytes\": %llu, \"last_cut\": %llu, "
+                      "\"segments_deleted\": %llu, \"rotations\": %llu}",
+                      lm->started ? "true" : "false", lm->gen, (unsigned long long)(lm->wal ? wal_file_bytes(lm->wal) : 0),
+                      (unsigned long long)atomic_load(&lm->checkpoints), (unsigned long long)atomic_load(&lm->failures),
+                      (double)atomic_load(&lm->last_ns) / 1e9, (unsigned long long)atomic_load(&lm->last_entries),
+                      (unsigned long long)atomic_load(&lm->last_bytes), (unsigned long long)atomic_load(&lm->last_cut),
+                      (unsigned long long)atomic_load(&lm->segments_deleted),
+                      (unsigned long long)(lm->wal ? wal_rotations(lm->wal) : 0));
+}
+
 /* JSON string with the escapes Python's json.loads requires */
 static int buf_json_str(buf_t *b, const char *s, size_t n) {
     if (buf_put(b, "\"", 1)) return -1;
@@ -409,6 +620,7 @@ typedef struct kv_entry {
     /* the RAM copy has bytes the tier copy lacks: written back once, when
      * evicted (WRITE_AT pieces of a stripe filled out of order) */
     uint8_t tier_dirty;
+    uint8_t rconf;        /* a standby's resync: confirmed as the primary's (repl_*) */
     struct kv_entry *lru_prev, *lru_next;
 } kv_entry;
 
@@ -443,6 +655,8 @@ typedef struct {
     wal_t *wal;
     int durable;
     atomic_ullong log_fail;
+    logmgr_t lm;                    /* segments and checkpoints */
+    struct repl *repl;              /* asynchronous replication (NULL: none) */
     /* durable: slabs freed by a change, given back to the tier only once the
      * log record of that change is durable -- before, a crash replays the
      * old object onto its old slab, which may meanwhile hold another's */
@@ -835,15 +1049,18 @@ static void kv_grow(kv_stripe *st) {
  * version, key: the object as it now is (its bytes are on the tier, synced
  * in the same commit). 'D' u32 key length, key: deleted. Appended under the
  * object's stripe lock, so a key's records are in the order of its changes. */
-static void ost_log_set(ost_store *s, const kv_entry *e) {
-    if (!s->wal) return;
-    uint8_t h[33];
+static void ost_rec_head(uint8_t h[33], const kv_entry *e) {
     h[0] = 'S';
     wr_u32le(h + 1, (uint32_t)e->key_len);
     wr_u64le(h + 5, e->ext.off);
     wr_u32le(h + 13, e->ext.cls);
     wr_u64le(h + 17, e->size);
     wr_u64le(h + 25, e->version);
+}
+static void ost_log_set(ost_store *s, const kv_entry *e) {
+    if (!s->wal) return;
+    uint8_t h[33];
+    ost_rec_head(h, e);
     uint64_t lsn = wal_append(s->wal, h, 33, e->key, e->key_len, NULL, 0);
     if (!lsn) atomic_fetch_add(&s->log_fail, 1);
     wal_note(s->wal, lsn);
@@ -905,6 +1122,52 @@ static int ost_replay_rec(void *user, const uint8_t *r, size_t len) {
     return 0;
 }
 
+static int ost_replay_lsn(void *user, uint64_t lsn, const uint8_t *r, size_t len) {
+    (void)lsn;  /* a record is the object's whole state: the last one wins */
+    return ost_replay_rec(user, r, len);
+}
+
+/* LM_CHUNK hash slots at a time under a lock: a checkpoint's copy never
+ * holds one for long */
+#define LM_CHUNK 2048
+
+/* every object as its 'S' record (what ost_log_set writes) */
+static int ost_snapshot(void *store, ckpt_writer_t *ck, uint64_t *entries) {
+    ost_store *s = store;
+    buf_t b = {0};
+    int rc = 0;
+    for (int i = 0; i < OST_STRIPES && !rc; i++) {
+        kv_stripe *st = &s->stripes[i];
+        size_t at = 0, nsl = 0;
+        while (!rc) {
+            b.len = 0;
+            pthread_mutex_lock(&st->lock);
+            /* grown since the last chunk: entries moved, so from the start
+             * again (a copy taken twice: the later one is loaded last) */
+            if (st->nslots != nsl) { at = 0; nsl = st->nslots; }
+            if (at >= nsl) { pthread_mutex_unlock(&st->lock); break; }
+            size_t to = at + LM_CHUNK < nsl ? at + LM_CHUNK : nsl;
+            for (size_t j = at; j < to && !rc; j++)
+                for (kv_entry *e = st->slots[j]; e && !rc; e = e->next) {
+                    uint8_t h[37];
+                    wr_u32le(h, (uint32_t)(33 + e->key_len));
+                    ost_rec_head(h + 4, e);
+                    rc = buf_put(&b, h, 37) || buf_put(&b, e->key, e->key_len) ? -ENOMEM : 0;
+                }
+            at = to;
+            pthread_mutex_unlock(&st->lock);
+            for (size_t o = 0; o < b.len && !rc; ) {
+                size_t n = rd_u32le(b.p + o);
+                rc = ckpt_add(ck, b.p + o + 4, n, NULL, 0, NULL, 0);
+                o += 4 + n;
+                ++*entries;
+            }
+        }
+    }
+    free(b.p);
+    return rc;
+}
+
 static int ost_open_log(ost_store *s, const char *spec, int n) {
     char path[1024], err[512];
     wal_path(spec, n, path, sizeof(path));
@@ -913,10 +1176,11 @@ static int ost_open_log(ost_store *s, const char *spec, int n) {
                 "are never durable\n", path);
         return -1;
     }
-    uint64_t t0 = mono_ns();
-    long recs = wal_replay(path, ost_replay_rec, s);
-    if (recs < 0) { fprintf(stderr, "rocepool OST: replaying %s: %s\n", path, strerror((int)-recs)); return -1; }
-    if (recs > 0) {  /* the tier's allocator around the objects found */
+    uint64_t t0 = mono_ns(), last = 0;
+    char cur[1100];
+    long recs = lm_recover(&s->lm, path, s, "OST", NULL, ost_replay_rec, ost_replay_lsn, cur, sizeof(cur), &last);
+    if (recs < 0) return -1;
+    if (atomic_load(&s->objects) > 0) {  /* the tier's allocator around the objects found */
         size_t cap = (size_t)atomic_load(&s->objects) + 1, k = 0;
         tier_ext_t *used = malloc(cap * sizeof(*used));
         if (!used) return -1;
@@ -941,11 +1205,12 @@ static int ost_open_log(ost_store *s, const char *spec, int n) {
      * its measured mode. */
     const char *cal = getenv("ROCEPOOL_OST_LOG_CALIBRATE");
     int measured = cal && !strcmp(cal, "1");
-    s->wal = measured ? wal_open(path, err, sizeof(err)) : wal_open_as(path, 0, 1, err, sizeof(err));
+    s->wal = wal_open_base(cur, measured ? -1 : 0, measured ? 0 : 1, last, err, sizeof(err));
     if (!s->wal) { fprintf(stderr, "rocepool OST: %s\n", err); return -1; }
     wal_add_sync(s->wal, ost_tier_sync_fd(s->tier));
     s->durable = 1;  /* every write goes through to the tier before its reply */
-    fprintf(stderr, "rocepool OST: durable: log %s, writes synced to the tier before the reply\n", path);
+    fprintf(stderr, "rocepool OST: durable: log %s, writes synced to the tier before the reply\n", cur);
+    lm_start(&s->lm, s->wal, NULL, ost_snapshot, NULL);
     return 0;
 }
 
@@ -1164,6 +1429,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
             old = e->data; old_size = e->size; old_cap = e->data_cap;
         }
         e->data = data; e->data_cap = cap; e->size = dlen; e->version++; e->updated_at = t;
+        if (s->repl && e->version < repl_vfloor(s->repl)) e->version = repl_vfloor(s->repl);
         if (data) obj_publish(&s->arena, data, dlen);
         int rc = 0;
         if (s->tier) {
@@ -1183,6 +1449,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
             if (data) { atomic_fetch_add(&s->ram_bytes, cap_mem(cap)); lru_touch(s, e); } else lru_drop(s, e);
         }
         if (!rc) ost_log_set(s, e);
+        if (!rc && s->repl) repl_mark(s->repl, e->key, e->key_len, 0, 0, 1);
         uint64_t version = e->version;
         pthread_mutex_unlock(&st->lock);
         ent_free_data(s, old, old_cap);
@@ -1230,6 +1497,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         st->count--;
         if (*wm < e->version + 1) *wm = e->version + 1;
         ost_log_del(s, e->key, e->key_len);
+        if (s->repl) repl_mark(s->repl, e->key, e->key_len, 0, 0, 1);
         pthread_mutex_unlock(&st->lock);
         atomic_fetch_sub(&s->bytes, e->size);
         atomic_fetch_sub(&s->objects, 1);
@@ -1383,12 +1651,14 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         }
         e->size = new_size;
         e->version++;
+        if (s->repl && e->version < repl_vfloor(s->repl)) e->version = repl_vfloor(s->repl);
         e->updated_at = t;
         if (s->durable && !e->on_tier) {  /* durable: never acknowledged from RAM alone */
             pthread_mutex_unlock(&st->lock);
             return frame_error(f, "STORAGE_ERROR", "object not on the tier", out_len);
         }
         ost_log_set(s, e);
+        if (s->repl) repl_mark(s->repl, e->key, e->key_len, off, off + dlen, 0);
         uint64_t version = e->version;
         pthread_mutex_unlock(&st->lock);
         atomic_fetch_add(&s->bytes, new_size - old_size);
@@ -1443,9 +1713,11 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
                 e->size = (size_t)size;
                 e->ext.zero_tail = 0;  /* past the new size: the old bytes, on the tier */
                 e->version++;
+                if (s->repl && e->version < repl_vfloor(s->repl)) e->version = repl_vfloor(s->repl);
                 e->updated_at = now_s();
                 if (e->data) { obj_begin(e->data); obj_publish(&s->arena, e->data, e->size); }
                 ost_log_set(s, e);
+                if (s->repl) repl_mark(s->repl, e->key, e->key_len, 0, 0, 0);  /* the size alone */
             }
             version = e->version;
             cur = e->size;
@@ -1578,6 +1850,9 @@ typedef struct md_entry {
     int inl, frozen;
     uint8_t *idata;
     uint64_t iver;
+    uint64_t lsn;  /* the log record of its last change (a replay skips those at or below it) */
+    uint64_t pstamp;  /* a standby's: the primary's stamp of the change it last applied (repl_*) */
+    uint8_t rconf;    /* a standby's resync: confirmed as the primary's */
 } md_entry;
 
 /* Locking (was: one mutex for the whole MDT, which serialized every
@@ -1683,6 +1958,10 @@ typedef struct {
     size_t nrq, crq;
     atomic_ullong async_replies, replays_applied, replays_skipped, replays_late;
     atomic_ullong log_fail;
+    logmgr_t lm;                    /* segments and checkpoints */
+    struct repl *repl;              /* asynchronous replication (NULL: none) */
+    uint64_t life_base;             /* the LSN before this life's marker: a transno is relative to it */
+    atomic_ullong ckpt_skipped;     /* replayed records a checkpoint had already */
 } mdt_store;
 
 static int mdt_open_log(mdt_store *m, const char *spec);
@@ -2055,6 +2334,71 @@ static size_t rd_snap_seek(const rd_snap *s, const uint8_t *cur, size_t clen) {
 /* a snapshot older than this is rebuilt rather than served to a later page */
 #define RD_SNAP_MAX_AGE_NS (60ull * 1000000000ull)
 
+/* while a log record is replayed: its LSN (0 otherwise) */
+static __thread uint64_t tl_replay_lsn;
+
+/* An entry's fields in a checkpoint record and a replication item (58
+ * bytes): u8 is_dir, u8 flags (1 layout, 2 inline, 4 frozen), u64 size,
+ * f64 mtime, f64 ctime, u32 sc, u64 ss, u32 so, u64 inline version, u64
+ * the primary's stamp; its inline bytes follow. */
+#define MD_CK_FIXED 58
+static void md_fields_write(uint8_t *q, const md_entry *e, uint64_t pstamp) {
+    q[0] = (uint8_t)e->is_dir;
+    q[1] = (uint8_t)((e->has_layout ? 1 : 0) | (e->inl ? 2 : 0) | (e->frozen ? 4 : 0));
+    wr_u64le(q + 2, e->size);
+    memcpy(q + 10, &e->mtime, 8);
+    memcpy(q + 18, &e->ctime, 8);
+    wr_u32le(q + 26, e->sc);
+    wr_u64le(q + 30, e->ss);
+    wr_u32le(q + 38, e->so);
+    wr_u64le(q + 42, e->iver);
+    wr_u64le(q + 50, pstamp);
+}
+/* into e (bucket lock held): the fields and inline bytes (ilen of them);
+ * -1 when they do not add up */
+static int md_fields_read(md_entry *e, const uint8_t *q, const uint8_t *idata, size_t ilen) {
+    if (e->inl && e->idata) atomic_fetch_sub(&g_inline_bytes, e->size);
+    free(e->idata);
+    e->idata = NULL;
+    e->is_dir = q[0];
+    e->has_layout = q[1] & 1;
+    e->inl = (q[1] & 2) != 0;
+    e->frozen = (q[1] & 4) != 0;
+    e->size = rd_u64le(q + 2);
+    memcpy(&e->mtime, q + 10, 8);
+    memcpy(&e->ctime, q + 18, 8);
+    e->sc = rd_u32le(q + 26);
+    e->ss = rd_u64le(q + 30);
+    e->so = rd_u32le(q + 38);
+    e->iver = rd_u64le(q + 42);
+    e->pstamp = rd_u64le(q + 50);
+    if (!e->inl) return ilen ? -1 : 0;
+    if (ilen != e->size) return -1;  /* an inline file's bytes are the file */
+    if (ilen) {
+        e->idata = malloc(ilen);
+        if (!e->idata) return -1;
+        memcpy(e->idata, idata, ilen);
+        atomic_fetch_add(&g_inline_bytes, ilen);
+    }
+    return 0;
+}
+
+/* a new entry for name in bucket bk at *pp (lock held) */
+static md_entry *md_new_entry(md_bucket *bk, md_entry **pp, const char *name, size_t name_len, uint64_t nh) {
+    md_entry *e = calloc(1, sizeof(*e));
+    char *nm = malloc(name_len + 1);
+    if (!e || !nm) { free(e); free(nm); return NULL; }
+    memcpy(nm, name, name_len); nm[name_len] = 0;
+    e->hash = nh; e->name = nm; e->name_len = name_len;
+    e->next = *pp;
+    *pp = e;
+    if (++bk->count > bk->nslots * 2) md_grow(bk);
+    return e;
+}
+static int md_is_change(uint8_t op) {
+    return op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10 || op == 14 || op == 40 || op == 41;
+}
+
 static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
     if (f->op != OP_MDT) {
         char msg[48];
@@ -2082,14 +2426,24 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
     md_bucket *bk = NULL;
     uint64_t tw = mono_ns(), th = tw;
     if (op != 5 && op != 6 && op != 13) {
-        pd = md_get_dir(m, parent, parent_len, op == 2);
+        pd = md_get_dir(m, parent, parent_len, op == 2 || op == 40);
         if (pd) {
             bk = md_bucket_of(pd, nh);
             pthread_mutex_lock(&bk->lock);
             th = mono_ns();
         }
     }
-    switch (op) {
+    /* a replayed record a checkpoint already has (the entry's last change
+     * is at or after it): nothing to do */
+    int skip = 0;
+    if (tl_replay_lsn && bk && md_is_change(op)) {
+        md_entry *x = *md_find(bk, name, name_len, nh);
+        skip = x && x->lsn >= tl_replay_lsn;
+    }
+    if (skip) {
+        out = frame_simple(OP_MDT_OK, f, NULL, 0, out_len);
+        atomic_fetch_add(&m->ckpt_skipped, 1);
+    } else switch (op) {
     case 1: {  /* lookup */
         md_entry *e = bk ? *md_find(bk, name, name_len, nh) : NULL;
         out = e ? entry_frame(f, e, out_len) : frame_error(f, "NOT_FOUND", path, out_len);
@@ -2355,6 +2709,33 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         out = entry_frame(f, e, out_len);
         break;
     }
+    case 40: {  /* REPL_SET (a standby, from its primary): the entry as the
+                 * primary has it -- the fields (MD_CK_FIXED), its inline bytes */
+        if (f->val_len < 1 + MD_CK_FIXED || !bk) { out = frame_error(f, "MDT_INTERNAL", "short repl_set", out_len); break; }
+        md_entry **pp = md_find(bk, name, name_len, nh), *e = *pp;
+        if (!e && !(e = md_new_entry(bk, pp, name, name_len, nh))) { out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
+        if (md_fields_read(e, f->val + 1, f->val + 1 + MD_CK_FIXED, f->val_len - 1 - MD_CK_FIXED)) {
+            out = frame_error(f, "MDT_INTERNAL", "bad repl_set", out_len);
+            break;
+        }
+        e->rconf = 1;
+        out = frame_simple(OP_MDT_OK, f, NULL, 0, out_len);
+        break;
+    }
+    case 41: {  /* REPL_DEL: gone at the primary (a file or a directory) */
+        md_entry **pp = bk ? md_find(bk, name, name_len, nh) : NULL;
+        md_entry *e = pp ? *pp : NULL;
+        if (e) {
+            *pp = e->next;
+            bk->count--;
+            if (e->inl && e->idata) atomic_fetch_sub(&g_inline_bytes, e->size);
+            free(e->idata);
+            free(e->name);
+            free(e);
+        }
+        out = frame_simple(OP_MDT_OK, f, NULL, 0, out_len);
+        break;
+    }
     case 13: {  /* readdir by position (request: u8 13, u32 LE max reply bytes,
                  * u64 LE index): the records of the listing's snapshot from
                  * that index on, in the same name order as 5. Reply: u64 LE
@@ -2423,14 +2804,15 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         out = frame_error(f, "UNSUPPORTED_OP", msg, out_len);
     }
     }
-    if (pd && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10 || op == 14))
+    if (!skip && pd && md_is_change(op))
         atomic_fetch_add_explicit(&pd->ver, 1, memory_order_release);
-    if (bk && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10 || op == 14)) {
+    if (!skip && bk && md_is_change(op)) {
         /* keep the one-sided table in step while the bucket is still ours */
-        md_entry *e = op == 4 ? NULL : *md_find(bk, name, name_len, nh);
-        if (op == 4 || e) md_slot_sync(m, path, pl, e);
+        md_entry *e = op == 4 || op == 41 ? NULL : *md_find(bk, name, name_len, nh);
+        if (op == 4 || op == 41 || e) md_slot_sync(m, path, pl, e);
     }
-    if (m->wal && out && out[4] == OP_MDT_OK && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10 || op == 14)) {
+    uint64_t stamp = 0;
+    if (!skip && m->wal && out && out[4] == OP_MDT_OK && md_is_change(op)) {
         /* the request as it came, appended while the name's bucket is still
          * held: a name's records are in the order of its changes */
         uint8_t hdr[8];  /* u32 LE key length, u32 LE value length, key, value */
@@ -2439,7 +2821,18 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         uint64_t lsn = wal_append(m->wal, hdr, 8, f->key, f->key_len, f->val, f->val_len);
         if (!lsn) atomic_fetch_add(&m->log_fail, 1);
         wal_note(m->wal, lsn);
+        stamp = lsn;
+    } else if (!skip && tl_replay_lsn && out && out[4] == OP_MDT_OK && md_is_change(op)) {
+        stamp = tl_replay_lsn;
     }
+    if (stamp && bk && op != 4 && op != 41) {  /* the entry remembers its last change */
+        md_entry *x = *md_find(bk, name, name_len, nh);
+        if (x) x->lsn = stamp;
+    }
+    /* a primary's change goes to its standby, asynchronously (not a
+     * replay: a restart's resync compares everything instead) */
+    if (!skip && m->repl && !tl_replay_lsn && out && out[4] == OP_MDT_OK && md_is_change(op) && op < 40)
+        repl_mark(m->repl, path, pl, 0, 0, 1);
     if (bk) {
         uint64_t tu = mono_ns();
         pthread_mutex_unlock(&bk->lock);
@@ -2480,6 +2873,131 @@ static int mdt_replay_rec(void *user, const uint8_t *r, size_t len) {
     roce_reply_free(out);
     return 0;
 }
+
+static int mdt_replay_lsn(void *user, uint64_t lsn, const uint8_t *r, size_t len) {
+    tl_replay_lsn = lsn;
+    int rc = mdt_replay_rec(user, r, len);
+    tl_replay_lsn = 0;
+    return rc;
+}
+
+/* ---- the MDT's checkpoint ----
+ * Header: u64 epoch and u64 transno of the life the cut is in, u32 lives,
+ * then (u64 epoch, u64 last transno) each. An entry: 'E', u64 LSN of its
+ * last change, u32 path length, path, its fields (md_fields_write), then
+ * its inline bytes. */
+static size_t mdt_ckpt_header(void *store, uint64_t cut, uint8_t *out, size_t cap) {
+    mdt_store *m = store;
+    int nl = m->nlives;
+    if (20 + (size_t)nl * 16 > cap) nl = (int)((cap - 20) / 16);
+    wr_u64le(out, m->epoch);
+    wr_u64le(out + 8, cut - m->life_base);
+    wr_u32le(out + 16, (uint32_t)nl);
+    for (int i = 0; i < nl; i++) {
+        wr_u64le(out + 20 + 16 * (size_t)i, m->lives[m->nlives - nl + i].epoch);
+        wr_u64le(out + 28 + 16 * (size_t)i, m->lives[m->nlives - nl + i].last);
+    }
+    return 20 + (size_t)nl * 16;
+}
+static int mdt_ckpt_hdr(void *store, const uint8_t *p, size_t n) {
+    mdt_store *m = store;
+    if (n < 20) return 1;
+    uint32_t nl = rd_u32le(p + 16);
+    if (n != 20 + (size_t)nl * 16 || nl > 64) return 1;
+    m->nlives = 0;
+    for (uint32_t i = 0; i < nl; i++) {
+        m->lives[i].epoch = rd_u64le(p + 20 + 16 * (size_t)i);
+        m->lives[i].last = rd_u64le(p + 28 + 16 * (size_t)i);
+        m->nlives++;
+    }
+    /* the replay goes on inside the life the cut was in */
+    m->replay_epoch = rd_u64le(p);
+    m->replay_seq = rd_u64le(p + 8);
+    return 0;
+}
+
+static int mdt_ckpt_rec(void *store, const uint8_t *r, size_t len) {
+    mdt_store *m = store;
+    if (len < 13 || r[0] != 'E') return 1;
+    uint64_t lsn = rd_u64le(r + 1);
+    size_t pl = rd_u32le(r + 9);
+    if (len < 13 + pl + MD_CK_FIXED) return 1;
+    const char *path = (const char *)r + 13;
+    const uint8_t *q = r + 13 + pl;
+    size_t ilen = len - 13 - pl - MD_CK_FIXED;
+    const char *slash = memrchr(path, '/', pl);
+    size_t parent_len = slash ? (size_t)(slash - path) : 0;
+    const char *name = slash ? slash + 1 : path;
+    size_t name_len = pl - (size_t)(name - path);
+    uint64_t nh = fnv1a(name, name_len);
+    md_dir *pd = md_get_dir(m, path, parent_len, 1);
+    if (!pd) return 1;
+    md_bucket *bk = md_bucket_of(pd, nh);
+    pthread_mutex_lock(&bk->lock);
+    md_entry **pp = md_find(bk, name, name_len, nh), *e = *pp;
+    if (!e && !(e = md_new_entry(bk, pp, name, name_len, nh))) { pthread_mutex_unlock(&bk->lock); return 1; }
+    int bad = md_fields_read(e, q, q + MD_CK_FIXED, ilen) ? 1 : 0;  /* copied twice: the later copy */
+    e->lsn = lsn;
+    md_slot_sync(m, path, pl, e);
+    pthread_mutex_unlock(&bk->lock);
+    atomic_fetch_add_explicit(&pd->ver, 1, memory_order_release);
+    return bad;
+}
+
+static int mdt_snapshot(void *store, ckpt_writer_t *ck, uint64_t *entries) {
+    mdt_store *m = store;
+    pthread_rwlock_rdlock(&m->dirs_lock);
+    size_t nd = 0, cd = m->ndirs + 1;
+    md_dir **ds = malloc(cd * sizeof(*ds));
+    for (size_t i = 0; ds && i < m->ndirs_slots; i++)
+        for (md_dir *d = m->dirs[i]; d && nd < cd; d = d->next) ds[nd++] = d;
+    pthread_rwlock_unlock(&m->dirs_lock);
+    if (!ds) return -ENOMEM;
+    buf_t b = {0};
+    int rc = 0;
+    for (size_t di = 0; di < nd && !rc; di++) {
+        md_dir *d = ds[di];
+        for (int bi = 0; bi < MD_BUCKETS && !rc; bi++) {
+            md_bucket *bk = &d->b[bi];
+            size_t at = 0, nsl = 0;
+            while (!rc) {
+                b.len = 0;
+                pthread_mutex_lock(&bk->lock);
+                if (bk->nslots != nsl) { at = 0; nsl = bk->nslots; }  /* grown: again (the later copy wins) */
+                if (at >= nsl) { pthread_mutex_unlock(&bk->lock); break; }
+                size_t to = at + LM_CHUNK < nsl ? at + LM_CHUNK : nsl;
+                for (size_t j = at; j < to && !rc; j++)
+                    for (md_entry *e = bk->slots[j]; e && !rc; e = e->next) {
+                        size_t pl = d->path_len ? d->path_len + 1 + e->name_len : e->name_len;
+                        size_t il = e->inl && e->idata ? (size_t)e->size : 0;
+                        uint8_t h[4 + 13], q[MD_CK_FIXED];
+                        wr_u32le(h, (uint32_t)(13 + pl + MD_CK_FIXED + il));
+                        h[4] = 'E';
+                        wr_u64le(h + 5, e->lsn);
+                        wr_u32le(h + 13, (uint32_t)pl);
+                        md_fields_write(q, e, e->pstamp);
+                        rc = buf_put(&b, h, sizeof(h)) ||
+                             (d->path_len && (buf_put(&b, d->path, d->path_len) || buf_put(&b, "/", 1))) ||
+                             buf_put(&b, e->name, e->name_len) || buf_put(&b, q, sizeof(q)) ||
+                             (il && buf_put(&b, e->idata, il)) ? -ENOMEM : 0;
+                    }
+                at = to;
+                pthread_mutex_unlock(&bk->lock);
+                for (size_t o = 0; o < b.len && !rc; ) {
+                    size_t n = rd_u32le(b.p + o);
+                    rc = ckpt_add(ck, b.p + o + 4, n, NULL, 0, NULL, 0);
+                    o += 4 + n;
+                    ++*entries;
+                }
+            }
+        }
+    }
+    free(b.p);
+    free(ds);
+    return rc;
+}
+
+static int mdt_busy(void *store) { return atomic_load(&((mdt_store *)store)->recovering); }
 
 static int rq_cmp(const void *a, const void *b) {
     const struct mdt_replay *x = a, *y = b;
@@ -2596,16 +3114,20 @@ static int mdt_open_log(mdt_store *m, const char *spec) {
     static atomic_int n_mdts;
     char path[1024], err[512];
     wal_path(spec, atomic_fetch_add(&n_mdts, 1), path, sizeof(path));
-    uint64_t t0 = mono_ns();
-    long recs = wal_replay(path, mdt_replay_rec, m);
+    uint64_t t0 = mono_ns(), last = 0;
+    char cur[1100];
+    long recs = lm_recover(&m->lm, path, m, "MDT", mdt_ckpt_hdr, mdt_ckpt_rec, mdt_replay_lsn, cur, sizeof(cur), &last);
     tl_wal_lsn = 0;
     tl_wal = NULL;
-    if (recs < 0) { fprintf(stderr, "rocepool MDT: replaying %s: %s\n", path, strerror((int)-recs)); return -1; }
+    if (recs < 0) return -1;
     if (recs > 0)
-        fprintf(stderr, "rocepool MDT: %ld log records replayed in %.1f s\n", recs, (double)(mono_ns() - t0) / 1e9);
+        fprintf(stderr, "rocepool MDT: %ld checkpoint entries and log records restored in %.1f s (%llu records a "
+                "checkpoint had already)\n", recs, (double)(mono_ns() - t0) / 1e9,
+                (unsigned long long)atomic_load(&m->ckpt_skipped));
     mdt_life_end(m);
-    m->wal = wal_open(path, err, sizeof(err));
+    m->wal = wal_open_base(cur, -1, 0, last, err, sizeof(err));
     if (!m->wal) { fprintf(stderr, "rocepool MDT: %s\n", err); return -1; }
+    m->life_base = last;
     /* this life's marker: record 1, before any change */
     uint64_t ep = 0;
     int ufd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
@@ -2618,7 +3140,7 @@ static int mdt_open_log(mdt_store *m, const char *spec) {
     wr_u32le(mk + 4, 8);
     for (int i = 0; i < 8; i++) mk[8 + i] = (uint8_t)(ep >> (8 * i));
     uint64_t l = wal_append(m->wal, mk, 16, NULL, 0, NULL, 0);
-    if (l != 1 || wal_wait(m->wal, l)) { fprintf(stderr, "rocepool MDT: writing the log's marker failed\n"); return -1; }
+    if (l != m->life_base + 1 || wal_wait(m->wal, l)) { fprintf(stderr, "rocepool MDT: writing the log's marker failed\n"); return -1; }
     pthread_mutex_init(&m->rec_lk, NULL);
     const char *as = getenv("ROCEPOOL_MDT_ASYNC");
     int async = as && !strcmp(as, "1");
@@ -2630,6 +3152,7 @@ static int mdt_open_log(mdt_store *m, const char *spec) {
      * replay them. (Was: only when an earlier life had records past its
      * marker; one whose every change was still uncommitted skipped it.) */
     if (async && m->nlives > 0) mdt_recovery_start(m);
+    lm_start(&m->lm, m->wal, mdt_ckpt_header, mdt_snapshot, mdt_busy);
     return 0;
 }
 
@@ -2649,6 +3172,1124 @@ struct rocepool_native {
     atomic_ullong log_deferred, log_waited;
     atomic_ullong ost_by_op[64];
 };
+
+/* ------------------------------------------------------------------ */
+/* asynchronous replication                                             */
+/* ------------------------------------------------------------------ */
+/* A server (MDT or OST) with a standby (ROCEPOOL_MDT_REPLICAS /
+ * ROCEPOOL_OST_REPLICAS: the n-th address for this process's n-th server)
+ * keeps a second, complete copy of its store there, off the request path:
+ *
+ *  - a change marks its key dirty (a hash set per shard, a few hundred ns
+ *    under the shard's lock: the request never waits for the standby);
+ *  - shipper threads, one per shard, take dirty keys in batches, read each
+ *    one's state as it is NOW (an MDT entry with its inline bytes; an OST
+ *    object's changed range, 1 MiB at a time) and send the batch to the
+ *    standby, which applies it through its own durable path (its log, its
+ *    tier) before it replies. Several changes to a key before it ships go
+ *    as one. A failed send puts the keys back;
+ *  - a manager thread says hello every half second. When the standby's
+ *    copy is not a complete one of this primary life (a new standby, a
+ *    restart of either, a queue that overflowed while it was away) it
+ *    resyncs: every key and version is checked against the standby in
+ *    batches, what differs is shipped, and what the standby has that the
+ *    primary does not is deleted there (marked unconfirmed at the start,
+ *    swept at the end).
+ *
+ * Roles: the primary serves clients; the standby answers them STANDBY and
+ * the client (rocepool_client.c) goes to the other address of the pair.
+ * A standby that has not heard from its primary for
+ * ROCEPOOL_REPL_PROMOTE_S (default 10; 0: never on its own) and holds a
+ * complete copy promotes itself: role primary, term + 1. A server that
+ * hears from a primary of a higher term steps down to standby and is
+ * resynced by it. Role, term and the copy's completeness are kept in
+ * <log>.repl, so a restart does not bring a stale primary back.
+ *
+ * Versions identify a change across failovers: an OST object's version
+ * never goes below term << 40 in a term, and an MDT entry ships its last
+ * change's LSN with the term on top -- a standby compares those, so a
+ * change one primary made and never shipped cannot pass for another's.
+ *
+ * Asynchronous: changes in the last moments before a primary dies (the
+ * queue: see "queued" in STATS) are lost with it on a failover. */
+#define ROLE_PRIMARY 1
+#define ROLE_STANDBY 2
+enum { RS_HELLO = 1, RS_BATCH = 2, RS_BEGIN = 3, RS_CHECK = 4, RS_END = 5, RS_PROMOTE = 6 };
+#define REPL_SHARDS 8
+#define REPL_BATCH_ITEMS 512
+#define REPL_BATCH_BYTES (4u << 20)
+#define REPL_CHUNK (1u << 20)       /* an OST object's bytes per item */
+#define REPL_TERM_SHIFT 40
+
+typedef struct repl_node {
+    struct repl_node *hnext, *qnext;
+    uint64_t h, lo, hi;
+    uint8_t all;   /* the whole object (else [lo, hi) and its size) */
+    size_t kl;
+    char key[];
+} repl_node;
+
+typedef struct {
+    pthread_mutex_t lk;
+    pthread_cond_t cv;
+    repl_node **tab;
+    size_t nslots, n;
+    repl_node *qh, *qt;
+    int busy;
+} repl_shard;
+
+typedef struct repl {
+    int kind;                      /* ROCEPOOL_NATIVE_OST / _MDT */
+    void *store;
+    char peer[128];
+    char state_path[1100];
+    _Atomic int role;
+    _Atomic uint64_t term;
+    uint64_t life;                 /* this process's run as a primary: what a standby's copy is complete for */
+    repl_shard sh[REPL_SHARDS];
+    pthread_mutex_t st_lk;         /* role, term, synced and the state file */
+    _Atomic int in_sync, peer_up, resyncing;
+    _Atomic uint64_t synced;       /* a standby: its copy is complete for this primary life (0: not) */
+    _Atomic uint64_t session;      /* a standby: the resync under way */
+    atomic_ullong heard_ns, started_ns;
+    double promote_s;
+    uint64_t max_queue;
+    atomic_ullong queued, marked, items, bytes, rpcs, errors, resyncs, checked, mismatched, swept, applied;
+    atomic_ullong promotions, demotions, overflows, resync_ns;
+} repl_t;
+
+static uint64_t repl_vfloor(const struct repl *r) {
+    return atomic_load(&r->role) == ROLE_PRIMARY ? atomic_load(&r->term) << REPL_TERM_SHIFT : 0;
+}
+static uint64_t repl_stamp(const repl_t *r, uint64_t lsn) {
+    return atomic_load(&r->term) << REPL_TERM_SHIFT | (lsn & ((1ull << REPL_TERM_SHIFT) - 1));
+}
+
+static uint64_t rand64(void) {
+    uint64_t v = 0;
+    int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+    if (fd < 0 || read(fd, &v, sizeof(v)) != sizeof(v)) v = mono_ns() ^ ((uint64_t)getpid() << 32);
+    if (fd >= 0) close(fd);
+    return v ? v : 1;
+}
+
+/* <log>.repl: "role=<1|2> term=<n> synced=<life>" (st_lk held) */
+static void repl_save(repl_t *r) {
+    if (!r->state_path[0]) return;
+    char tmp[1200];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", r->state_path);
+    FILE *f = fopen(tmp, "w");
+    if (!f) { fprintf(stderr, "rocepool repl: %s: %s\n", tmp, strerror(errno)); return; }
+    fprintf(f, "role=%d term=%llu synced=%llu\n", atomic_load(&r->role), (unsigned long long)atomic_load(&r->term),
+            (unsigned long long)atomic_load(&r->synced));
+    fflush(f);
+    fdatasync(fileno(f));
+    fclose(f);
+    if (rename(tmp, r->state_path)) { fprintf(stderr, "rocepool repl: %s: %s\n", r->state_path, strerror(errno)); return; }
+    char dir[1100];
+    snprintf(dir, sizeof(dir), "%s", r->state_path);
+    char *sl = strrchr(dir, '/');
+    if (sl) { *sl = 0; int d = open(dir, O_RDONLY | O_DIRECTORY | O_CLOEXEC); if (d >= 0) { fsync(d); close(d); } }
+}
+
+static const char *repl_who(const repl_t *r) { return r->kind == ROCEPOOL_NATIVE_MDT ? "MDT" : "OST"; }
+
+static void repl_clear_queue(repl_t *r) {
+    for (int i = 0; i < REPL_SHARDS; i++) {
+        repl_shard *sh = &r->sh[i];
+        pthread_mutex_lock(&sh->lk);
+        for (repl_node *x = sh->qh, *nx; x; x = nx) { nx = x->qnext; free(x); }
+        sh->qh = sh->qt = NULL;
+        memset(sh->tab, 0, sh->nslots * sizeof(*sh->tab));
+        atomic_fetch_sub(&r->queued, sh->n);
+        sh->n = 0;
+        pthread_mutex_unlock(&sh->lk);
+    }
+}
+
+static void repl_promote(repl_t *r, const char *why) {
+    pthread_mutex_lock(&r->st_lk);
+    if (atomic_load(&r->role) == ROLE_STANDBY) {
+        atomic_store(&r->term, atomic_load(&r->term) + 1);
+        atomic_store(&r->role, ROLE_PRIMARY);
+        atomic_store(&r->in_sync, 0);
+        r->life = rand64();
+        repl_save(r);
+        atomic_fetch_add(&r->promotions, 1);
+        fprintf(stderr, "rocepool %s repl: promoted to primary, term %llu (%s)\n", repl_who(r),
+                (unsigned long long)atomic_load(&r->term), why);
+    }
+    pthread_mutex_unlock(&r->st_lk);
+}
+
+static void repl_demote(repl_t *r, uint64_t term) {
+    pthread_mutex_lock(&r->st_lk);
+    if (term > atomic_load(&r->term)) atomic_store(&r->term, term);
+    if (atomic_load(&r->role) == ROLE_PRIMARY) {
+        atomic_store(&r->role, ROLE_STANDBY);
+        atomic_store(&r->synced, 0);  /* what this one has is not a copy of the new primary's */
+        atomic_fetch_add(&r->demotions, 1);
+        fprintf(stderr, "rocepool %s repl: a primary of term %llu exists: standby from now on (its resync follows)\n",
+                repl_who(r), (unsigned long long)term);
+    }
+    repl_save(r);
+    pthread_mutex_unlock(&r->st_lk);
+    repl_clear_queue(r);
+    atomic_store(&r->in_sync, 0);
+}
+
+/* ---- the dirty set ---- */
+static void repl_mark(struct repl *r, const char *key, size_t kl, uint64_t lo, uint64_t hi, int all) {
+    if (!r || atomic_load_explicit(&r->role, memory_order_relaxed) != ROLE_PRIMARY) return;
+    if (atomic_load_explicit(&r->queued, memory_order_relaxed) >= r->max_queue) {
+        /* the standby is gone for long: forget the queue, resync later */
+        if (atomic_exchange(&r->in_sync, 0)) atomic_fetch_add(&r->overflows, 1);
+        return;
+    }
+    uint64_t h = fnv1a(key, kl);
+    repl_shard *sh = &r->sh[h % REPL_SHARDS];
+    pthread_mutex_lock(&sh->lk);
+    repl_node **pp = &sh->tab[(h / REPL_SHARDS) % sh->nslots];
+    for (; *pp; pp = &(*pp)->hnext)
+        if ((*pp)->h == h && (*pp)->kl == kl && !memcmp((*pp)->key, key, kl)) break;
+    repl_node *x = *pp;
+    if (x) {
+        if (all) x->all = 1;
+        else if (!x->all && hi > lo) {
+            if (x->hi <= x->lo) { x->lo = lo; x->hi = hi; }
+            else { if (lo < x->lo) x->lo = lo; if (hi > x->hi) x->hi = hi; }
+        }
+    } else if ((x = malloc(sizeof(*x) + kl))) {
+        x->h = h; x->kl = kl; memcpy(x->key, key, kl);
+        x->all = (uint8_t)(all != 0); x->lo = lo; x->hi = hi;
+        x->hnext = NULL; x->qnext = NULL;
+        *pp = x;
+        if (sh->qt) sh->qt->qnext = x; else sh->qh = x;
+        sh->qt = x;
+        sh->n++;
+        atomic_fetch_add(&r->queued, 1);
+        atomic_fetch_add(&r->marked, 1);
+        if (sh->n > sh->nslots * 2) {  /* grow the set */
+            size_t nn = sh->nslots * 2;
+            repl_node **nt = calloc(nn, sizeof(*nt));
+            if (nt) {
+                for (size_t i = 0; i < sh->nslots; i++)
+                    for (repl_node *y = sh->tab[i], *ny; y; y = ny) {
+                        ny = y->hnext;
+                        size_t j = (y->h / REPL_SHARDS) % nn;
+                        y->hnext = nt[j];
+                        nt[j] = y;
+                    }
+                free(sh->tab);
+                sh->tab = nt;
+                sh->nslots = nn;
+            }
+        }
+        pthread_cond_signal(&sh->cv);
+    }
+    pthread_mutex_unlock(&sh->lk);
+}
+
+/* take x out of the set (lock held) */
+static void repl_unhash(repl_shard *sh, repl_node *x) {
+    repl_node **pp = &sh->tab[(x->h / REPL_SHARDS) % sh->nslots];
+    for (; *pp; pp = &(*pp)->hnext) if (*pp == x) { *pp = x->hnext; return; }
+}
+
+/* put keys whose ship failed back in front (merged into a newer mark) */
+static void repl_putback(repl_t *r, repl_shard *sh, repl_node **v, int n) {
+    pthread_mutex_lock(&sh->lk);
+    for (int i = n - 1; i >= 0; i--) {
+        repl_node *x = v[i];
+        repl_node **pp = &sh->tab[(x->h / REPL_SHARDS) % sh->nslots];
+        for (; *pp; pp = &(*pp)->hnext)
+            if ((*pp)->h == x->h && (*pp)->kl == x->kl && !memcmp((*pp)->key, x->key, x->kl)) break;
+        if (*pp) {  /* marked again meanwhile: one node with both */
+            repl_node *y = *pp;
+            if (x->all) y->all = 1;
+            else if (!y->all && x->hi > x->lo) {
+                if (y->hi <= y->lo) { y->lo = x->lo; y->hi = x->hi; }
+                else { if (x->lo < y->lo) y->lo = x->lo; if (x->hi > y->hi) y->hi = x->hi; }
+            }
+            free(x);
+            continue;
+        }
+        x->hnext = NULL;
+        *pp = x;
+        x->qnext = sh->qh;
+        sh->qh = x;
+        if (!sh->qt) sh->qt = x;
+        sh->n++;
+        atomic_fetch_add(&r->queued, 1);
+    }
+    pthread_mutex_unlock(&sh->lk);
+}
+
+/* ---- talking to the other server ---- */
+typedef struct { roce_conn_t *c; uint64_t id; } repl_link;
+
+/* one request: op OP_REPL, value body; the reply's value in *val (free with
+ * roce_reply_release(rep)); -errno, or 1 with the error code in code */
+static int repl_call(repl_t *r, repl_link *l, const uint8_t *body, size_t blen, roce_reply_t *rep,
+                     const uint8_t **val, size_t *vlen, char *code, size_t code_len, int timeout_ms) {
+    if (!l->c) {
+        l->c = roce_client_connect_shared(r->peer, 2000, (size_t)(16u << 20) + 4096);
+        if (!l->c) return -ECONNREFUSED;
+    }
+    uint8_t head[HDR];
+    memcpy(head, "RCP1", 4);
+    head[4] = OP_REPL;
+    head[5] = head[6] = head[7] = 0;
+    wr_u64le(head + 8, ++l->id);
+    wr_u32le(head + 16, 0);
+    wr_u32le(head + 20, (uint32_t)blen);
+    roce_seg_t seg = {body, blen, NULL};
+    int s = roce_client_request(l->c, head, HDR, &seg, 1, rep, timeout_ms);
+    if (s) { roce_client_close(l->c); l->c = NULL; return -EIO; }
+    frame_t f;
+    if (frame_decode(rep->data, rep->len, &f) || f.req_id != l->id) {
+        roce_reply_release(rep);
+        roce_client_close(l->c);
+        l->c = NULL;
+        return -EIO;
+    }
+    atomic_fetch_add(&r->rpcs, 1);
+    *val = f.val;
+    *vlen = f.val_len;
+    if (f.op == OP_ERROR) {
+        size_t n = 0;
+        while (n < f.val_len && n + 1 < code_len && f.val[n]) { code[n] = (char)f.val[n]; n++; }
+        code[n] = 0;
+        return 1;
+    }
+    return 0;
+}
+
+static void repl_link_close(repl_link *l) {
+    if (l->c) roce_client_close(l->c);
+    l->c = NULL;
+}
+
+/* ---- the stores: one key's state as an item, applied on the standby ----
+ * Items in a batch: u8 type, u32 LE length, bytes.
+ *   OST 'W': u32 key length, key, u64 version, u64 size, u64 offset, u8
+ *            flags (1: replace -- empty it first; 2: more of it follows --
+ *            leave its size), u32 n, n bytes at offset
+ *   OST/MDT 'X': the key: gone at the primary
+ *   MDT 'E': u32 path length, path, the fields (md_fields_write, with the
+ *            primary's stamp), the inline bytes */
+static int item_put(buf_t *b, uint8_t type, const void *a, size_t al, const void *c, size_t cl, const void *d, size_t dl) {
+    uint8_t h[5];
+    h[0] = type;
+    wr_u32le(h + 1, (uint32_t)(al + cl + dl));
+    return buf_put(b, h, 5) || (al && buf_put(b, a, al)) || (cl && buf_put(b, c, cl)) || (dl && buf_put(b, d, dl)) ? -ENOMEM : 0;
+}
+
+static int ost_repl_item(repl_t *r, ost_store *s, repl_node *x, buf_t *b) {
+    uint64_t h = fnv1a(x->key, x->kl);
+    kv_stripe *st = ost_stripe(s, h);
+    uint8_t kh[4];
+    wr_u32le(kh, (uint32_t)x->kl);
+    pthread_mutex_lock(&st->lock);
+    kv_entry *e = *kv_find(st, h, x->key, x->kl);
+    if (!e) {
+        pthread_mutex_unlock(&st->lock);
+        return item_put(b, 'X', kh, 4, x->key, x->kl, NULL, 0);
+    }
+    uint64_t ver = e->version, size = e->size, uid = e->uid;
+    uint64_t lo = x->all ? 0 : x->lo, hi = x->all ? size : x->hi;
+    if (hi > size) hi = size;
+    if (lo > hi) lo = hi;
+    uint64_t n = hi - lo;
+    int more = n > REPL_CHUNK;
+    if (more) n = REPL_CHUNK;
+    uint8_t *data = n ? malloc((size_t)n) : NULL;
+    if (n && !data) { pthread_mutex_unlock(&st->lock); return -ENOMEM; }
+    int rc = 0;
+    if (n && e->data) memcpy(data, e->data + lo, (size_t)n);
+    else if (n && e->on_tier) {
+        /* off the lock: then the object must still be the one read */
+        tier_ext_t ext = e->ext;
+        pthread_mutex_unlock(&st->lock);
+        rc = tier_read_at(s, &ext, lo, data, (size_t)n);
+        pthread_mutex_lock(&st->lock);
+        e = *kv_find(st, h, x->key, x->kl);
+        if (!rc && (!e || e->uid != uid || e->version != ver || e->ext.off != ext.off)) rc = 1;  /* changed: re-marked */
+    } else if (n) memset(data, 0, (size_t)n);
+    pthread_mutex_unlock(&st->lock);
+    if (rc) { free(data); return rc < 0 ? rc : 0; }
+    uint8_t m[33];
+    wr_u64le(m, ver);
+    wr_u64le(m + 8, size);
+    wr_u64le(m + 16, lo);
+    m[24] = (uint8_t)((x->all ? 1 : 0) | (more ? 2 : 0));
+    wr_u32le(m + 25, (uint32_t)n);
+    uint8_t hdr[4];
+    wr_u32le(hdr, (uint32_t)x->kl);
+    buf_t tmp = {0};
+    rc = buf_put(&tmp, hdr, 4) || buf_put(&tmp, x->key, x->kl) || buf_put(&tmp, m, 29) ? -ENOMEM : 0;
+    if (!rc) rc = item_put(b, 'W', tmp.p, tmp.len, data, (size_t)n, NULL, 0);
+    free(tmp.p);
+    free(data);
+    atomic_fetch_add(&r->bytes, n);
+    /* the rest, as a range of its own (not "replace": that was this part) */
+    if (!rc && more) repl_mark(r, x->key, x->kl, lo + n, x->all ? size : x->hi, 0);
+    return rc;
+}
+
+static int mdt_repl_item(repl_t *r, mdt_store *m, repl_node *x, buf_t *b) {
+    const char *path = x->key;
+    size_t pl = x->kl;
+    const char *slash = memrchr(path, '/', pl);
+    size_t parent_len = slash ? (size_t)(slash - path) : 0;
+    const char *name = slash ? slash + 1 : path;
+    size_t name_len = pl - (size_t)(name - path);
+    uint64_t nh = fnv1a(name, name_len);
+    uint8_t ph[4];
+    wr_u32le(ph, (uint32_t)pl);
+    md_dir *pd = md_get_dir(m, path, parent_len, 0);
+    if (!pd) return item_put(b, 'X', ph, 4, path, pl, NULL, 0);
+    md_bucket *bk = md_bucket_of(pd, nh);
+    pthread_mutex_lock(&bk->lock);
+    md_entry *e = *md_find(bk, name, name_len, nh);
+    if (!e) { pthread_mutex_unlock(&bk->lock); return item_put(b, 'X', ph, 4, path, pl, NULL, 0); }
+    uint8_t q[MD_CK_FIXED];
+    md_fields_write(q, e, repl_stamp(r, e->lsn));
+    size_t il = e->inl && e->idata ? (size_t)e->size : 0;
+    uint8_t h[5];
+    h[0] = 'E';
+    wr_u32le(h + 1, (uint32_t)(4 + pl + MD_CK_FIXED + il));
+    int rc = buf_put(b, h, 5) || buf_put(b, ph, 4) || buf_put(b, path, pl) || buf_put(b, q, MD_CK_FIXED) ||
+             (il && buf_put(b, e->idata, il)) ? -ENOMEM : 0;
+    pthread_mutex_unlock(&bk->lock);
+    atomic_fetch_add(&r->bytes, il);
+    return rc;
+}
+
+/* run a request against this server's own store, as if it came in (the
+ * standby's apply: its log and tier take it like any other) */
+static int self_req(struct rocepool_native *n, uint8_t op, const char *key, size_t kl, const void *v1, size_t n1,
+                    const void *v2, size_t n2, char *code, size_t code_len) {
+    uint8_t *val = malloc(n1 + n2 ? n1 + n2 : 1);
+    if (!val) return -ENOMEM;
+    if (n1) memcpy(val, v1, n1);
+    if (n2) memcpy(val + n1, v2, n2);
+    frame_t f = {.op = op, .req_id = 0, .key = key, .key_len = (uint32_t)kl, .val = val, .val_len = (uint32_t)(n1 + n2)};
+    size_t ol = 0;
+    uint8_t *out = n->ost ? ost_handle(n->ost, &f, &ol) : mdt_handle(n->mdt, &f, &ol);
+    free(val);
+    if (!out) return -EIO;
+    int rc = 0;
+    if (out[4] == OP_ERROR) {
+        rc = 1;
+        if (code) {
+            size_t vl = rd_u32le(out + 20), k = rd_u32le(out + 16), i = 0;
+            for (; i < vl && i + 1 < code_len && out[HDR + k + i]; i++) code[i] = (char)out[HDR + k + i];
+            code[i] = 0;
+        }
+    }
+    roce_reply_free(out);
+    return rc;
+}
+
+static int ost_repl_apply(repl_t *r, struct rocepool_native *n, uint8_t type, const uint8_t *p, size_t len) {
+    ost_store *s = n->ost;
+    if (len < 4) return -EINVAL;
+    size_t kl = rd_u32le(p);
+    if (len < 4 + kl) return -EINVAL;
+    const char *key = (const char *)p + 4;
+    char code[32];
+    if (type == 'X') { self_req(n, OP_DELETE, key, kl, NULL, 0, NULL, 0, code, sizeof(code)); return 0; }
+    if (type != 'W' || len < 4 + kl + 29) return -EINVAL;
+    const uint8_t *m = p + 4 + kl;
+    uint64_t ver = rd_u64le(m), size = rd_u64le(m + 8), off = rd_u64le(m + 16);
+    uint8_t flags = m[24];
+    size_t dn = rd_u32le(m + 25);
+    if (len != 4 + kl + 29 + dn) return -EINVAL;
+    uint8_t o[8];
+    if (flags & 1) { wr_u64le(o, 0); if (self_req(n, OP_TRUNCATE, key, kl, o, 8, NULL, 0, code, sizeof(code))) return -EIO; }
+    wr_u64le(o, off);
+    if (self_req(n, OP_WRITE_AT, key, kl, o, 8, m + 29, dn, code, sizeof(code))) return -EIO;
+    if (!(flags & 2)) {  /* the last part: the primary's size */
+        wr_u64le(o, size);
+        if (self_req(n, OP_WRITE_AT, key, kl, o, 8, NULL, 0, code, sizeof(code))) return -EIO;
+        if (self_req(n, OP_TRUNCATE, key, kl, o, 8, NULL, 0, code, sizeof(code))) return -EIO;
+    }
+    uint64_t h = fnv1a(key, kl);
+    kv_stripe *st = ost_stripe(s, h);
+    pthread_mutex_lock(&st->lock);
+    kv_entry *e = *kv_find(st, h, key, kl);
+    if (e) {
+        e->version = ver;  /* the primary's: what a resync compares */
+        e->rconf = 1;
+        ost_log_set(s, e);
+    }
+    pthread_mutex_unlock(&st->lock);
+    (void)r;
+    return 0;
+}
+
+static int mdt_repl_apply(repl_t *r, struct rocepool_native *n, uint8_t type, const uint8_t *p, size_t len) {
+    (void)r;
+    if (len < 4) return -EINVAL;
+    size_t pl = rd_u32le(p);
+    if (len < 4 + pl) return -EINVAL;
+    const char *path = (const char *)p + 4;
+    char code[32];
+    uint8_t op = type == 'X' ? 41 : 40;
+    if (type != 'X' && (type != 'E' || len < 4 + pl + MD_CK_FIXED)) return -EINVAL;
+    int rc = self_req(n, OP_MDT, path, pl, &op, 1, p + 4 + pl, len - 4 - pl, code, sizeof(code));
+    return rc ? -EIO : 0;
+}
+
+/* every key and its version, for a resync's comparison */
+typedef int (*repl_emit_fn)(void *ctx, const char *key, size_t kl, uint64_t ver);
+static int ost_repl_scan(repl_t *r, ost_store *s, repl_emit_fn emit, void *ctx) {
+    (void)r;
+    buf_t b = {0};
+    int rc = 0;
+    for (int i = 0; i < OST_STRIPES && !rc; i++) {
+        kv_stripe *st = &s->stripes[i];
+        size_t at = 0, nsl = 0;
+        while (!rc) {
+            b.len = 0;
+            pthread_mutex_lock(&st->lock);
+            if (st->nslots != nsl) { at = 0; nsl = st->nslots; }
+            if (at >= nsl) { pthread_mutex_unlock(&st->lock); break; }
+            size_t to = at + LM_CHUNK < nsl ? at + LM_CHUNK : nsl;
+            for (size_t j = at; j < to && !rc; j++)
+                for (kv_entry *e = st->slots[j]; e && !rc; e = e->next) {
+                    uint8_t h[12];
+                    wr_u32le(h, (uint32_t)e->key_len);
+                    wr_u64le(h + 4, e->version);
+                    rc = buf_put(&b, h, 12) || buf_put(&b, e->key, e->key_len) ? -ENOMEM : 0;
+                }
+            at = to;
+            pthread_mutex_unlock(&st->lock);
+            for (size_t o = 0; o < b.len && !rc;) {
+                size_t kl = rd_u32le(b.p + o);
+                rc = emit(ctx, (const char *)b.p + o + 12, kl, rd_u64le(b.p + o + 4));
+                o += 12 + kl;
+            }
+        }
+    }
+    free(b.p);
+    return rc;
+}
+
+static int mdt_repl_scan(repl_t *r, mdt_store *m, repl_emit_fn emit, void *ctx) {
+    pthread_rwlock_rdlock(&m->dirs_lock);
+    size_t nd = 0, cd = m->ndirs + 1;
+    md_dir **ds = malloc(cd * sizeof(*ds));
+    for (size_t i = 0; ds && i < m->ndirs_slots; i++)
+        for (md_dir *d = m->dirs[i]; d && nd < cd; d = d->next) ds[nd++] = d;
+    pthread_rwlock_unlock(&m->dirs_lock);
+    if (!ds) return -ENOMEM;
+    buf_t b = {0};
+    int rc = 0;
+    for (size_t di = 0; di < nd && !rc; di++) {
+        md_dir *d = ds[di];
+        for (int bi = 0; bi < MD_BUCKETS && !rc; bi++) {
+            md_bucket *bk = &d->b[bi];
+            size_t at = 0, nsl = 0;
+            while (!rc) {
+                b.len = 0;
+                pthread_mutex_lock(&bk->lock);
+                if (bk->nslots != nsl) { at = 0; nsl = bk->nslots; }
+                if (at >= nsl) { pthread_mutex_unlock(&bk->lock); break; }
+                size_t to = at + LM_CHUNK < nsl ? at + LM_CHUNK : nsl;
+                for (size_t j = at; j < to && !rc; j++)
+                    for (md_entry *e = bk->slots[j]; e && !rc; e = e->next) {
+                        size_t pl = d->path_len ? d->path_len + 1 + e->name_len : e->name_len;
+                        uint8_t h[12];
+                        wr_u32le(h, (uint32_t)pl);
+                        wr_u64le(h + 4, repl_stamp(r, e->lsn));
+                        rc = buf_put(&b, h, 12) || (d->path_len && (buf_put(&b, d->path, d->path_len) || buf_put(&b, "/", 1))) ||
+                             buf_put(&b, e->name, e->name_len) ? -ENOMEM : 0;
+                    }
+                at = to;
+                pthread_mutex_unlock(&bk->lock);
+                for (size_t o = 0; o < b.len && !rc;) {
+                    size_t kl = rd_u32le(b.p + o);
+                    rc = emit(ctx, (const char *)b.p + o + 12, kl, rd_u64le(b.p + o + 4));
+                    o += 12 + kl;
+                }
+            }
+        }
+    }
+    free(b.p);
+    free(ds);
+    return rc;
+}
+
+/* a standby's resync: every entry's confirmation cleared (BEGIN), compared
+ * (CHECK), the unconfirmed ones deleted (END) */
+static void repl_confirm_reset(struct rocepool_native *n) {
+    if (n->ost) {
+        for (int i = 0; i < OST_STRIPES; i++) {
+            kv_stripe *st = &n->ost->stripes[i];
+            pthread_mutex_lock(&st->lock);
+            for (size_t j = 0; j < st->nslots; j++)
+                for (kv_entry *e = st->slots[j]; e; e = e->next) e->rconf = 0;
+            pthread_mutex_unlock(&st->lock);
+        }
+        return;
+    }
+    mdt_store *m = n->mdt;
+    pthread_rwlock_rdlock(&m->dirs_lock);
+    for (size_t i = 0; i < m->ndirs_slots; i++)
+        for (md_dir *d = m->dirs[i]; d; d = d->next)
+            for (int bi = 0; bi < MD_BUCKETS; bi++) {
+                pthread_mutex_lock(&d->b[bi].lock);
+                for (size_t j = 0; j < d->b[bi].nslots; j++)
+                    for (md_entry *e = d->b[bi].slots[j]; e; e = e->next) e->rconf = 0;
+                pthread_mutex_unlock(&d->b[bi].lock);
+            }
+    pthread_rwlock_unlock(&m->dirs_lock);
+}
+
+/* 1 = the standby has key at version ver (and it is confirmed now) */
+static int repl_have(struct rocepool_native *n, const char *key, size_t kl, uint64_t ver) {
+    int ok = 0;
+    if (n->ost) {
+        uint64_t h = fnv1a(key, kl);
+        kv_stripe *st = ost_stripe(n->ost, h);
+        pthread_mutex_lock(&st->lock);
+        kv_entry *e = *kv_find(st, h, key, kl);
+        if (e && e->version == ver) { e->rconf = 1; ok = 1; }
+        pthread_mutex_unlock(&st->lock);
+        return ok;
+    }
+    const char *slash = memrchr(key, '/', kl);
+    size_t parent_len = slash ? (size_t)(slash - key) : 0;
+    const char *name = slash ? slash + 1 : key;
+    size_t name_len = kl - (size_t)(name - key);
+    uint64_t nh = fnv1a(name, name_len);
+    md_dir *pd = md_get_dir(n->mdt, key, parent_len, 0);
+    if (!pd) return 0;
+    md_bucket *bk = md_bucket_of(pd, nh);
+    pthread_mutex_lock(&bk->lock);
+    md_entry *e = *md_find(bk, name, name_len, nh);
+    if (e && e->pstamp == ver) { e->rconf = 1; ok = 1; }
+    pthread_mutex_unlock(&bk->lock);
+    return ok;
+}
+
+static uint64_t repl_sweep(struct rocepool_native *n) {
+    buf_t b = {0};
+    if (n->ost) {
+        for (int i = 0; i < OST_STRIPES; i++) {
+            kv_stripe *st = &n->ost->stripes[i];
+            pthread_mutex_lock(&st->lock);
+            for (size_t j = 0; j < st->nslots; j++)
+                for (kv_entry *e = st->slots[j]; e; e = e->next)
+                    if (!e->rconf) {
+                        uint8_t h[4];
+                        wr_u32le(h, (uint32_t)e->key_len);
+                        if (buf_put(&b, h, 4) || buf_put(&b, e->key, e->key_len)) break;
+                    }
+            pthread_mutex_unlock(&st->lock);
+        }
+    } else {
+        mdt_store *m = n->mdt;
+        pthread_rwlock_rdlock(&m->dirs_lock);
+        for (size_t i = 0; i < m->ndirs_slots; i++)
+            for (md_dir *d = m->dirs[i]; d; d = d->next)
+                for (int bi = 0; bi < MD_BUCKETS; bi++) {
+                    pthread_mutex_lock(&d->b[bi].lock);
+                    for (size_t j = 0; j < d->b[bi].nslots; j++)
+                        for (md_entry *e = d->b[bi].slots[j]; e; e = e->next)
+                            if (!e->rconf) {
+                                uint8_t h[4];
+                                wr_u32le(h, (uint32_t)(d->path_len ? d->path_len + 1 + e->name_len : e->name_len));
+                                if (buf_put(&b, h, 4) || (d->path_len && (buf_put(&b, d->path, d->path_len) || buf_put(&b, "/", 1))) ||
+                                    buf_put(&b, e->name, e->name_len)) break;
+                            }
+                    pthread_mutex_unlock(&d->b[bi].lock);
+                }
+        pthread_rwlock_unlock(&m->dirs_lock);
+    }
+    uint64_t cnt = 0;
+    char code[32];
+    for (size_t o = 0; o < b.len;) {
+        size_t kl = rd_u32le(b.p + o);
+        const char *key = (const char *)b.p + o + 4;
+        uint8_t op = 41;
+        if (n->ost) self_req(n, OP_DELETE, key, kl, NULL, 0, NULL, 0, code, sizeof(code));
+        else self_req(n, OP_MDT, key, kl, &op, 1, NULL, 0, code, sizeof(code));
+        cnt++;
+        o += 4 + kl;
+    }
+    free(b.p);
+    return cnt;
+}
+
+/* ---- the standby's side of the conversation ---- */
+static uint8_t *repl_handle(struct rocepool_native *n, repl_t *r, const frame_t *f, size_t *out_len) {
+    if (!r) return frame_error(f, "NO_REPL", "this server has no replication configured", out_len);
+    if (f->val_len < 1) return frame_error(f, "STORAGE_ERROR", "empty repl request", out_len);
+    const uint8_t *v = f->val + 1;
+    size_t vl = f->val_len - 1;
+    switch (f->val[0]) {
+    case RS_HELLO: {  /* u64 primary life, u64 term -> u8 role, u64 term, u64 synced */
+        if (vl < 16) return frame_error(f, "STORAGE_ERROR", "short hello", out_len);
+        uint64_t term = rd_u64le(v + 8);
+        atomic_store(&r->heard_ns, mono_ns());
+        if (atomic_load(&r->role) == ROLE_PRIMARY && term > atomic_load(&r->term)) repl_demote(r, term);
+        else if (atomic_load(&r->role) == ROLE_STANDBY && term > atomic_load(&r->term)) {
+            pthread_mutex_lock(&r->st_lk);
+            atomic_store(&r->term, term);
+            repl_save(r);
+            pthread_mutex_unlock(&r->st_lk);
+        }
+        uint8_t o[17];
+        o[0] = (uint8_t)atomic_load(&r->role);
+        wr_u64le(o + 1, atomic_load(&r->term));
+        wr_u64le(o + 9, atomic_load(&r->synced));
+        return frame_simple(OP_REPL_OK, f, o, 17, out_len);
+    }
+    case RS_PROMOTE:
+        repl_promote(r, "asked to");
+        return frame_simple(OP_REPL_OK, f, NULL, 0, out_len);
+    default:
+        break;
+    }
+    if (atomic_load(&r->role) != ROLE_STANDBY) return frame_error(f, "NOT_STANDBY", "a primary", out_len);
+    atomic_store(&r->heard_ns, mono_ns());
+    switch (f->val[0]) {
+    case RS_BATCH: {  /* u32 n, items */
+        if (vl < 4) return frame_error(f, "STORAGE_ERROR", "short batch", out_len);
+        uint32_t cnt = rd_u32le(v);
+        size_t o = 4;
+        for (uint32_t i = 0; i < cnt; i++) {
+            if (o + 5 > vl) return frame_error(f, "STORAGE_ERROR", "malformed batch", out_len);
+            uint8_t type = v[o];
+            size_t il = rd_u32le(v + o + 1);
+            if (o + 5 + il > vl) return frame_error(f, "STORAGE_ERROR", "malformed batch", out_len);
+            int rc = n->ost ? ost_repl_apply(r, n, type, v + o + 5, il) : mdt_repl_apply(r, n, type, v + o + 5, il);
+            if (rc) return frame_error(f, "STORAGE_ERROR", "applying a replicated change failed", out_len);
+            atomic_fetch_add(&r->applied, 1);
+            o += 5 + il;
+        }
+        return frame_simple(OP_REPL_OK, f, NULL, 0, out_len);
+    }
+    case RS_BEGIN: {
+        if (vl < 8) return frame_error(f, "STORAGE_ERROR", "short begin", out_len);
+        atomic_store(&r->session, rd_u64le(v));
+        repl_confirm_reset(n);
+        return frame_simple(OP_REPL_OK, f, NULL, 0, out_len);
+    }
+    case RS_CHECK: {  /* u32 n, n x (u32 kl, key, u64 version) -> u32 m, m x u32 index (differs) */
+        if (vl < 4) return frame_error(f, "STORAGE_ERROR", "short check", out_len);
+        uint32_t cnt = rd_u32le(v);
+        uint32_t *bad = malloc(((size_t)cnt + 1) * 4);
+        if (!bad) return frame_error(f, "STORAGE_ERROR", "out of memory", out_len);
+        uint32_t nb = 0;
+        size_t o = 4;
+        for (uint32_t i = 0; i < cnt; i++) {
+            if (o + 4 > vl) break;
+            size_t kl = rd_u32le(v + o);
+            if (o + 12 + kl > vl) break;
+            if (!repl_have(n, (const char *)v + o + 4, kl, rd_u64le(v + o + 4 + kl))) bad[nb++] = i;
+            o += 12 + kl;
+        }
+        uint8_t *out;
+        uint8_t *w = frame_alloc(OP_REPL_OK, f, 4 + (size_t)nb * 4, &out, out_len);
+        if (w) {
+            wr_u32le(w, nb);
+            for (uint32_t i = 0; i < nb; i++) wr_u32le(w + 4 + 4 * (size_t)i, bad[i]);
+        }
+        free(bad);
+        return w ? out : NULL;
+    }
+    case RS_END: {  /* u64 session, u64 primary life */
+        if (vl < 16) return frame_error(f, "STORAGE_ERROR", "short end", out_len);
+        if (rd_u64le(v) != atomic_load(&r->session)) return frame_error(f, "STALE_SESSION", "another resync began", out_len);
+        uint64_t gone = repl_sweep(n);
+        atomic_fetch_add(&r->swept, gone);
+        pthread_mutex_lock(&r->st_lk);
+        atomic_store(&r->synced, rd_u64le(v + 8));
+        atomic_store(&r->session, 0);
+        repl_save(r);
+        pthread_mutex_unlock(&r->st_lk);
+        uint8_t o[8];
+        wr_u64le(o, gone);
+        return frame_simple(OP_REPL_OK, f, o, 8, out_len);
+    }
+    }
+    return frame_error(f, "UNSUPPORTED_OP", "repl", out_len);
+}
+
+/* ---- the primary's threads ---- */
+typedef struct { repl_t *r; int i; } repl_arg;
+
+static void *repl_shipper(void *arg) {
+    repl_t *r = ((repl_arg *)arg)->r;
+    repl_shard *sh = &r->sh[((repl_arg *)arg)->i];
+    free(arg);
+    pthread_setname_np(pthread_self(), "rp-repl-ship");
+    repl_link l = {0};
+    buf_t b = {0};
+    repl_node **v = malloc(REPL_BATCH_ITEMS * sizeof(*v));
+    if (!v) return NULL;
+    for (;;) {
+        pthread_mutex_lock(&sh->lk);
+        while (!(sh->qh && atomic_load(&r->peer_up) && atomic_load(&r->role) == ROLE_PRIMARY)) {
+            struct timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            ts.tv_nsec += 200 * 1000000L;
+            ts.tv_sec += ts.tv_nsec / 1000000000L;
+            ts.tv_nsec %= 1000000000L;
+            pthread_cond_timedwait(&sh->cv, &sh->lk, &ts);
+        }
+        int nv = 0;
+        while (sh->qh && nv < REPL_BATCH_ITEMS) {
+            repl_node *x = sh->qh;
+            sh->qh = x->qnext;
+            if (!sh->qh) sh->qt = NULL;
+            repl_unhash(sh, x);
+            sh->n--;
+            atomic_fetch_sub(&r->queued, 1);
+            v[nv++] = x;
+        }
+        sh->busy = 1;
+        pthread_mutex_unlock(&sh->lk);
+
+        b.len = 0;
+        uint8_t hd[5] = {RS_BATCH, 0, 0, 0, 0};
+        int rc = buf_put(&b, hd, 5) ? -ENOMEM : 0;
+        int used = 0;
+        uint32_t cnt = 0;
+        for (; used < nv && !rc && b.len < REPL_BATCH_BYTES; used++) {
+            size_t before = b.len;
+            rc = r->kind == ROCEPOOL_NATIVE_OST ? ost_repl_item(r, r->store, v[used], &b) : mdt_repl_item(r, r->store, v[used], &b);
+            if (!rc && b.len > before) cnt++;
+        }
+        if (!rc && used < nv) { repl_putback(r, sh, v + used, nv - used); nv = used; }  /* the next batch's */
+        wr_u32le(b.p + 1, cnt);
+        if (!rc && cnt) {
+            roce_reply_t rep;
+            const uint8_t *val;
+            size_t vlen;
+            char code[32];
+            rc = repl_call(r, &l, b.p, b.len, &rep, &val, &vlen, code, sizeof(code), 30000);
+            if (rc == 0) roce_reply_release(&rep);
+            else if (rc == 1) {
+                roce_reply_release(&rep);
+                fprintf(stderr, "rocepool %s repl: the standby refused a batch: %s\n", repl_who(r), code);
+                rc = -EIO;
+            }
+        }
+        if (rc) {
+            atomic_fetch_add(&r->errors, 1);
+            atomic_store(&r->peer_up, 0);
+            repl_putback(r, sh, v, nv);
+            repl_link_close(&l);
+        } else {
+            for (int i = 0; i < nv; i++) free(v[i]);
+            atomic_fetch_add(&r->items, cnt);
+        }
+        pthread_mutex_lock(&sh->lk);
+        sh->busy = 0;
+        pthread_cond_broadcast(&sh->cv);
+        pthread_mutex_unlock(&sh->lk);
+        if (rc) { struct timespec ts = {0, 200 * 1000000L}; nanosleep(&ts, NULL); }
+    }
+    return NULL;
+}
+
+/* nothing queued or in flight */
+static int repl_drained(repl_t *r) {
+    for (int i = 0; i < REPL_SHARDS; i++) {
+        repl_shard *sh = &r->sh[i];
+        pthread_mutex_lock(&sh->lk);
+        int idle = !sh->qh && !sh->busy;
+        pthread_mutex_unlock(&sh->lk);
+        if (!idle) return 0;
+    }
+    return 1;
+}
+
+typedef struct {
+    repl_t *r;
+    repl_link *l;
+    buf_t b;        /* RS_CHECK, u32 n, items */
+    uint32_t n;
+    int err;
+} repl_check_ctx;
+
+static int repl_check_flush(repl_check_ctx *c) {
+    if (!c->n) return 0;
+    wr_u32le(c->b.p + 1, c->n);
+    roce_reply_t rep;
+    const uint8_t *val;
+    size_t vlen;
+    char code[32];
+    int rc = repl_call(c->r, c->l, c->b.p, c->b.len, &rep, &val, &vlen, code, sizeof(code), 120000);
+    if (rc) { if (rc == 1) roce_reply_release(&rep); return -EIO; }
+    atomic_fetch_add(&c->r->checked, c->n);
+    uint32_t nb = vlen >= 4 ? rd_u32le(val) : 0;
+    if (vlen < 4 + (size_t)nb * 4) nb = 0;
+    /* the keys that differ: shipped whole */
+    size_t o = 5, idx = 0;
+    for (uint32_t k = 0; k < nb; k++) {
+        uint32_t want = rd_u32le(val + 4 + 4 * (size_t)k);
+        while (idx < want && o < c->b.len) { o += 12 + rd_u32le(c->b.p + o); idx++; }
+        if (o >= c->b.len) break;
+        size_t kl = rd_u32le(c->b.p + o);
+        repl_mark(c->r, (const char *)c->b.p + o + 4, kl, 0, 0, 1);
+        atomic_fetch_add(&c->r->mismatched, 1);
+    }
+    roce_reply_release(&rep);
+    c->b.len = 5;
+    c->n = 0;
+    return 0;
+}
+
+static int repl_check_emit(void *ctx, const char *key, size_t kl, uint64_t ver) {
+    repl_check_ctx *c = ctx;
+    uint8_t h[4], vv[8];
+    wr_u32le(h, (uint32_t)kl);
+    wr_u64le(vv, ver);
+    if (buf_put(&c->b, h, 4) || buf_put(&c->b, key, kl) || buf_put(&c->b, vv, 8)) return -ENOMEM;
+    c->n++;
+    if (c->n >= 2048 || c->b.len >= (1u << 20)) {
+        if (repl_check_flush(c)) return -EIO;
+        /* keep the queue it fills within bounds */
+        while (atomic_load(&c->r->queued) > c->r->max_queue / 2) {
+            if (!atomic_load(&c->r->peer_up) || atomic_load(&c->r->role) != ROLE_PRIMARY) return -EIO;
+            struct timespec ts = {0, 5 * 1000000L};
+            nanosleep(&ts, NULL);
+        }
+    }
+    return 0;
+}
+
+static int repl_resync(repl_t *r, repl_link *l) {
+    uint64_t t0 = mono_ns(), session = rand64();
+    atomic_store(&r->resyncing, 1);
+    fprintf(stderr, "rocepool %s repl: resync of the standby %s begins\n", repl_who(r), r->peer);
+    uint8_t bg[9];
+    bg[0] = RS_BEGIN;
+    wr_u64le(bg + 1, session);
+    roce_reply_t rep;
+    const uint8_t *val;
+    size_t vlen;
+    char code[32];
+    int rc = repl_call(r, l, bg, 9, &rep, &val, &vlen, code, sizeof(code), 600000);
+    if (rc) { if (rc == 1) roce_reply_release(&rep); goto out; }
+    roce_reply_release(&rep);
+    repl_check_ctx c = {r, l, {0}, 0, 0};
+    uint8_t hd[5] = {RS_CHECK, 0, 0, 0, 0};
+    rc = buf_put(&c.b, hd, 5) ? -ENOMEM : 0;
+    if (!rc) rc = r->kind == ROCEPOOL_NATIVE_OST ? ost_repl_scan(r, r->store, repl_check_emit, &c)
+                                                : mdt_repl_scan(r, r->store, repl_check_emit, &c);
+    if (!rc) rc = repl_check_flush(&c);
+    free(c.b.p);
+    if (rc) goto out;
+    /* what differed (and everything changed meanwhile) is shipped before
+     * the end: the sweep must not delete it */
+    while (!repl_drained(r)) {
+        if (!atomic_load(&r->peer_up) || atomic_load(&r->role) != ROLE_PRIMARY) { rc = -EIO; goto out; }
+        struct timespec ts = {0, 5 * 1000000L};
+        nanosleep(&ts, NULL);
+    }
+    uint8_t en[17];
+    en[0] = RS_END;
+    wr_u64le(en + 1, session);
+    wr_u64le(en + 9, r->life);
+    rc = repl_call(r, l, en, 17, &rep, &val, &vlen, code, sizeof(code), 600000);
+    if (rc) { if (rc == 1) roce_reply_release(&rep); goto out; }
+    uint64_t gone = vlen >= 8 ? rd_u64le(val) : 0;
+    roce_reply_release(&rep);
+    atomic_store(&r->in_sync, 1);
+    atomic_fetch_add(&r->resyncs, 1);
+    atomic_store(&r->resync_ns, mono_ns() - t0);
+    fprintf(stderr, "rocepool %s repl: resync done in %.1f s: %llu checked, %llu shipped, %llu deleted there\n",
+            repl_who(r), (double)(mono_ns() - t0) / 1e9, (unsigned long long)atomic_load(&r->checked),
+            (unsigned long long)atomic_load(&r->mismatched), (unsigned long long)gone);
+out:
+    if (rc) {
+        repl_link_close(l);
+        fprintf(stderr, "rocepool %s repl: resync interrupted (%s); again later\n", repl_who(r), strerror(rc < 0 ? -rc : EIO));
+    }
+    atomic_store(&r->resyncing, 0);
+    return rc;
+}
+
+/* hello: 0 = answered (role, term, synced), -errno otherwise */
+static int repl_hello(repl_t *r, repl_link *l, int *role, uint64_t *term, uint64_t *synced) {
+    uint8_t h[17];
+    h[0] = RS_HELLO;
+    wr_u64le(h + 1, r->life);
+    wr_u64le(h + 9, atomic_load(&r->term));
+    roce_reply_t rep;
+    const uint8_t *val;
+    size_t vlen;
+    char code[32];
+    int rc = repl_call(r, l, h, 17, &rep, &val, &vlen, code, sizeof(code), 3000);
+    if (rc) { if (rc == 1) roce_reply_release(&rep); return -EIO; }
+    if (vlen < 17) { roce_reply_release(&rep); return -EIO; }
+    *role = val[0];
+    *term = rd_u64le(val + 1);
+    *synced = rd_u64le(val + 9);
+    roce_reply_release(&rep);
+    return 0;
+}
+
+static void *repl_manager(void *arg) {
+    repl_t *r = arg;
+    pthread_setname_np(pthread_self(), "rp-repl-mgr");
+    repl_link l = {0};
+    for (;;) {
+        struct timespec ts = {0, 500 * 1000000L};
+        nanosleep(&ts, NULL);
+        if (atomic_load(&r->role) == ROLE_STANDBY) {
+            repl_link_close(&l);
+            atomic_store(&r->peer_up, 0);
+            if (r->promote_s <= 0) continue;
+            uint64_t last = atomic_load(&r->heard_ns);
+            if (!last) last = atomic_load(&r->started_ns);
+            int complete = atomic_load(&r->synced) != 0 || getenv("ROCEPOOL_REPL_PROMOTE_PARTIAL");
+            if (complete && (double)(mono_ns() - last) / 1e9 > r->promote_s)
+                repl_promote(r, "its primary has been silent");
+            continue;
+        }
+        int role;
+        uint64_t term, synced;
+        if (repl_hello(r, &l, &role, &term, &synced)) {
+            if (atomic_exchange(&r->peer_up, 0)) fprintf(stderr, "rocepool %s repl: standby %s unreachable\n", repl_who(r), r->peer);
+            repl_link_close(&l);
+            continue;
+        }
+        if (role == ROLE_PRIMARY) {
+            if (term > atomic_load(&r->term)) repl_demote(r, term);  /* it took over: this one steps down */
+            continue;  /* lower: it steps down on this hello */
+        }
+        if (!atomic_exchange(&r->peer_up, 1)) {
+            fprintf(stderr, "rocepool %s repl: standby %s reachable\n", repl_who(r), r->peer);
+            for (int i = 0; i < REPL_SHARDS; i++) {
+                pthread_mutex_lock(&r->sh[i].lk);
+                pthread_cond_broadcast(&r->sh[i].cv);
+                pthread_mutex_unlock(&r->sh[i].lk);
+            }
+        }
+        if (synced != r->life || !atomic_load(&r->in_sync)) {
+            atomic_store(&r->in_sync, 0);
+            repl_resync(r, &l);
+        }
+    }
+    return NULL;
+}
+
+/* index-th entry of a comma list ("" when none) */
+static void list_nth(const char *list, int idx, char *out, size_t n) {
+    out[0] = 0;
+    if (!list) return;
+    for (int i = 0; *list; i++) {
+        const char *e = strchr(list, ',');
+        size_t len = e ? (size_t)(e - list) : strlen(list);
+        if (i == idx) { snprintf(out, n, "%.*s", (int)len, list); return; }
+        if (!e) return;
+        list = e + 1;
+    }
+}
+
+static repl_t *repl_start(int kind, void *store, const char *log_base, int idx) {
+    char peer[128];
+    list_nth(getenv(kind == ROCEPOOL_NATIVE_MDT ? "ROCEPOOL_MDT_REPLICAS" : "ROCEPOOL_OST_REPLICAS"), idx, peer, sizeof(peer));
+    if (!peer[0]) return NULL;
+    const char *who = kind == ROCEPOOL_NATIVE_MDT ? "MDT" : "OST";
+    if (!log_base || !log_base[0]) {
+        fprintf(stderr, "rocepool %s repl: a standby (%s) needs the server's log (ROCEPOOL_%s_LOG): not replicated\n", who,
+                peer, who);
+        return NULL;
+    }
+    repl_t *r = calloc(1, sizeof(*r));
+    if (!r) return NULL;
+    r->kind = kind;
+    r->store = store;
+    snprintf(r->peer, sizeof(r->peer), "%s", peer);
+    snprintf(r->state_path, sizeof(r->state_path), "%s.repl", log_base);
+    pthread_mutex_init(&r->st_lk, NULL);
+    for (int i = 0; i < REPL_SHARDS; i++) {
+        pthread_mutex_init(&r->sh[i].lk, NULL);
+        pthread_cond_init(&r->sh[i].cv, NULL);
+        r->sh[i].nslots = 1024;
+        r->sh[i].tab = calloc(1024, sizeof(repl_node *));
+        if (!r->sh[i].tab) return NULL;
+    }
+    const char *ps = getenv("ROCEPOOL_REPL_PROMOTE_S");
+    r->promote_s = ps && *ps ? atof(ps) : 10.0;
+    r->max_queue = env_u64("ROCEPOOL_REPL_MAX_QUEUE", 1u << 20);
+    r->life = rand64();
+    atomic_store(&r->started_ns, mono_ns());
+    /* the role: as kept, else as configured (a fresh standby: term 0, a
+     * fresh primary: term 1 -- so it wins) */
+    int role = 0;
+    unsigned long long term = 0, synced = 0;
+    FILE *f = fopen(r->state_path, "r");
+    if (f) {
+        if (fscanf(f, "role=%d term=%llu synced=%llu", &role, &term, &synced) != 3) role = 0;
+        fclose(f);
+    }
+    if (role != ROLE_PRIMARY && role != ROLE_STANDBY) {
+        const char *rr = getenv("ROCEPOOL_REPL_ROLE");
+        role = rr && !strcmp(rr, "standby") ? ROLE_STANDBY : ROLE_PRIMARY;
+        term = role == ROLE_PRIMARY ? 1 : 0;
+        synced = 0;
+    }
+    atomic_store(&r->role, role);
+    atomic_store(&r->term, term);
+    atomic_store(&r->synced, synced);
+    pthread_mutex_lock(&r->st_lk);
+    repl_save(r);
+    pthread_mutex_unlock(&r->st_lk);
+    /* a primary asks first: a standby that took over meanwhile wins */
+    if (role == ROLE_PRIMARY) {
+        repl_link l = {0};
+        int pr;
+        uint64_t pt, psync;
+        if (!repl_hello(r, &l, &pr, &pt, &psync) && pr == ROLE_PRIMARY && pt > term) repl_demote(r, pt);
+        repl_link_close(&l);
+    }
+    for (int i = 0; i < REPL_SHARDS; i++) {
+        repl_arg *a = malloc(sizeof(*a));
+        pthread_t t;
+        if (!a) continue;
+        a->r = r;
+        a->i = i;
+        if (pthread_create(&t, NULL, repl_shipper, a)) { free(a); continue; }
+        pthread_detach(t);
+    }
+    pthread_t t;
+    if (!pthread_create(&t, NULL, repl_manager, r)) pthread_detach(t);
+    fprintf(stderr, "rocepool %s repl: %s, term %llu, its %s %s%s\n", who,
+            atomic_load(&r->role) == ROLE_PRIMARY ? "primary" : "standby", (unsigned long long)atomic_load(&r->term),
+            atomic_load(&r->role) == ROLE_PRIMARY ? "standby" : "primary", peer,
+            atomic_load(&r->role) == ROLE_STANDBY && r->promote_s > 0 ? " (takes over when it is silent)" : "");
+    return r;
+}
+
+static int repl_stats_json(buf_t *b, repl_t *r) {
+    return buf_printf(b, ", \"repl\": {\"role\": \"%s\", \"term\": %llu, \"peer\": \"%s\", \"peer_up\": %s, \"in_sync\": %s, "
+                      "\"resyncing\": %s, \"synced\": %s, \"queued\": %llu, \"marked\": %llu, \"items\": %llu, \"bytes\": %llu, "
+                      "\"rpcs\": %llu, \"errors\": %llu, \"resyncs\": %llu, \"checked\": %llu, \"mismatched\": %llu, "
+                      "\"swept\": %llu, \"applied\": %llu, \"promotions\": %llu, \"demotions\": %llu, \"overflows\": %llu, "
+                      "\"last_resync_s\": %.3f}",
+                      atomic_load(&r->role) == ROLE_PRIMARY ? "primary" : "standby", (unsigned long long)atomic_load(&r->term),
+                      r->peer, atomic_load(&r->peer_up) ? "true" : "false", atomic_load(&r->in_sync) ? "true" : "false",
+                      atomic_load(&r->resyncing) ? "true" : "false", atomic_load(&r->synced) ? "true" : "false",
+                      (unsigned long long)atomic_load(&r->queued), (unsigned long long)atomic_load(&r->marked),
+                      (unsigned long long)atomic_load(&r->items), (unsigned long long)atomic_load(&r->bytes),
+                      (unsigned long long)atomic_load(&r->rpcs), (unsigned long long)atomic_load(&r->errors),
+                      (unsigned long long)atomic_load(&r->resyncs), (unsigned long long)atomic_load(&r->checked),
+                      (unsigned long long)atomic_load(&r->mismatched), (unsigned long long)atomic_load(&r->swept),
+                      (unsigned long long)atomic_load(&r->applied), (unsigned long long)atomic_load(&r->promotions),
+                      (unsigned long long)atomic_load(&r->demotions), (unsigned long long)atomic_load(&r->overflows),
+                      (double)atomic_load(&r->resync_ns) / 1e9);
+}
+
 
 static uint64_t thread_cpu_ns(void) {
     struct timespec ts;
@@ -2767,6 +4408,11 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
                             (unsigned long long)atomic_load(&n->log_waited));
         }
     }
+    if (!rc && (n->ost ? n->ost->wal : n->mdt->wal))
+        rc = lm_stats_json(&b, n->ost ? &n->ost->lm : &n->mdt->lm);
+    if (!rc && n->mdt && n->mdt->wal)
+        rc = buf_printf(&b, ", \"ckpt_skipped\": %llu", (unsigned long long)atomic_load(&n->mdt->ckpt_skipped));
+    if (!rc && (n->ost ? n->ost->repl : n->mdt->repl)) rc = repl_stats_json(&b, n->ost ? n->ost->repl : n->mdt->repl);
     if (!rc && n->mdt)  /* asynchronous commit (mdt_store) */
         rc = buf_printf(&b, ", \"mdt_async\": {\"early_replies\": %llu, \"replays_applied\": %llu, "
                         "\"replays_skipped\": %llu, \"replays_late\": %llu, \"recovering\": %s}",
@@ -2844,17 +4490,26 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
     mdt_store *md = n->kind == ROCEPOOL_NATIVE_MDT ? n->mdt : NULL;
     uint8_t mop = f.op == OP_MDT && f.val_len ? f.val[0] : 0;
     uint8_t *out;
-    if (md && atomic_load(&md->recovering)) {
+    repl_t *rp = n->ost ? n->ost->repl : n->mdt ? n->mdt->repl : NULL;
+    if (rp && f.op != OP_REPL && atomic_load(&rp->role) == ROLE_STANDBY) {
+        /* the client goes to the other server of the pair */
+        out = frame_error(&f, "STANDBY", "a standby: its primary serves", resp_len);
+        goto done;
+    }
+    if (f.op == OP_REPL) {
+        if (n->ost) slab_reap(n->ost);
+        out = repl_handle(n, rp, &f, resp_len);  /* a standby's apply: durable before the reply, like a client's change */
+        if (n->ost) slab_release_queue(tl_wal_lsn);
+        md = NULL;
+    } else if (md && atomic_load(&md->recovering)) {
         /* after a restart: replays are collected, everything else waits */
         out = f.flags & RQF_REPLAY ? mdt_replay_in(md, &f, resp_len)
                                    : frame_error(&f, "RECOVERING", "the MDT is collecting replayed changes", resp_len);
         goto done;
-    }
-    if (md && (f.flags & RQF_REPLAY)) {
+    } else if (md && (f.flags & RQF_REPLAY)) {
         out = mdt_replay_in(md, &f, resp_len);  /* too late: refused */
         goto done;
-    }
-    if (md && mop == MDT_OP_COMMIT) {
+    } else if (md && mop == MDT_OP_COMMIT) {
         out = frame_simple(OP_MDT_OK, &f, NULL, 0, resp_len);
         if (md->wal && out) {
             tl_wal = md->wal;
@@ -2882,7 +4537,10 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
         } else if (lsn > committed) {
             committed = lsn;  /* the reply leaves once this is durable */
         }
-        out = mdt_tx_wrap(out, resp_len, md->epoch, lsn, committed);
+        /* a transno counts within this life (the client's view): LSNs go on
+         * across lives */
+        uint64_t lb = md->life_base;
+        out = mdt_tx_wrap(out, resp_len, md->epoch, lsn > lb ? lsn - lb : 0, committed > lb ? committed - lb : 0);
     }
     if (tl_wal_lsn) {  /* the change is acknowledged only once it is durable */
         int wrc = 0;
@@ -2999,6 +4657,13 @@ rocepool_native_t *rocepool_native_start(int kind, const char *bind_address, siz
     if (kind == ROCEPOOL_NATIVE_OST) n->ost = ost_new();
     else if (kind == ROCEPOOL_NATIVE_MDT) n->mdt = mdt_new();
     if (!n->ost && !n->mdt) { free(n); return NULL; }
+    {   /* a standby of its own (ROCEPOOL_*_REPLICAS): the n-th server of a kind in this process takes the n-th */
+        static atomic_int n_repl[3];
+        int idx = atomic_fetch_add(&n_repl[kind == ROCEPOOL_NATIVE_MDT ? 2 : 1], 1);
+        logmgr_t *lm = n->ost ? &n->ost->lm : &n->mdt->lm;
+        struct repl *r = repl_start(kind, n->ost ? (void *)n->ost : (void *)n->mdt, (n->ost ? n->ost->wal : n->mdt->wal) ? lm->base : NULL, idx);
+        if (n->ost) n->ost->repl = r; else n->mdt->repl = r;
+    }
     if (n->ost && n->ost->tier) {
         const char *p2p = getenv("ROCEPOOL_P2PMEM");
         if (p2p && *p2p) {

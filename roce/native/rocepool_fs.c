@@ -399,7 +399,8 @@ static int mdt_entry_call(const char *path, const uint8_t *req, size_t rlen, att
 }
 
 /* ---- one-sided lookups (the MDT's slot table, rocepool_servers.c) ---- */
-typedef struct { uint64_t addr, nslots; uint32_t rkey; int state; pthread_mutex_t lk; } mdt_tab_t;  /* state: 0 unknown, 1 ok, -1 none */
+/* state: 0 unknown, 1 ok, -1 none; gen: the peer's (a server pair's switch makes it another server's table) */
+typedef struct { uint64_t addr, nslots; uint32_t rkey; _Atomic int state; unsigned gen; pthread_mutex_t lk; } mdt_tab_t;
 static mdt_tab_t g_mdt_tab[MAX_PEERS];
 static atomic_ullong g_direct_lookups, g_direct_lookup_misses;
 #define MD_SLOT 256
@@ -419,13 +420,16 @@ void rp_lookup_stats(uint64_t *direct, uint64_t *misses) {
 
 static mdt_tab_t *mdt_table(peer_t *p) {
     mdt_tab_t *t = &g_mdt_tab[p - g_mdts];
-    if (t->state) return t;
+    if (t->state && t->gen == atomic_load(&p->gen)) return t;
     static pthread_mutex_t once_lk = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_lock(&once_lk);
-    if (!t->state) {
+    if (!t->state || t->gen != atomic_load(&p->gen)) {
+        t->state = 0;
+        unsigned g = atomic_load(&p->gen);
         uint8_t req[1] = {12};
         resp_t r;
         int rc = mdt_rpc(p, "", req, 1, NULL, 0, &r);
+        t->gen = g == atomic_load(&p->gen) ? g : g - 1;  /* switched meanwhile: fetched again next time */
         if (rc == 0 && r.op == OP_MDT_OK && r.vlen >= 20) {
             memcpy(&t->addr, r.val, 8);
             memcpy(&t->nslots, r.val + 8, 8);
@@ -479,8 +483,10 @@ static int mdt_lookup_direct(peer_t *p, const char *path, attr_t *a) {
     size_t scratch = (MD_PROBE + 1) * MD_SLOT + 64;
     if (!tl_slots) { tl_slots = rp_bulk_alloc(scratch); if (!tl_slots) return -EAGAIN; }
     roce_mem_t *mem = rp_bulk_mem(tl_slots, scratch);
+    unsigned g = t->gen;
     rp_read_t rd = { t->addr + start * MD_SLOT, t->rkey, MD_PROBE * MD_SLOT, mem, tl_slots };
     if (rp_rdma_read(p, &rd, 1)) return -EAGAIN;
+    if (g != atomic_load(&p->gen)) return -EAGAIN;  /* read from the pair's other server: not its table */
     for (int i = 0; i < MD_PROBE; i++) {
         const uint8_t *sl = tl_slots + (size_t)i * MD_SLOT;
         uint64_t seq, ph, tail;

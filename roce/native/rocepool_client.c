@@ -175,10 +175,23 @@ void rp_bulk_stats(uint64_t *bytes, uint64_t *in_use, uint64_t *zero_copy_bytes,
 }
 
 /* ---------------------------------------------------------------- pooled RPC */
+int rp_failover_ms = 60000;
+
 void rp_peer_init(rp_peer_t *p, const char *addr) {
     memset(p, 0, sizeof(*p));
-    snprintf(p->addr, sizeof(p->addr), "%s", addr);
+    const char *bar = strchr(addr, '|');
+    if (bar) {
+        snprintf(p->addrs[0], sizeof(p->addrs[0]), "%.*s", (int)(bar - addr), addr);
+        snprintf(p->addrs[1], sizeof(p->addrs[1]), "%s", bar + 1);
+        p->naddr = 2;
+    } else {
+        snprintf(p->addrs[0], sizeof(p->addrs[0]), "%s", addr);
+        p->naddr = 1;
+    }
+    p->addr = p->addrs[0];
     pthread_mutex_init(&p->lk, NULL);
+    const char *fo = getenv("ROCEPOOL_FAILOVER_S");
+    if (fo && atof(fo) > 0) rp_failover_ms = (int)(atof(fo) * 1000);
     const char *fe = getenv("ROCE_MAX_FRAME_BYTES");
     if (fe && atol(fe) > 0) rp_frame_bytes = (size_t)atol(fe);
 }
@@ -187,6 +200,23 @@ void rp_peer_close_idle(rp_peer_t *p) {
     pthread_mutex_lock(&p->lk);
     while (p->nidle > 0) roce_client_close(p->idle[--p->nidle]);
     pthread_mutex_unlock(&p->lk);
+}
+
+/* the pair's other server from now on -- unless another thread switched
+ * already since `seen` */
+static void peer_switch(rp_peer_t *p, unsigned seen, const char *why) {
+    roce_conn_t *old[RP_POOL_IDLE_MAX];
+    int n = 0;
+    pthread_mutex_lock(&p->lk);
+    if (atomic_load(&p->gen) == seen) {
+        const char *from = p->addr;
+        p->addr = p->addr == p->addrs[0] ? p->addrs[1] : p->addrs[0];
+        atomic_fetch_add(&p->gen, 1);
+        while (p->nidle > 0) old[n++] = p->idle[--p->nidle];  /* connections to the other one */
+        fprintf(stderr, "rocepool: %s %s: to %s\n", from, why, p->addr);
+    }
+    pthread_mutex_unlock(&p->lk);
+    for (int i = 0; i < n; i++) roce_client_close(old[i]);
 }
 
 static roce_conn_t *peer_checkout(rp_peer_t *p) {
@@ -205,9 +235,9 @@ static roce_conn_t *peer_checkout(rp_peer_t *p) {
     return c;
 }
 
-static void peer_checkin(rp_peer_t *p, roce_conn_t *c) {
+static void peer_checkin(rp_peer_t *p, roce_conn_t *c, unsigned gen) {
     pthread_mutex_lock(&p->lk);
-    if (p->nidle < RP_POOL_IDLE_MAX) {
+    if (gen == atomic_load(&p->gen) && p->nidle < RP_POOL_IDLE_MAX) {
         p->idle[p->nidle] = c;
         p->idle_at[p->nidle] = rp_mono_s();
         p->nidle++;
@@ -261,6 +291,11 @@ int rp_rpc_v(rp_peer_t *p, uint8_t op, const char *key, const void *v1, size_t n
     }
     atomic_fetch_add(&p->rpcs, 1);
     int rc = -EIO;
+    double deadline = 0;
+    int tries = 0;
+again:;
+    unsigned g = atomic_load(&p->gen);
+    rc = -EIO;
     for (int attempt = 0; attempt < 1 + RP_POOL_IDLE_MAX; attempt++) {
         roce_conn_t *c = peer_checkout(p);
         if (!c) c = roce_client_connect_shared(p->addr, rp_timeout_ms < 10000 ? rp_timeout_ms : 10000, rp_frame_bytes);
@@ -285,7 +320,7 @@ int rp_rpc_v(rp_peer_t *p, uint8_t op, const char *key, const void *v1, size_t n
         memcpy(&rkl, r + 16, 4);
         memcpy(&rvl, r + 20, 4);
         if (rid != id || 24 + (size_t)rkl + rvl != rl) { roce_reply_release(&reply); roce_client_close(c); break; }
-        peer_checkin(p, c);
+        peer_checkin(p, c, g);
         out->reply = reply;
         out->raw = r;
         out->op = r[4];
@@ -299,6 +334,25 @@ int rp_rpc_v(rp_peer_t *p, uint8_t op, const char *key, const void *v1, size_t n
         }
         rc = 0;
         break;
+    }
+    if (p->naddr == 2) {
+        /* a server pair: unreachable, or a standby -> the other one, until
+         * one answers or ROCEPOOL_FAILOVER_S is over */
+        int standby = rc == 0 && out->op == RP_ERROR && !strcmp(out->code, "STANDBY");
+        if (rc || standby) {
+            double now = rp_mono_s();
+            if (!deadline) deadline = now + rp_failover_ms / 1000.0;
+            if (now < deadline) {
+                if (standby) rp_resp_free(out);
+                peer_switch(p, g, standby ? "is a standby" : "unreachable");
+                if (++tries % 2 == 0) {  /* both tried: give the standby time to take over */
+                    struct timespec ts = {0, 100 * 1000000L};
+                    nanosleep(&ts, NULL);
+                }
+                goto again;
+            }
+            if (standby) { rp_resp_free(out); rc = -EIO; }
+        }
     }
     if (buf != stack) free(buf);
     return rc;
@@ -475,7 +529,9 @@ void rp_direct_stats(uint64_t *reads, uint64_t *bytes, uint64_t *leases, uint64_
 
 int rp_ost_lease(rp_peer_t *p, const char *key, rp_lease_t *out) {
     rp_resp_t r;
+    unsigned g = atomic_load(&p->gen);
     int rc = rp_rpc(p, RP_LEASE, key, NULL, 0, NULL, 0, &r);
+    out->gen = g == atomic_load(&p->gen) ? g : g - 1;  /* switched during the call: never used */
     if (rc) return rc;
     if (r.op == RP_LEASE_OK && r.vlen >= 44) {
         out->version = be64(r.val);
@@ -494,6 +550,7 @@ int rp_ost_lease(rp_peer_t *p, const char *key, rp_lease_t *out) {
 }
 
 int rp_rdma_read(rp_peer_t *p, const rp_read_t *reads, int n) {
+    unsigned g = atomic_load(&p->gen);
     for (int attempt = 0; attempt < 1 + RP_POOL_IDLE_MAX; attempt++) {
         roce_conn_t *c = peer_checkout(p);
         if (!c) c = roce_client_connect_shared(p->addr, rp_timeout_ms < 10000 ? rp_timeout_ms : 10000, rp_frame_bytes);
@@ -504,7 +561,7 @@ int rp_rdma_read(rp_peer_t *p, const rp_read_t *reads, int n) {
             if (s == ROCE_ERR_NOT_DELIVERED) continue;
             return -EIO;
         }
-        peer_checkin(p, c);
+        peer_checkin(p, c, g);
         return 0;
     }
     return -EIO;
@@ -543,6 +600,8 @@ int rp_ost_read_direct_mem(rp_peer_t *p, const rp_lease_t *l, uint64_t off, size
        reused, so an unchanged header afterwards means no writer touched
        the object in between. */
     int ordered = roce_transport_reads_ordered();
+    unsigned g = atomic_load(&p->gen);
+    if (l->gen != g) return -EAGAIN;  /* a lease of the pair's other server */
     for (int attempt = 0; attempt < 1 + RP_POOL_IDLE_MAX; attempt++) {
         roce_conn_t *c = peer_checkout(p);
         if (!c) c = roce_client_connect_shared(p->addr, rp_timeout_ms < 10000 ? rp_timeout_ms : 10000, rp_frame_bytes);
@@ -559,7 +618,7 @@ int rp_ost_read_direct_mem(rp_peer_t *p, const rp_lease_t *l, uint64_t off, size
             if (s == ROCE_ERR_NOT_DELIVERED) continue;
             break;
         }
-        peer_checkin(p, c);
+        peer_checkin(p, c, g);
         rc = 0;
         break;
     }

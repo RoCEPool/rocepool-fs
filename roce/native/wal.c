@@ -17,6 +17,9 @@
 #define WAL_MAX_SYNC 8
 #define WAL_BLOCK 4096u                 /* every commit starts on a block: O_DIRECT */
 #define WAL_PAD 0x80000000u             /* length flag: a pad record, skipped by replay */
+#define WAL_META 0x40000000u            /* length flag: a segment's header (its base LSN), not a record */
+#define WAL_FLAGS (WAL_PAD | WAL_META)
+#define WAL_META_LEN 12u                /* "RPSG" + u64 LE base */
 #define WAL_MAX_RECORD (2u << 20)       /* larger records are refused */
 #define WAL_BATCH (256u << 10)          /* a commit takes up to this much (whole records) */
 #define WAL_MAX_PIPE 8                  /* commits in flight at most */
@@ -67,6 +70,11 @@ struct wal {
     pthread_t th[WAL_MAX_PIPE + 1];
     int nth;
     double cal_append, cal_direct, cal_direct4;  /* records/s the calibration measured (0: not run) */
+    /* wal_rotate: records up to `cut` go to the current file; commits stop
+     * there until the file is switched (cutting) */
+    int cutting;
+    uint64_t cut;
+    atomic_ullong rotations;
 };
 
 static uint32_t crc_table[256];
@@ -133,10 +141,13 @@ void wal_path(const char *spec, int n, char *out, size_t out_len) {
 }
 
 /* ------------------------------------------------------------ replay */
-/* Scans the log: every whole record in order to cb (not pad records);
- * stops at a zero header (the end), a short or corrupt record, or when cb
- * says so. *good = where the next record goes. */
-static long scan(int fd, int (*cb)(void *, const uint8_t *, size_t), void *user, uint64_t *good, int *torn) {
+typedef int (*lsn_cb)(void *user, uint64_t lsn, const uint8_t *rec, size_t len);
+
+/* Scans the log: every whole record in order to cb (not pad records),
+ * with its LSN (*base + its number); a segment's header record (WAL_META,
+ * first in the file) sets *base. Stops at a zero header (the end), a short
+ * or corrupt record, or when cb says so. *good = where the next record goes. */
+static long scan(int fd, lsn_cb cb, void *user, uint64_t *base, uint64_t *good, int *torn) {
     FILE *f = fdopen(dup(fd), "rb");
     if (!f) return -errno;
     long n = 0;
@@ -150,10 +161,11 @@ static long scan(int fd, int (*cb)(void *, const uint8_t *, size_t), void *user,
         if (h < 8) { *torn = 1; break; }
         uint32_t lf = get_u32(hdr), crc = get_u32(hdr + 4);
         if (lf == 0 && crc == 0) break;                     /* zeros: the end */
-        int pad = (lf & WAL_PAD) != 0;
-        uint32_t len = lf & ~WAL_PAD;
+        int pad = (lf & WAL_PAD) != 0, meta = (lf & WAL_META) != 0;
+        uint32_t len = lf & ~WAL_FLAGS;
         /* a record has a payload; a pad may not (exactly 8 bytes to the block) */
-        if ((len == 0 && !pad) || len > WAL_MAX_RECORD || (pad && len > 2 * WAL_BLOCK)) { *torn = 1; break; }
+        if ((len == 0 && !pad) || len > WAL_MAX_RECORD || (pad && len > 2 * WAL_BLOCK) || (pad && meta) ||
+            (meta && (len != WAL_META_LEN || pos != 0))) { *torn = 1; break; }
         if (len > cap || !rec) {
             uint8_t *r = realloc(rec, len ? len : 1);
             if (!r) { free(rec); fclose(f); return -ENOMEM; }
@@ -164,8 +176,15 @@ static long scan(int fd, int (*cb)(void *, const uint8_t *, size_t), void *user,
         if (pad && (pos + 8 + len) % WAL_BLOCK) { *torn = 1; break; }  /* a pad always ends a block */
         pos += 8 + (uint64_t)len;
         if (pad) continue;
+        if (meta) {
+            if (memcmp(rec, "RPSG", 4)) { *torn = 1; pos = 0; break; }
+            uint64_t b = 0;
+            for (int i = 0; i < 8; i++) b |= (uint64_t)rec[4 + i] << (8 * i);
+            *base = b;
+            continue;
+        }
         n++;
-        if (cb && cb(user, rec, len)) break;
+        if (cb && cb(user, *base + (uint64_t)n, rec, len)) break;
     }
     free(rec);
     fclose(f);
@@ -209,12 +228,11 @@ static pthread_mutex_t ends_lk = PTHREAD_MUTEX_INITIALIZER;
 static struct { char path[1024]; uint64_t end; } ends[64];
 static int nends;
 
-static long replay_fd(int fd, const char *path, int (*cb)(void *, const uint8_t *, size_t), void *user,
-                      uint64_t *end) {
+static long replay_fd(int fd, const char *path, lsn_cb cb, void *user, uint64_t *base, uint64_t *end) {
     pthread_once(&crc_once, crc_init);
     uint64_t good = 0;
     int torn = 0;
-    long n = scan(fd, cb, user, &good, &torn);
+    long n = scan(fd, cb, user, base, &good, &torn);
     if (n < 0) return n;
     uint64_t nz = 0;
     int rc = clear_after(fd, good, &nz);
@@ -235,12 +253,28 @@ static long replay_fd(int fd, const char *path, int (*cb)(void *, const uint8_t 
     return n;
 }
 
+struct plain_cb { int (*cb)(void *, const uint8_t *, size_t); void *user; };
+static int plain_adapter(void *u, uint64_t lsn, const uint8_t *rec, size_t len) {
+    (void)lsn;
+    struct plain_cb *p = u;
+    return p->cb(p->user, rec, len);
+}
+
 long wal_replay(const char *path, int (*cb)(void *user, const uint8_t *rec, size_t len), void *user) {
+    struct plain_cb p = {cb, user};
+    uint64_t last;
+    return wal_replay_lsn(path, 0, cb ? plain_adapter : NULL, &p, &last);
+}
+
+long wal_replay_lsn(const char *path, uint64_t base, int (*cb)(void *user, uint64_t lsn, const uint8_t *rec, size_t len),
+                    void *user, uint64_t *last) {
+    *last = base;
     int fd = open(path, O_RDWR | O_CLOEXEC);
     if (fd < 0) return errno == ENOENT ? 0 : -errno;
     uint64_t end = 0;
-    long n = replay_fd(fd, path, cb, user, &end);
+    long n = replay_fd(fd, path, cb, user, &base, &end);
     close(fd);
+    if (n >= 0) *last = base + (uint64_t)n;
     if (n >= 0) {
         pthread_mutex_lock(&ends_lk);
         int i = 0;
@@ -305,13 +339,19 @@ static void fail_locked(wal_t *w, int rc) {
 static size_t take_len(const wal_t *w, uint64_t *nrec) {
     size_t off = 0;
     *nrec = 0;
-    while (off + 8 <= w->len) {
+    uint64_t lim = w->cutting ? w->cut - w->buf_seq : UINT64_MAX;  /* not past a rotation's cut */
+    while (off + 8 <= w->len && *nrec < lim) {
         size_t r = 8 + (get_u32(w->buf + off) & ~WAL_PAD);
         if (off && off + r > WAL_BATCH) break;
         off += r;
         ++*nrec;
     }
     return off;
+}
+
+/* something appended may be committed now (w->lk held) */
+static int can_commit(const wal_t *w) {
+    return w->len && w->nfl < w->pipe && !(w->cutting && w->buf_seq >= w->cut);
 }
 
 static int grow(uint8_t **buf, size_t *cap, size_t need, size_t keep) {
@@ -398,7 +438,8 @@ static void commit_one(wal_t *w, uint8_t **mine, size_t *mine_cap) {
     }
     if (rc) pthread_cond_broadcast(&w->cv);
     /* more to commit and a flusher may be idle */
-    if (w->want && w->len && w->nfl < w->pipe) pthread_cond_signal(&w->fcv);
+    if (w->want && can_commit(w)) pthread_cond_signal(&w->fcv);
+    if (w->cutting) pthread_cond_broadcast(&w->cv);  /* wal_rotate waits for the cut's commits */
     /* wake the prefill (busy already when its lock is held: never wait
      * for it -- it holds the lock through a whole chunk of zeros) */
     if (w->dfd >= 0 && !pthread_mutex_trylock(&w->ext_lk)) {
@@ -416,7 +457,7 @@ static void *flusher_main(void *arg) {
     size_t mine_cap = 0;
     pthread_mutex_lock(&w->lk);
     for (;;) {
-        while (!w->stop && !(w->want && w->len && !w->err && w->nfl < w->pipe)) pthread_cond_wait(&w->fcv, &w->lk);
+        while (!w->stop && !(w->want && !w->err && can_commit(w))) pthread_cond_wait(&w->fcv, &w->lk);
         if (w->stop) break;
         commit_one(w, &mine, &mine_cap);
     }
@@ -553,6 +594,10 @@ static void calibrate(const char *path, int want_direct, int want_pipe, int *dir
 wal_t *wal_open(const char *path, char *err, size_t err_len) { return wal_open_as(path, -1, 0, err, err_len); }
 
 wal_t *wal_open_as(const char *path, int as_direct, int as_pipe, char *err, size_t err_len) {
+    return wal_open_base(path, as_direct, as_pipe, 0, err, err_len);
+}
+
+wal_t *wal_open_base(const char *path, int as_direct, int as_pipe, uint64_t base, char *err, size_t err_len) {
     pthread_once(&crc_once, crc_init);
     int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
     if (fd < 0) { snprintf(err, err_len, "log %s: %s", path, strerror(errno)); return NULL; }
@@ -564,7 +609,8 @@ wal_t *wal_open_as(const char *path, int as_direct, int as_pipe, char *err, size
         if (!strcmp(ends[i].path, path)) { end = ends[i].end; known = 1; ends[i] = ends[--nends]; break; }
     pthread_mutex_unlock(&ends_lk);
     if (!known) {
-        long n = replay_fd(fd, path, NULL, NULL, &end);
+        uint64_t b = 0;
+        long n = replay_fd(fd, path, NULL, NULL, &b, &end);
         if (n < 0) { snprintf(err, err_len, "log %s: %s", path, strerror((int)-n)); close(fd); return NULL; }
     }
     /* ROCEPOOL_LOG_DIRECT / ROCEPOOL_LOG_PIPELINE set: as told; else measured */
@@ -579,6 +625,8 @@ wal_t *wal_open_as(const char *path, int as_direct, int as_pipe, char *err, size
     wal_t *w = open_core(path, fd, end, direct, pipe, (uint64_t)env_int("ROCEPOOL_LOG_PREFILL_MIB", 32, 1, 4096) << 20,
                          err, err_len);
     if (!w) { close(fd); return NULL; }
+    w->next_seq = w->buf_seq = w->durable_lsn = base;  /* LSNs go on from the log's last one */
+    atomic_store(&w->durable_pub, base);
     w->cal_append = res[0];
     w->cal_direct = res[1];
     w->cal_direct4 = res[2];
@@ -634,7 +682,7 @@ int wal_wait(wal_t *w, uint64_t lsn) {
     while (w->durable_lsn < lsn && !w->err) {
         /* a free slot: commit it here, no hand-off to another thread (the
          * records this one waits for are taken first) */
-        if (w->len && w->nfl < w->pipe && w->buf_seq < lsn) commit_one(w, &mine, &mine_cap);
+        if (can_commit(w) && w->buf_seq < lsn) commit_one(w, &mine, &mine_cap);
         else pthread_cond_wait(&w->cv, &w->lk);
     }
     int rc = w->durable_lsn >= lsn ? 0 : w->err;
@@ -660,7 +708,7 @@ int wal_ready(wal_t *w, uint64_t lsn) {
 void wal_kick(wal_t *w) {
     pthread_mutex_lock(&w->lk);
     w->want = 1;
-    if (w->len && w->nfl < w->pipe) pthread_cond_signal(&w->fcv);
+    if (can_commit(w)) pthread_cond_signal(&w->fcv);
     pthread_mutex_unlock(&w->lk);
 }
 
@@ -684,4 +732,254 @@ void wal_stats_more(wal_t *w, int *direct, int *pipeline, uint64_t *inflight_max
     pthread_mutex_unlock(&w->lk);
     *inflight_max = atomic_load(&w->inflight_max);
     *prefill_bytes = atomic_load(&w->prefill_bytes);
+}
+
+/* ---------------------------------------------------------- segments */
+static int fsync_parent(const char *path) {
+    char dir[4096];
+    snprintf(dir, sizeof(dir), "%s", path);
+    char *slash = strrchr(dir, '/');
+    if (!slash) snprintf(dir, sizeof(dir), ".");
+    else if (slash == dir) slash[1] = 0;
+    else *slash = 0;
+    int d = open(dir, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (d < 0) return -errno;
+    int rc = fsync(d) ? -errno : 0;
+    close(d);
+    return rc;
+}
+
+int wal_rotate(wal_t *w, const char *path, uint64_t *cut_out) {
+    pthread_once(&crc_once, crc_init);
+    int fd = open(path, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    if (fd < 0) return -errno;
+    /* the cut: every record appended so far stays in the current file */
+    pthread_mutex_lock(&w->lk);
+    if (w->err || w->cutting) {
+        int rc = w->err ? w->err : -EBUSY;
+        pthread_mutex_unlock(&w->lk);
+        close(fd);
+        unlink(path);
+        return rc;
+    }
+    uint64_t cut = w->next_seq;
+    w->cut = cut;
+    w->cutting = 1;
+    int direct = w->dfd >= 0;
+    uint64_t chunk = w->chunk;
+    pthread_mutex_unlock(&w->lk);
+
+    /* the new file, off every lock: its header (base = the cut), padded to a
+     * block, synced; for direct writes a chunk of zeros ahead of it */
+    uint8_t first[2 * WAL_BLOCK];
+    memset(first, 0, sizeof(first));
+    uint8_t meta[WAL_META_LEN];
+    memcpy(meta, "RPSG", 4);
+    for (int i = 0; i < 8; i++) meta[4 + i] = (uint8_t)(cut >> (8 * i));
+    put_u32(first, WAL_META_LEN | WAL_META);
+    put_u32(first + 4, crc32_of(0, meta, WAL_META_LEN));
+    memcpy(first + 8, meta, WAL_META_LEN);
+    size_t hl = 8 + WAL_META_LEN, pad = pad_for(hl);
+    if (pad) put_pad(first + hl, pad);
+    uint64_t start = hl + pad;
+    int rc = pwrite_all(fd, first, (size_t)start, 0);
+    uint64_t prefilled = start;
+    int dfd = -1;
+    if (!rc && direct) {
+        static uint8_t zero[1 << 20];
+        uint64_t to = start + chunk;
+        for (uint64_t o = start; o < to && !rc; o += sizeof(zero)) {
+            size_t n = to - o < sizeof(zero) ? (size_t)(to - o) : sizeof(zero);
+            rc = pwrite_all(fd, zero, n, o);
+        }
+        if (!rc) prefilled = to & ~(uint64_t)(WAL_BLOCK - 1);
+        dfd = rc ? -1 : open(path, O_RDWR | O_DIRECT | O_DSYNC | O_CLOEXEC);
+    }
+    if (!rc && fdatasync(fd)) rc = -errno;
+    if (!rc) rc = fsync_parent(path);
+
+    pthread_mutex_lock(&w->lk);
+    /* the current file's last commits: everything up to the cut durable */
+    static __thread uint8_t *mine;
+    static __thread size_t mine_cap;
+    w->want = 1;
+    while (!rc && !w->err && !(w->buf_seq == w->cut && w->nfl == 0)) {
+        if (can_commit(w)) commit_one(w, &mine, &mine_cap);
+        else pthread_cond_wait(&w->cv, &w->lk);
+    }
+    if (!rc && w->err) rc = w->err;
+    int ofd = -1, odfd = -1;
+    if (!rc) {
+        pthread_mutex_lock(&w->ext_lk);
+        ofd = w->fd;
+        odfd = w->dfd;
+        w->fd = fd;
+        w->dfd = dfd;
+        w->buf_start = start;
+        __atomic_store_n(&w->next_lsn, start + w->len, __ATOMIC_RELAXED);
+        w->prefilled = prefilled;
+        pthread_mutex_unlock(&w->ext_lk);
+        atomic_fetch_add(&w->rotations, 1);
+    }
+    w->cutting = 0;
+    pthread_cond_broadcast(&w->cv);
+    pthread_cond_broadcast(&w->fcv);
+    pthread_mutex_unlock(&w->lk);
+    if (rc) {
+        if (dfd >= 0) close(dfd);
+        close(fd);
+        unlink(path);
+        return rc;
+    }
+    if (odfd >= 0) close(odfd);
+    close(ofd);
+    *cut_out = cut;
+    return 0;
+}
+
+uint64_t wal_file_bytes(wal_t *w) { return __atomic_load_n(&w->next_lsn, __ATOMIC_RELAXED); }
+uint64_t wal_rotations(wal_t *w) { return atomic_load(&w->rotations); }
+
+/* -------------------------------------------------------- checkpoints */
+/* A checkpoint file: records framed like the log's (u32 LE length, u32 LE
+ * CRC-32, payload), written to <path>.tmp and renamed into place once
+ * whole and synced; the last record is "RPCE" + u64 LE count of the ones
+ * before it, so a file cut short is never taken for a whole one. */
+struct ckpt_writer {
+    int fd;
+    char path[1024], tmp[1100];
+    uint8_t *buf;
+    size_t len, cap;
+    uint64_t off, count, bytes;
+    uint64_t mbps, t0, written;  /* throttle: at most mbps MiB/s on average */
+};
+
+ckpt_writer_t *ckpt_begin(const char *path, uint64_t mbps) {
+    pthread_once(&crc_once, crc_init);
+    ckpt_writer_t *c = calloc(1, sizeof(*c));
+    if (!c) return NULL;
+    snprintf(c->path, sizeof(c->path), "%s", path);
+    snprintf(c->tmp, sizeof(c->tmp), "%s.tmp", path);
+    c->fd = open(c->tmp, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    if (c->fd < 0) { free(c); return NULL; }
+    c->cap = 1 << 20;
+    c->buf = malloc(c->cap);
+    if (!c->buf) { close(c->fd); unlink(c->tmp); free(c); return NULL; }
+    c->mbps = mbps;
+    c->t0 = mono_ns();
+    return c;
+}
+
+static int ckpt_flush(ckpt_writer_t *c) {
+    if (!c->len) return 0;
+    int rc = pwrite_all(c->fd, c->buf, c->len, c->off);
+    if (rc) return rc;
+    c->off += c->len;
+    c->written += c->len;
+    c->len = 0;
+    if (c->mbps) {  /* stay under the rate: sleep off what is ahead of it */
+        uint64_t due_ns = c->written * 1000000000ull / (c->mbps << 20), el = mono_ns() - c->t0;
+        if (due_ns > el) {
+            uint64_t d = due_ns - el;
+            struct timespec ts = {(time_t)(d / 1000000000ull), (long)(d % 1000000000ull)};
+            nanosleep(&ts, NULL);
+        }
+    }
+    return 0;
+}
+
+int ckpt_add(ckpt_writer_t *c, const void *a, size_t alen, const void *b, size_t blen, const void *d, size_t dlen) {
+    size_t n = alen + blen + dlen;
+    if (n == 0 || n > WAL_MAX_RECORD) return -EINVAL;
+    if (c->len + 8 + n > c->cap) {
+        int rc = ckpt_flush(c);
+        if (rc) return rc;
+        if (8 + n > c->cap) {
+            uint8_t *nb = realloc(c->buf, 8 + n);
+            if (!nb) return -ENOMEM;
+            c->buf = nb;
+            c->cap = 8 + n;
+        }
+    }
+    uint32_t crc = crc32_of(0, a, alen);
+    if (blen) crc = crc32_of(crc, b, blen);
+    if (dlen) crc = crc32_of(crc, d, dlen);
+    uint8_t *p = c->buf + c->len;
+    put_u32(p, (uint32_t)n);
+    put_u32(p + 4, crc);
+    memcpy(p + 8, a, alen);
+    if (blen) memcpy(p + 8 + alen, b, blen);
+    if (dlen) memcpy(p + 8 + alen + blen, d, dlen);
+    c->len += 8 + n;
+    c->count++;
+    c->bytes += 8 + n;
+    return 0;
+}
+
+uint64_t ckpt_bytes(const ckpt_writer_t *c) { return c->bytes; }
+
+void ckpt_abort(ckpt_writer_t *c) {
+    if (!c) return;
+    close(c->fd);
+    unlink(c->tmp);
+    free(c->buf);
+    free(c);
+}
+
+int ckpt_commit(ckpt_writer_t *c) {
+    uint8_t end[12];
+    memcpy(end, "RPCE", 4);
+    uint64_t n = c->count;
+    for (int i = 0; i < 8; i++) end[4 + i] = (uint8_t)(n >> (8 * i));
+    int rc = ckpt_add(c, end, sizeof(end), NULL, 0, NULL, 0);
+    if (!rc) rc = ckpt_flush(c);
+    if (!rc && fdatasync(c->fd)) rc = -errno;
+    if (!rc && rename(c->tmp, c->path)) rc = -errno;
+    if (!rc) rc = fsync_parent(c->path);
+    close(c->fd);
+    if (rc) unlink(c->tmp);
+    free(c->buf);
+    free(c);
+    return rc;
+}
+
+long ckpt_load(const char *path, int (*cb)(void *user, const uint8_t *rec, size_t len), void *user) {
+    pthread_once(&crc_once, crc_init);
+    FILE *f = fopen(path, "rb");
+    if (!f) return errno == ENOENT ? 0 : -errno;
+    /* first: the whole file must check out (its end record), before any of
+     * it is applied */
+    long n = 0;
+    int ok = 0;
+    uint8_t hdr[8], *rec = NULL;
+    size_t cap = 0;
+    for (int pass = 0; pass < 2; pass++) {
+        rewind(f);
+        n = 0;
+        ok = 0;
+        for (;;) {
+            if (fread(hdr, 1, 8, f) != 8) break;
+            uint32_t len = get_u32(hdr), crc = get_u32(hdr + 4);
+            if (len == 0 || len > WAL_MAX_RECORD) break;
+            if (len > cap) {
+                uint8_t *r = realloc(rec, len);
+                if (!r) { free(rec); fclose(f); return -ENOMEM; }
+                rec = r;
+                cap = len;
+            }
+            if (fread(rec, 1, len, f) != len || crc32_of(0, rec, len) != crc) break;
+            if (len == 12 && !memcmp(rec, "RPCE", 4)) {
+                uint64_t cnt = 0;
+                for (int i = 0; i < 8; i++) cnt |= (uint64_t)rec[4 + i] << (8 * i);
+                ok = cnt == (uint64_t)n;
+                break;
+            }
+            if (pass == 1 && cb(user, rec, len)) { free(rec); fclose(f); return -EINVAL; }
+            n++;
+        }
+        if (!ok) break;
+    }
+    free(rec);
+    fclose(f);
+    return ok ? n : -EBADMSG;
 }

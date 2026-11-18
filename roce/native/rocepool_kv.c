@@ -479,9 +479,12 @@ static void *lease_group(void *arg) {
         rp_batch_init(&b);
         for (size_t q = first; q < last; q++) rp_batch_add(&b, RP_LEASE, j->fks[j->idx[q]], NULL, 0, NULL, 0);
         rp_resp_t r;
-        int rc = rp_batch_send(owner(j->kv, j->fks[j->idx[first]]), &b, &r);
+        rp_peer_t *peer = owner(j->kv, j->fks[j->idx[first]]);
+        unsigned g0 = atomic_load(&peer->gen);
+        int rc = rp_batch_send(peer, &b, &r);
         rp_batch_free(&b);
         if (rc) { j->rc = rc; break; }
+        unsigned gl = g0 == atomic_load(&peer->gen) ? g0 : g0 - 1;  /* a server pair switched: not to be used */
         size_t pos = 0;
         for (size_t q = first; q < last; q++) {
             size_t k = j->idx[q];
@@ -491,7 +494,7 @@ static void *lease_group(void *arg) {
             if (rp_batch_next(&r, &pos, &op, &v, &vl, NULL, 0)) { j->present[k] = -1; continue; }
             if (op == RP_LEASE_OK && vl >= 44) {
                 rp_lease_t l = {be64(v), be64(v + 8), be64(v + 16), be64(v + 24), be64(v + 32),
-                                ((uint32_t)v[40] << 24) | ((uint32_t)v[41] << 16) | ((uint32_t)v[42] << 8) | v[43]};
+                                ((uint32_t)v[40] << 24) | ((uint32_t)v[41] << 16) | ((uint32_t)v[42] << 8) | v[43], gl};
                 lc_put(j->kv, j->fks[k], &l);
                 atomic_fetch_add(&j->kv->leases, 1);
                 j->present[k] = 1;

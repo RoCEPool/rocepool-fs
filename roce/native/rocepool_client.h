@@ -33,7 +33,13 @@ enum {
 #define RP_POOL_IDLE_MAX 256
 
 typedef struct {
-    char addr[128];
+    /* "a|b" in ROCEPOOL_MDTS / ROCEPOOL_OSTS: a server and its standby
+     * (rocepool_servers.c's replication). A request that cannot reach the
+     * one in use, or is answered STANDBY, goes to the other. */
+    char addrs[2][128];
+    const char *volatile addr;   /* the one in use */
+    int naddr;
+    atomic_uint gen;             /* bumped by each switch */
     pthread_mutex_t lk;
     roce_conn_t *idle[RP_POOL_IDLE_MAX];
     double idle_at[RP_POOL_IDLE_MAX];
@@ -65,6 +71,7 @@ void rp_bulk_stats(uint64_t *bytes, uint64_t *in_use, uint64_t *zero_copy_bytes,
 
 extern size_t rp_frame_bytes;   /* max frame, default 16 MiB (env ROCE_MAX_FRAME_BYTES) */
 extern int rp_timeout_ms;       /* per request, default 5000 */
+extern int rp_failover_ms;      /* a server pair: how long to keep trying the two (ROCEPOOL_FAILOVER_S, default 60) */
 
 void rp_peer_init(rp_peer_t *p, const char *addr);
 void rp_peer_close_idle(rp_peer_t *p);
@@ -111,7 +118,7 @@ int rp_ost_truncate(rp_peer_t *p, const char *key, uint64_t size);
  * trailer read in order): 0 = bytes valid; -EAGAIN = the object changed
  * or moved (take a new lease, or read by RPC); -ENOTSUP from rp_ost_lease
  * = this server has no one-sided path (the Python one). */
-typedef struct { uint64_t version, size, addr, seq, keyhash; uint32_t rkey; } rp_lease_t;
+typedef struct { uint64_t version, size, addr, seq, keyhash; uint32_t rkey; unsigned gen; } rp_lease_t;
 void rp_stride_ra_stats(uint64_t *issued, uint64_t *hits, uint64_t *wasted);  /* (rocepool_fs.c) stride readahead */
 void rp_lookup_stats(uint64_t *direct, uint64_t *misses);   /* (rocepool_fs.c) one-sided MDT lookups / misses */
 int rp_ost_lease(rp_peer_t *p, const char *key, rp_lease_t *out);

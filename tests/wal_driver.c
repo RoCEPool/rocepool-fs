@@ -4,6 +4,9 @@
  *   wal_driver stale PATH GAP N                after the log's end: GAP zero bytes, then N valid
  *                                              records "stale:<i>" (a crash's out-of-order commits)
  *   wal_driver big PATH                        a 3 MiB record: refused
+ *   wal_driver rotate PATH THREADS PER ROT     write's load while the log is switched ROT times to
+ *                                              PATH.1, PATH.2, ... (wal_rotate)
+ *   wal_driver dumpseg PATH                    replays PATH, PATH.1, ... in order: "lsn record..." lines
  * Prints the log's stats after write. */
 #define _GNU_SOURCE
 #include "wal.h"
@@ -32,7 +35,14 @@ static void *writer(void *arg) {
     return NULL;
 }
 
-static int dump_cb(void *u, const uint8_t *rec, size_t len) {
+static int lsn_cb(void *u, uint64_t lsn, const uint8_t *rec, size_t len) {
+    printf("%llu ", (unsigned long long)lsn);
+    int dump_cb(void *, const uint8_t *, size_t);
+    return dump_cb(u, rec, len);
+}
+
+int dump_cb(void *u, const uint8_t *rec, size_t len);
+int dump_cb(void *u, const uint8_t *rec, size_t len) {
     (void)u;
     size_t n = 0;
     while (n < len && rec[n] != ':') n++;
@@ -128,6 +138,42 @@ int main(int argc, char **argv) {
             uint64_t lsn = wal_append(w, rec, n, NULL, 0, NULL, 0);
             if (!lsn || wal_wait(w, lsn)) return 4;
         }
+        return 0;
+    }
+    if (!strcmp(cmd, "rotate")) {
+        if (wal_replay(path, NULL, NULL) < 0) return 3;
+        W = wal_open_base(path, -1, 0, 0, err, sizeof(err));
+        if (!W) { fprintf(stderr, "%s\n", err); return 3; }
+        int threads = atoi(argv[3]), rot = atoi(argv[5]);
+        PER = atoi(argv[4]);
+        pthread_t t[64];
+        for (long k = 0; k < threads; k++) pthread_create(&t[k], NULL, writer, (void *)k);
+        for (int r = 1; r <= rot; r++) {
+            usleep(3000);
+            char np[1100];
+            snprintf(np, sizeof(np), "%s.%d", path, r);
+            uint64_t cut;
+            int rc = wal_rotate(W, np, &cut);
+            if (rc) { fprintf(stderr, "rotate: %s\n", strerror(-rc)); return 5; }
+            printf("cut %d %llu\n", r, (unsigned long long)cut);
+        }
+        for (int k = 0; k < threads; k++) pthread_join(t[k], NULL);
+        printf("rotations %llu last %llu\n", (unsigned long long)wal_rotations(W), (unsigned long long)wal_last(W));
+        return 0;
+    }
+    if (!strcmp(cmd, "dumpseg")) {
+        uint64_t base = 0;
+        long total = 0;
+        for (int g = 0;; g++) {
+            char p[1100];
+            if (g) snprintf(p, sizeof(p), "%s.%d", path, g); else snprintf(p, sizeof(p), "%s", path);
+            if (access(p, F_OK)) break;
+            printf("seg %d from %llu\n", g, (unsigned long long)base);
+            long n = wal_replay_lsn(p, base, lsn_cb, NULL, &base);
+            if (n < 0) return 3;
+            total += n;
+        }
+        printf("replayed %ld\n", total);
         return 0;
     }
     if (!strcmp(cmd, "big")) {

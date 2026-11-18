@@ -58,6 +58,45 @@ class WalTests(unittest.TestCase):
         for t, idx in got.items():
             self.assertEqual(idx, list(range(per)), t)
 
+    def check_rotation(self, threads=8, per=300, rot=12):
+        r = self.run_drv("rotate", self.log, threads, per, rot)
+        cuts = [int(l.split()[2]) for l in r.stdout.splitlines() if l.startswith("cut ")]
+        self.assertEqual(len(cuts), rot, r.stdout)
+        self.assertEqual(cuts, sorted(cuts))
+        out = self.run_drv("dumpseg", self.log).stdout.strip().splitlines()
+        self.assertEqual(out[-1], f"replayed {threads * per}")
+        segs = [l for l in out if l.startswith("seg ")]
+        self.assertEqual(len(segs), rot + 1)
+        # each segment starts right after the cut that made it, LSNs 1..N
+        # without a gap or a repeat across the files
+        self.assertEqual([int(l.split()[3]) for l in segs[1:]], cuts)
+        recs = [l for l in out if not l.startswith(("seg ", "replayed "))]
+        self.assertEqual([int(l.split()[0]) for l in recs], list(range(1, threads * per + 1)))
+        self.check_records([l.split(" ", 1)[1] for l in recs], threads, per)
+        # every record before a cut is in an earlier file than every one after
+        bounds, g = {}, -1
+        for l in out:
+            if l.startswith("seg "):
+                g = int(l.split()[1])
+            elif not l.startswith("replayed"):
+                bounds.setdefault(g, []).append(int(l.split()[0]))
+        for k, c in enumerate(cuts, start=1):
+            self.assertTrue(all(x <= c for gg, xs in bounds.items() if gg < k for x in xs))
+            self.assertTrue(all(x > c for gg, xs in bounds.items() if gg >= k for x in xs))
+
+    def test_rotation_keeps_every_record_in_order(self):
+        """wal_rotate under load: appends never wait, LSNs go on across the
+        segment files, nothing lost, repeated or reordered"""
+        self.check_rotation()
+
+    def test_rotation_with_direct_writes(self):
+        self.MODE = {"ROCEPOOL_LOG_DIRECT": "1", "ROCEPOOL_LOG_PIPELINE": "4"}
+        self.check_rotation()
+
+    def test_rotation_with_appends_one_at_a_time(self):
+        self.MODE = {"ROCEPOOL_LOG_DIRECT": "0", "ROCEPOOL_LOG_PIPELINE": "1"}
+        self.check_rotation()
+
     def test_pipelined_commits_replay_in_order(self):
         st = self.run_drv("write", self.log, 16, 300).stdout
         f = dict(zip(st.split()[::2], map(int, st.split()[1::2])))
