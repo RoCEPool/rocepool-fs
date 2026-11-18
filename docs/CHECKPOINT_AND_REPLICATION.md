@@ -75,6 +75,7 @@ another host, with its own log, tier and checkpoints.
 | `ROCEPOOL_REPL_ROLE` | `primary` (default) or `standby`, for the first start |
 | `ROCEPOOL_REPL_PROMOTE_S` | Default 2; 0 means never promote on its own |
 | `ROCEPOOL_REPL_HEARTBEAT_MS` | Hello interval, default 200 |
+| `ROCEPOOL_REPL_PROBE_MS` | A standby's probe of its primary, default 20; 0 turns the fast takeover off |
 | `ROCEPOOL_REPL_REPLY_CACHE` | Replies kept for request dedupe, default 65536 |
 | `ROCEPOOL_REPL_MAX_QUEUE` | Keys queued at most (default 1 M) |
 | `ROCEPOOL_MDTS` / `ROCEPOOL_OSTS` (client) | Each entry `primary|standby` |
@@ -126,8 +127,21 @@ drains: no resync is needed.
   primary with term + 1.
   - A standby still handling a request from its primary, such as a long
     resync step, is never "silent".
-  - Measured locally: the first read answered 1.8 s after the primaries
-    were killed.
+- **On proof that the primary's process is gone, a standby takes over at
+  once.** The standby keeps a probe connection to its primary and pings it
+  every 20 ms (`ROCEPOOL_REPL_PROBE_MS`). The proof is:
+  1. that connection broke;
+  2. the primary's host then refuses connections to its port twice in a
+     row.
+
+  A refusal means nothing listens there, because the process exited or was
+  killed. The standby first finishes applying a batch it was still
+  receiving, then promotes itself. Measured locally: 3-4 ms from the kill
+  until every standby was primary.
+- **A frozen primary gives no proof.** Its port still takes connections, so
+  a primary under `SIGSTOP`, a dead host or a cut network waits for
+  `ROCEPOOL_REPL_PROMOTE_S` of silence. A primary back within that time
+  keeps its role.
 
 **Request dedupe across a takeover (as NonStop process pairs do with
 their sync IDs).**

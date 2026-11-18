@@ -3205,7 +3205,7 @@ struct rocepool_native {
  * queue: see "queued" in STATS) are lost with it on a failover. */
 #define ROLE_PRIMARY 1
 #define ROLE_STANDBY 2
-enum { RS_HELLO = 1, RS_BATCH = 2, RS_BEGIN = 3, RS_CHECK = 4, RS_END = 5, RS_PROMOTE = 6 };
+enum { RS_HELLO = 1, RS_BATCH = 2, RS_BEGIN = 3, RS_CHECK = 4, RS_END = 5, RS_PROMOTE = 6, RS_PING = 7 };
 #define REPL_SHARDS 8
 #define REPL_BATCH_ITEMS 512
 #define REPL_BATCH_BYTES (4u << 20)
@@ -3278,7 +3278,9 @@ typedef struct repl {
     /* fast takeover: hello every hb_ms from its own thread; a standby busy
      * with its primary's requests (a long resync step) is not "silent" */
     uint64_t hb_ms;
+    uint64_t probe_ms;             /* a standby's probe of its primary (fast takeover on proof of death) */
     _Atomic int busy;
+    _Atomic int inflight;          /* a primary's batches sent, not yet answered */
     _Atomic uint64_t peer_synced;  /* what the standby last said its copy is complete for */
     rcache_t rc;
 } repl_t;
@@ -3613,10 +3615,16 @@ static int ost_repl_item(repl_t *r, ost_store *s, repl_node *x, buf_t *b) {
         rc = tier_read_at(s, &ext, lo, data, (size_t)n);
         pthread_mutex_lock(&st->lock);
         e = *kv_find(st, h, x->key, x->kl);
-        if (!rc && (!e || e->uid != uid || e->version != ver || e->ext.off != ext.off)) rc = 1;  /* changed: re-marked */
+        if (!rc && (!e || e->uid != uid || e->version != ver || e->ext.off != ext.off)) rc = 1;  /* changed meanwhile */
     } else if (n) memset(data, 0, (size_t)n);
     pthread_mutex_unlock(&st->lock);
-    if (rc) { free(data); return rc < 0 ? rc : 0; }
+    if (rc) {
+        free(data);
+        /* this key's range again, after the change that got in the way
+         * (whose own mark has only its own range) */
+        if (rc > 0) repl_mark(r, x->key, x->kl, x->lo, x->hi, x->all);
+        return rc < 0 ? rc : 0;
+    }
     uint8_t m[33];
     wr_u64le(m, ver);
     wr_u64le(m + 8, size);
@@ -3958,6 +3966,12 @@ static uint8_t *repl_handle_in(struct rocepool_native *n, repl_t *r, const frame
     case RS_PROMOTE:
         repl_promote(r, "asked to");
         return frame_simple(OP_REPL_OK, f, NULL, 0, out_len);
+    case RS_PING: {  /* a standby's probe: alive (role, term), nothing else */
+        uint8_t o[9];
+        o[0] = (uint8_t)atomic_load(&r->role);
+        wr_u64le(o + 1, atomic_load(&r->term));
+        return frame_simple(OP_REPL_OK, f, o, 9, out_len);
+    }
     default:
         break;
     }
@@ -4055,6 +4069,7 @@ static void *repl_shipper(void *arg) {
             pthread_cond_timedwait(&sh->cv, &sh->lk, &ts);
         }
         int nv = 0;
+        atomic_fetch_add(&r->inflight, 1);  /* before "queued" drops: queued 0 and inflight 0 is nothing pending */
         while (sh->qh && nv < REPL_BATCH_ITEMS) {
             repl_node *x = sh->qh;
             sh->qh = x->qnext;
@@ -4109,6 +4124,7 @@ static void *repl_shipper(void *arg) {
             for (int i = 0; i < nv; i++) repl_node_free(v[i]);
             atomic_fetch_add(&r->items, cnt);
         }
+        atomic_fetch_sub(&r->inflight, 1);
         pthread_mutex_lock(&sh->lk);
         sh->busy = 0;
         pthread_cond_broadcast(&sh->cv);
@@ -4261,21 +4277,70 @@ static int repl_hello(repl_t *r, repl_link *l, int *role, uint64_t *term, uint64
  * steps run on the manager's): the standby hears it is alive, this one
  * hears what the standby holds -- or that it took over. A standby checks
  * here whether its primary went silent. */
+/* A standby's probe of its primary: a connection of its own, a ping every
+ * probe_ms. 1 = proof that the primary's process is gone: the connection
+ * that worked broke, and the primary's host now refuses connections to
+ * its port twice in a row (nothing listens there: the process exited or
+ * was killed; a dead host or a cut network gives no answer at all, and
+ * that waits for ROCEPOOL_REPL_PROMOTE_S instead). */
+typedef struct { repl_link l; int was_up, refused; } repl_probe;
+
+static int repl_probe_once(repl_t *r, repl_probe *p) {
+    if (!p->l.c) {
+        p->l.c = roce_client_connect_shared(r->peer, 300, 64u << 10);
+        if (!p->l.c) {
+            /* the transports report a refusal as a REJECTED connect */
+            if (p->was_up && strstr(roce_last_error(), "REJECTED")) p->refused++;
+            else p->refused = 0;
+            return p->was_up && p->refused >= 2;
+        }
+    }
+    uint8_t q = RS_PING;
+    roce_reply_t rep;
+    const uint8_t *val;
+    size_t vlen;
+    char code[32];
+    int rc = repl_call(r, &p->l, &q, 1, &rep, &val, &vlen, code, sizeof(code), 1000);
+    if (rc == 0 || rc == 1) {
+        roce_reply_release(&rep);
+        p->was_up = 1;
+        p->refused = 0;
+        atomic_store(&r->heard_ns, mono_ns());  /* alive: not "silent" either */
+        return 0;
+    }
+    repl_link_close(&p->l);  /* broke: reconnect on the next round, right away */
+    return 0;
+}
+
 static void *repl_heartbeat(void *arg) {
     repl_t *r = arg;
     pthread_setname_np(pthread_self(), "rp-repl-hb");
     repl_link l = {0};
+    repl_probe pr = {0};
     for (;;) {
-        struct timespec ts = {(time_t)(r->hb_ms / 1000), (long)(r->hb_ms % 1000) * 1000000L};
+        uint64_t ms = atomic_load(&r->role) == ROLE_STANDBY ? (pr.l.c || !pr.was_up ? r->probe_ms : 5) : r->hb_ms;
+        struct timespec ts = {(time_t)(ms / 1000), (long)(ms % 1000) * 1000000L};
         nanosleep(&ts, NULL);
         if (atomic_load(&r->role) == ROLE_STANDBY) {
             repl_link_close(&l);
             atomic_store(&r->peer_up, 0);
-            if (r->promote_s <= 0) continue;
+            if (r->promote_s <= 0) { repl_link_close(&pr.l); pr.was_up = 0; continue; }
+            int complete = atomic_load(&r->synced) != 0 || getenv("ROCEPOOL_REPL_PROMOTE_PARTIAL");
+            /* proof, and the primary's last batch applied (one still being
+             * applied when it died is part of the copy taken over) */
+            if (r->probe_ms && repl_probe_once(r, &pr) && complete) {
+                while (atomic_load(&r->busy)) {
+                    struct timespec w = {0, 1000000L};
+                    nanosleep(&w, NULL);
+                }
+                repl_promote(r, "its primary's process is gone (connection broken, port refused)");
+                repl_link_close(&pr.l);
+                pr.was_up = 0;
+                continue;
+            }
             if (atomic_load(&r->busy)) { atomic_store(&r->heard_ns, mono_ns()); continue; }  /* its primary is talking to it */
             uint64_t last = atomic_load(&r->heard_ns);
             if (!last) last = atomic_load(&r->started_ns);
-            int complete = atomic_load(&r->synced) != 0 || getenv("ROCEPOOL_REPL_PROMOTE_PARTIAL");
             if (complete && (double)(mono_ns() - last) / 1e9 > r->promote_s)
                 repl_promote(r, "its primary has been silent");
             continue;
@@ -4361,6 +4426,7 @@ static repl_t *repl_start(int kind, void *store, const char *log_base, int idx) 
     const char *ps = getenv("ROCEPOOL_REPL_PROMOTE_S");
     r->promote_s = ps && *ps ? atof(ps) : 2.0;
     r->hb_ms = env_u64("ROCEPOOL_REPL_HEARTBEAT_MS", 200);
+    r->probe_ms = env_u64("ROCEPOOL_REPL_PROBE_MS", 20);
     if (!r->hb_ms) r->hb_ms = 1;
     pthread_mutex_init(&r->rc.lk, NULL);
     r->rc.cap = env_u64("ROCEPOOL_REPL_REPLY_CACHE", 65536);
@@ -4477,15 +4543,17 @@ static int repl_mark_req(repl_t *r, struct rocepool_native *n, const frame_t *f,
 }
 
 static int repl_stats_json(buf_t *b, repl_t *r) {
+    unsigned long long queued = atomic_load(&r->queued);
+    int inflight = atomic_load(&r->inflight);  /* after queued: see repl_shipper */
     return buf_printf(b, ", \"repl\": {\"role\": \"%s\", \"term\": %llu, \"peer\": \"%s\", \"peer_up\": %s, \"in_sync\": %s, "
                       "\"resyncing\": %s, \"synced\": %s, \"queued\": %llu, \"marked\": %llu, \"items\": %llu, \"bytes\": %llu, "
                       "\"rpcs\": %llu, \"errors\": %llu, \"resyncs\": %llu, \"checked\": %llu, \"mismatched\": %llu, "
                       "\"swept\": %llu, \"applied\": %llu, \"promotions\": %llu, \"demotions\": %llu, \"overflows\": %llu, "
-                      "\"last_resync_s\": %.3f, \"replies_cached\": %llu, \"replies_reused\": %llu}",
+                      "\"last_resync_s\": %.3f, \"replies_cached\": %llu, \"replies_reused\": %llu, \"inflight\": %d}",
                       atomic_load(&r->role) == ROLE_PRIMARY ? "primary" : "standby", (unsigned long long)atomic_load(&r->term),
                       r->peer, atomic_load(&r->peer_up) ? "true" : "false", atomic_load(&r->in_sync) ? "true" : "false",
                       atomic_load(&r->resyncing) ? "true" : "false", atomic_load(&r->synced) ? "true" : "false",
-                      (unsigned long long)atomic_load(&r->queued), (unsigned long long)atomic_load(&r->marked),
+                      queued, (unsigned long long)atomic_load(&r->marked),
                       (unsigned long long)atomic_load(&r->items), (unsigned long long)atomic_load(&r->bytes),
                       (unsigned long long)atomic_load(&r->rpcs), (unsigned long long)atomic_load(&r->errors),
                       (unsigned long long)atomic_load(&r->resyncs), (unsigned long long)atomic_load(&r->checked),
@@ -4493,7 +4561,7 @@ static int repl_stats_json(buf_t *b, repl_t *r) {
                       (unsigned long long)atomic_load(&r->applied), (unsigned long long)atomic_load(&r->promotions),
                       (unsigned long long)atomic_load(&r->demotions), (unsigned long long)atomic_load(&r->overflows),
                       (double)atomic_load(&r->resync_ns) / 1e9, (unsigned long long)atomic_load(&r->rc.puts),
-                      (unsigned long long)atomic_load(&r->rc.hits));
+                      (unsigned long long)atomic_load(&r->rc.hits), inflight);
 }
 
 
@@ -4766,6 +4834,11 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
         uint64_t lb = md->life_base;
         out = mdt_tx_wrap(out, resp_len, md->epoch, lsn > lb ? lsn - lb : 0, committed > lb ? committed - lb : 0);
     }
+    /* a primary's change: to its standby (with the reply, for dedupe) --
+     * queued before the reply can leave (a deferred one goes out from the
+     * transport's thread as soon as the log commits) */
+    if (rp && !cached && f.op != OP_REPL && out && repl_mark_req(rp, n, &f, out, *resp_len, tag_c, tag_s) && tag_c)
+        rcache_put(&rp->rc, tag_c, tag_s, out, *resp_len);
     if (tl_wal_lsn) {  /* the change is acknowledged only once it is durable */
         int wrc = 0;
         /* the transport holds the reply until the log's commit covers it,
@@ -4785,9 +4858,6 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
         }
         tl_wal_lsn = 0;
     }
-    /* a primary's change: to its standby (with the reply, for dedupe) */
-    if (rp && !cached && f.op != OP_REPL && out && repl_mark_req(rp, n, &f, out, *resp_len, tag_c, tag_s) && tag_c)
-        rcache_put(&rp->rc, tag_c, tag_s, out, *resp_len);
 done:
     atomic_fetch_add(&n->cpu_ns, thread_cpu_ns() - c0);
     atomic_fetch_add(&n->wall_ns, mono_ns() - w0);

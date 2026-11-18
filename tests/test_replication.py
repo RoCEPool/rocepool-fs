@@ -82,8 +82,8 @@ class ReplicationTests(unittest.TestCase):
         while time.monotonic() - t0 < timeout:
             st = self.stats(side)
             r = [s["repl"] for s in st]
-            if all(x["role"] == "primary" and x["in_sync"] and x["queued"] == 0 and not x["resyncing"] for x in r):
-                time.sleep(0.3)  # a batch in flight when it was taken off the queue
+            if all(x["role"] == "primary" and x["in_sync"] and x["queued"] == 0 and not x["resyncing"]
+                   and x["inflight"] == 0 for x in r):
                 return st
             time.sleep(0.1)
         self.fail("not in sync: " + json.dumps([s["repl"] for s in self.stats(side)]))
@@ -235,18 +235,49 @@ print(repr(got)); print(repr(dirs))
         self.assertEqual(got, sums)
         self.wait_role(self.a, "primary")
 
-    def test_takeover_is_quick(self):
-        """defaults: a hello every 200 ms, a standby takes over after 2 s of
-        silence, a client finds a dead server within a second"""
+    def wait_primary_time(self, side, t0, timeout=10):
+        while time.monotonic() - t0 < timeout:
+            if all(s["repl"]["role"] == "primary" for s in self.stats(side)):
+                return time.monotonic() - t0
+            time.sleep(0.002)
+        self.fail("no takeover")
+
+    def test_a_crashed_primary_is_taken_over_in_milliseconds(self):
+        """proof of death -- the standby's probe connection broke and the
+        primary's port refuses connections -- is a takeover at once, not
+        after ROCEPOOL_REPL_PROMOTE_S of silence"""
         self.py(f"import os; os.makedirs({self.prefix!r} + '/q'); open({self.prefix!r} + '/q/a', 'wb').write(b'a' * 5000)")
         self.wait_synced(self.a)
+        time.sleep(0.5)  # the probes are up
         self.a.kill()
         t0 = time.monotonic()
+        took = self.wait_primary_time(self.b, t0)
         out = self.py(f"print(open({self.prefix!r} + '/q/a', 'rb').read() == b'a' * 5000)")
-        took = time.monotonic() - t0
         self.assertEqual(out.stdout.strip(), "True")
-        self.assertLess(took, 6.0, took)
-        print(f"takeover: first read answered {took:.2f} s after the kill", file=sys.stderr)
+        self.assertLess(took, 0.5, took)
+        print(f"takeover: every standby primary {took * 1000:.0f} ms after the kill", file=sys.stderr)
+
+    def test_a_primary_that_only_hangs_is_not_taken_over_early(self):
+        """a frozen primary (SIGSTOP) gives no proof: its port still takes
+        connections. Back within ROCEPOOL_REPL_PROMOTE_S, nothing changes;
+        frozen longer, the timeout takes over"""
+        import signal
+        self.wait_synced(self.a)
+        time.sleep(0.5)
+        self.a.p.send_signal(signal.SIGSTOP)
+        time.sleep(1.0)
+        self.a.p.send_signal(signal.SIGCONT)
+        time.sleep(0.5)
+        self.assertTrue(all(s["repl"]["role"] == "standby" for s in self.stats(self.b)))
+        self.assertTrue(all(s["repl"]["role"] == "primary" for s in self.stats(self.a)))
+        self.a.p.send_signal(signal.SIGSTOP)
+        t0 = time.monotonic()
+        took = self.wait_primary_time(self.b, t0)
+        self.a.p.send_signal(signal.SIGCONT)
+        self.assertGreater(took, 1.5, took)
+        self.assertLess(took, 4.0, took)
+        # the frozen one, back, hears of the higher term and steps down
+        self.wait_role(self.a, "standby")
 
     def test_a_retried_change_is_not_done_twice(self):
         """A request carries the client's id and sequence number: sent again
