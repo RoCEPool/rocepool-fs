@@ -7,7 +7,7 @@
 | プラットフォーム | Amazon EC2 us-east-2、i3en.12xlarge（1 ノードあたり 48 vCPU、384 GiB RAM、4 × 7.5 TB NVMe、50 Gb/s EFA） |
 | ベンチマーク | IO500 公式アプリケーション、クイックモード：stonewall 30 秒、1 ノードあたり 32 ランク |
 | 比較対象 | Vendor W（商用並列ファイルシステム）：ISC25 IO500 10 ノード本番リストのエントリ（クライアント 10 ノード＋データサーバー 18 台）、スコア 105.94 |
-| 関連レポート | [IO500_AWS_進捗レポート.md](IO500_AWS_進捗レポート.md)（2 ノードでの有効な 3 回の実行）・本レポートの英語版：[IO500_AWS_4NODE_REPORT.md](IO500_AWS_4NODE_REPORT.md) |
+| 関連レポート | [IO500_AWS_進捗レポート.md](IO500_AWS_進捗レポート.md)（2 ノードでの有効な 3 回の実行）・本レポートの英語版：[IO500_AWS_4NODE_REPORT.md](IO500_AWS_4NODE_REPORT.md) · 他の言語：[Deutsch](IO500_AWS_4-Knoten-Validierungsbericht.md) · [Español](IO500_AWS_Informe_de_validación_de_4_nodos.md) · [繁體中文](IO500_AWS_4節點驗證報告.md) |
 
 ## 1. 概要
 

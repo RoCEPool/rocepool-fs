@@ -9,7 +9,7 @@
 | Status | **Unofficial.** IO500 marked the result INVALID because one phase ended before the stonewall (section 4). Not submitted to the IO500 list. |
 | Reference | Vendor W, a commercial parallel file system: its 10-node entry on the ISC25 IO500 10-node production list, which uses 10 client nodes and 18 data servers (28 machines). Score 105.94. |
 | Run record | GitHub Actions run 40999521729; raw reports on branch `aws-results/gh-40999521729`; every step of the run: [IO500_AWS_6NODE_FULL_RUN_REPORT.md](IO500_AWS_6NODE_FULL_RUN_REPORT.md) |
-| Earlier reports | [4-node scaling](IO500_AWS_4NODE_REPORT.md) · [2-node progress](IO500_AWS_PROGRESS_REPORT.md) · Japanese version of this report: [IO500_AWS_6ノード結果レポート.md](IO500_AWS_6ノード結果レポート.md) |
+| Earlier reports | [4-node scaling](IO500_AWS_4NODE_REPORT.md) · [2-node progress](IO500_AWS_PROGRESS_REPORT.md) · Japanese version of this report: [IO500_AWS_6ノード結果レポート.md](IO500_AWS_6ノード結果レポート.md) · other languages: [Deutsch](IO500_AWS_6-Knoten-Ergebnisbericht.md) · [Español](IO500_AWS_Informe_de_resultados_de_6_nodos.md) · [繁體中文](IO500_AWS_6節點結果報告.md) |
 
 ## 1. Summary
 

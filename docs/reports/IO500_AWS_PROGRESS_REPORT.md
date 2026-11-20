@@ -8,6 +8,7 @@
 | Benchmark | IO500 official application, standard mode, 300 s stonewall, 64 ranks (32 per node) |
 | Reference | Vendor W, a commercial parallel file system: 10-node entry on the ISC25 IO500 10-node production list (10 client nodes + 18 data servers) |
 | Earlier report | [IO500_AWS_2NODE_REPORT.md](IO500_AWS_2NODE_REPORT.md) (run A only) |
+| Translations | [日本語](IO500_AWS_進捗レポート.md) · [Deutsch](IO500_AWS_Fortschrittsbericht.md) · [Español](IO500_AWS_Informe_de_progreso.md) · [繁體中文](IO500_AWS_進度報告.md) |
 
 ## 1. Summary
 
