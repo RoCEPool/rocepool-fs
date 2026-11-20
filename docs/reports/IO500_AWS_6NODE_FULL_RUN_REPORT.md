@@ -7,7 +7,7 @@
 | Platform | Amazon EC2 us-east-2, 6 × i3en.12xlarge (each: 48 vCPU, 384 GiB RAM, 4 × 7.5 TB NVMe, 50 Gb/s EFA), Ubuntu, kernel 7.0.0-1014-aws, libfabric efa provider |
 | Run | GitHub Actions run 40999521729, 2026-10-30 03:49–05:48 UTC; raw reports on branch `aws-results/gh-40999521729` |
 | Overall verdict | **WARN.** Every check passed; the 300 s IO500 run scored 111.26, and IO500 marked it invalid for one phase (section 5) |
-| Related | IO500 comparison with Vendor W: [IO500_AWS_6NODE_REPORT.md](IO500_AWS_6NODE_REPORT.md) · Japanese version of this report: [IO500_AWS_6ノード全項目テストレポート.md](IO500_AWS_6ノード全項目テストレポート.md) |
+| Related | IO500 comparison with Vendor W: [IO500_AWS_6NODE_REPORT.md](IO500_AWS_6NODE_REPORT.md) · Japanese version of this report: [IO500_AWS_6ノード全項目テストレポート.md](IO500_AWS_6ノード全項目テストレポート.md) · other languages: [Deutsch](IO500_AWS_6-Knoten-Gesamttestbericht.md) · [Español](IO500_AWS_Informe_de_prueba_completa_de_6_nodos.md) · [繁體中文](IO500_AWS_6節點全項目測試報告.md) |
 
 ## 1. Summary
 

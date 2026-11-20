@@ -7,7 +7,7 @@
 | Platform | Amazon EC2 us-east-2, i3en.12xlarge (48 vCPU, 384 GiB RAM, 4 × 7.5 TB NVMe, 50 Gb/s EFA per node) |
 | Benchmark | IO500 official application, quick mode: 30 s stonewall, 32 ranks per node |
 | Reference | Vendor W, a commercial parallel file system: 10-node entry on the ISC25 IO500 10-node production list (10 client nodes + 18 data servers), score 105.94 |
-| Earlier reports | [IO500_AWS_PROGRESS_REPORT.md](IO500_AWS_PROGRESS_REPORT.md) (three valid 2-node runs) · Japanese version of this report: [IO500_AWS_4ノード検証レポート.md](IO500_AWS_4ノード検証レポート.md) |
+| Earlier reports | [IO500_AWS_PROGRESS_REPORT.md](IO500_AWS_PROGRESS_REPORT.md) (three valid 2-node runs) · Japanese version of this report: [IO500_AWS_4ノード検証レポート.md](IO500_AWS_4ノード検証レポート.md) · other languages: [Deutsch](IO500_AWS_4-Knoten-Validierungsbericht.md) · [Español](IO500_AWS_Informe_de_validación_de_4_nodos.md) · [繁體中文](IO500_AWS_4節點驗證報告.md) |
 
 ## 1. Summary
 

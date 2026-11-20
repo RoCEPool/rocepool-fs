@@ -7,7 +7,7 @@
 | プラットフォーム | Amazon EC2 us-east-2、i3en.12xlarge × 6（各ノード：48 vCPU、384 GiB RAM、4 × 7.5 TB NVMe、50 Gb/s EFA）、Ubuntu、カーネル 7.0.0-1014-aws、libfabric efa プロバイダ |
 | 実行 | GitHub Actions の実行 40999521729、2026-10-30 03:49〜05:48 UTC。生データはブランチ `aws-results/gh-40999521729` |
 | 総合判定 | **WARN。** すべてのチェックに合格。300 秒の IO500 は 111.26 を記録したが、1 つのフェーズのため IO500 は INVALID と判定した（第 5 節） |
-| 関連 | Vendor W との IO500 比較：[IO500_AWS_6ノード結果レポート.md](IO500_AWS_6ノード結果レポート.md)・本レポートの英語版：[IO500_AWS_6NODE_FULL_RUN_REPORT.md](IO500_AWS_6NODE_FULL_RUN_REPORT.md) |
+| 関連 | Vendor W との IO500 比較：[IO500_AWS_6ノード結果レポート.md](IO500_AWS_6ノード結果レポート.md)・本レポートの英語版：[IO500_AWS_6NODE_FULL_RUN_REPORT.md](IO500_AWS_6NODE_FULL_RUN_REPORT.md) · 他の言語：[Deutsch](IO500_AWS_6-Knoten-Gesamttestbericht.md) · [Español](IO500_AWS_Informe_de_prueba_completa_de_6_nodos.md) · [繁體中文](IO500_AWS_6節點全項目測試報告.md) |
 
 ## 1. 概要
 

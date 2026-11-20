@@ -8,7 +8,7 @@
 | ベンチマーク | IO500 公式アプリケーション、標準モード、stonewall 300 秒、64 ランク（1 ノードあたり 32） |
 | 比較対象 | Vendor W（商用並列ファイルシステム）。ISC25 IO500 10 ノード・プロダクションリストの 10 ノード構成（クライアント 10 台 + データサーバー 18 台） |
 | 前回レポート | [IO500_AWS_2NODE_REPORT.md](IO500_AWS_2NODE_REPORT.md)（実行 A のみ） |
-| 原文 | [IO500_AWS_PROGRESS_REPORT.md](IO500_AWS_PROGRESS_REPORT.md)（英語版。本書はその日本語訳） |
+| 原文 | [IO500_AWS_PROGRESS_REPORT.md](IO500_AWS_PROGRESS_REPORT.md)（英語版。本書はその日本語訳） · 他の言語：[Deutsch](IO500_AWS_Fortschrittsbericht.md) · [Español](IO500_AWS_Informe_de_progreso.md) · [繁體中文](IO500_AWS_進度報告.md) |
 
 ## 1. 概要
 
