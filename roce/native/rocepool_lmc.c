@@ -47,7 +47,7 @@ struct rplmc {
     region_t reg[LMC_MAX_REGIONS];
     int nreg;
     pthread_rwlock_t reglk;
-    atomic_ullong ops, keys, bytes_set, bytes_get, copied, parts_failed;
+    atomic_ullong ops, keys, bytes_set, bytes_get, copied, parts_failed, chunks;
 };
 
 /* ---------------------------------------------------------------- helpers */
@@ -223,6 +223,7 @@ static void run_set(rplmc_t *c, job_t *j) {
             if (st[i]) { set_err(j, "commit", st[i], 1, 1); continue; }
             j->res[which[i]] = 1;
             atomic_fetch_add(&c->bytes_set, j->lens[which[i]]);
+            atomic_fetch_add(&c->chunks, 1);
         }
     }
     j->ok = 1;
@@ -459,7 +460,7 @@ int rplmc_pop(rplmc_t *c, uint64_t *id, int *op, int *ok, size_t *n, uint8_t *re
     return 1;
 }
 
-void rplmc_stats(rplmc_t *c, uint64_t out[8]) {
+void rplmc_stats(rplmc_t *c, uint64_t out[RPLMC_NSTATS]) {
     uint64_t direct = 0, bounced = 0;
     rpkv_dev_stats(c->kv, &direct, &bounced, NULL, NULL);
     out[0] = atomic_load(&c->ops);
@@ -472,4 +473,6 @@ void rplmc_stats(rplmc_t *c, uint64_t out[8]) {
     pthread_rwlock_rdlock(&c->reglk);
     out[7] = (uint64_t)c->nreg;
     pthread_rwlock_unlock(&c->reglk);
+    out[8] = atomic_load(&c->chunks);
+    out[9] = c->part;
 }

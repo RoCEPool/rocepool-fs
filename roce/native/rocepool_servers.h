@@ -23,6 +23,9 @@ rocepool_native_t *rocepool_native_start(int kind, const char *bind_address, siz
 int rocepool_native_local_address(rocepool_native_t *n, char *out, size_t out_len);
 /* OST: stored objects/bytes; MDT: entries; both: requests served. */
 void rocepool_native_stats(rocepool_native_t *n, uint64_t *objects, uint64_t *bytes, uint64_t *ops);
+/* OST: object bytes sent back in replies (GET, GET_V, READ_AT) -- not the
+ * reads clients make one-sided (RDMA READ of a leased object). MDT: 0. */
+uint64_t rocepool_native_ost_data_out(rocepool_native_t *n);
 void rocepool_native_stop(rocepool_native_t *n);
 
 #ifdef __cplusplus

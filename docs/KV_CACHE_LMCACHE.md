@@ -150,6 +150,8 @@ writes `kvcache_e2e_report.json`. Its steps:
 | T2 cross-server | Host B, which never saw the prompt, loads host A's KV cache from RoCEPool and answers like A's L1 hit. |
 | T3 TTFT | Not pass/fail on time. For each prompt length, median time to first token is recorded for four cases: cold (recompute), L1 hit, L2 hit on the same host, L2 hit on the other host. The cached answers must agree. |
 | T4 zero copy | The connectors' "bytes copied" counters stay at 0 on both hosts, so every byte moved by RDMA. |
+| T5 one-sided | Host B loads prompts host A stored. The OSTs' own `data_out` counter (object bytes sent in replies) stays at about 0 while B loads, so B's NIC read the data itself. The RDMA preflight confirms hardware RDMA read. OST CPU per MiB loaded is reported next to OST CPU per MiB stored, with idle busy-polling subtracted. |
+| T6 striping | A chunk (LMCache's chunk size, about 14 MiB for Qwen2.5-7B) is stored as at least 2 parts, and every OST holds data. When there are enough objects to judge (400 or more), every OST must also hold at least half its fair share. |
 
 **Progress write-back.** Every step and test result is written to
 `kvcache_e2e_progress.json` as soon as it is known, and again every 30 s.

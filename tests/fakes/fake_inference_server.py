@@ -174,7 +174,8 @@ class Engine:
         return answer, ttft_ready
 
     def status(self) -> dict:
-        return {"is_healthy": True, "engine_type": "fake",
+        return {"is_healthy": True, "engine_type": "fake", "chunk_size": CHUNK,
+                "cache_context_meta": {"0": {"kv_cache_layout": {"cache_size_per_token": self.a.kv_bytes_per_token}}},
                 "storage_manager": {"l2_adapters": [{"is_healthy": True, "type": "rocepool",
                                                      "zero_copy_l1": bool(self.registered),
                                                      "rocepool": self.conn.stats()}]}}

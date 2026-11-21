@@ -184,10 +184,10 @@ class RoCEPoolConnector:
         return out
 
     def stats(self) -> dict[str, int]:
-        v = (ctypes.c_uint64 * 8)()
+        v = (ctypes.c_uint64 * 10)()
         self._lib.rplmc_stats(self._h, v)
         names = ("ops", "keys", "bytes_stored", "bytes_loaded", "bytes_zero_copy", "bytes_copied",
-                 "parts_failed", "regions")
+                 "parts_failed", "regions", "chunks_stored", "part_bytes")
         return dict(zip(names, list(v)))
 
     def close(self) -> None:
