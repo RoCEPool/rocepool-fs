@@ -65,8 +65,9 @@ int rplmc_pop(rplmc_t *c, uint64_t *id, int *op, int *ok, size_t *n, uint8_t *re
 
 /* counters: [0] operations done, [1] keys, [2] bytes stored, [3] bytes
  * loaded, [4] bytes moved zero-copy, [5] bytes copied, [6] parts failed,
- * [7] registered regions */
-void rplmc_stats(rplmc_t *c, uint64_t out[8]);
+ * [7] registered regions, [8] chunks committed, [9] part size in bytes */
+#define RPLMC_NSTATS 10
+void rplmc_stats(rplmc_t *c, uint64_t out[RPLMC_NSTATS]);
 
 #ifdef __cplusplus
 }

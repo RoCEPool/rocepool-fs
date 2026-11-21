@@ -29,11 +29,18 @@ heartbeat every 30 s), so a run cut short still says how far it got:
   T3 TTFT          per prompt length: cold (recompute), L1 hit, L2 hit on the
                    same host (L1 cleared), L2 hit on the other host -- median
                    time to first token, and the bytes loaded.
+  T5 one-sided     B loads prompts A stored: the OSTs themselves report the
+                   object bytes they sent in replies (must stay ~0 -- the
+                   client's NIC read them), the preflight confirms RDMA read
+                   in hardware, and OST CPU per MiB loaded is set against
+                   per MiB stored (idle busy-polling subtracted).
+  T6 striping      a chunk is split into parts (LMCache's chunk size vs the
+                   part size) and every OST holds a balanced share.
   T4 zero copy     every byte between RoCEPool and LMCache's L1 moved by RDMA:
                    the connectors' "bytes copied" counters stay 0.
 
-Report: kvcache_e2e_report.json (verdict PASS when T1, T2 and T4 pass and T3
-ran). Logs of every process: kvcache_e2e_logs.tar.gz.
+Report: kvcache_e2e_report.json (verdict PASS when every test passes; T3's
+timings are measurements, its pass condition is that the cached answers agree). Logs of every process: kvcache_e2e_logs.tar.gz.
 
 --engine fake: the same steps and tests against tests/fakes/fake_inference_server.py
 (the same HTTP APIs; KV chunks stored and loaded through the real RoCEPool
@@ -405,9 +412,43 @@ def start_osts(args, rep: Report, hosts: list[Host]) -> tuple[list, str]:
         if not line.startswith("READY"):
             rep.step("osts", "FAIL", f"OST {me} did not start: {line!r}")
             raise RuntimeError("OSTs failed")
+    OSTS.clear()
+    for (p, me), h in zip(addrs, [h for h in hosts for _ in h.ost_ports]):
+        o = {"addr": me, "host": h, "proc": p, "probes": [], "cv": threading.Condition()}
+        threading.Thread(target=_collect_probes, args=(o,), daemon=True).start()
+        OSTS.append(o)
     osts = ",".join(me for _, me in addrs)
     rep.step("osts", "PASS", f"{len(addrs)} OSTs (RAM): {osts}", osts=osts)
     return procs, osts
+
+
+OSTS: list[dict] = []   # every OST: address, host, process, the MEMPROBE lines it printed
+
+
+def _collect_probes(o: dict) -> None:
+    for line in o["proc"].stdout:
+        if line.startswith("MEMPROBE "):
+            with o["cv"]:
+                o["probes"].append(json.loads(line[9:]))
+                o["cv"].notify_all()
+
+
+def probe_osts(timeout: float = 20) -> dict:
+    """Every OST's counters now (kill -USR1: objects, bytes, requests served,
+    object bytes sent in replies, CPU seconds), by address."""
+    seen = {o["addr"]: len(o["probes"]) for o in OSTS}
+    for o in OSTS:
+        pat = own(os.path.join(ROOT, "tools", "crossover_node.py")) + " ost-native " + o["addr"].replace(".", "\\.")
+        o["host"].run(f"pkill -USR1 -f {shlex.quote(pat)}", timeout=60)
+    out, end = {}, time.monotonic() + timeout
+    for o in OSTS:
+        with o["cv"]:
+            while len(o["probes"]) <= seen[o["addr"]] and time.monotonic() < end:
+                o["cv"].wait(0.2)
+            if len(o["probes"]) <= seen[o["addr"]]:
+                raise RuntimeError(f"OST {o['addr']} did not answer the probe")
+            out[o["addr"]] = dict(o["probes"][-1], at=time.monotonic())
+    return out
 
 
 def _readline(p, timeout: float) -> str:
@@ -420,7 +461,7 @@ def _readline(p, timeout: float) -> str:
 
 def l2_adapter(osts: str, namespace: str) -> str:
     return json.dumps({"type": "plugin", "module_path": "roce.lmcache_connector", "class_name": "RoCEPoolL2Adapter",
-                       "adapter_params": {"osts": osts, "namespace": namespace}})
+                       "adapter_params": {"osts": osts, "namespace": namespace, "part_mb": 4}})
 
 
 def start_engines(args, rep: Report, hosts: list[Host], osts: str) -> list:
@@ -590,6 +631,130 @@ def t3_ttft(args, rep: Report, A: Host, B: Host) -> dict:
             "summary": summary}
 
 
+def preflight_rdma_read(args) -> dict:
+    """The RDMA preflight's verdict on hardware RDMA read (EFA: by instance
+    family, from AWS's documentation)."""
+    if args.local:
+        return {"status": "n/a", "detail": "local rehearsal: RDMA emulator"}
+    try:
+        pf = json.load(open(os.path.join(ROOT, "onsite_report.json")))["steps"]["preflight"]["preflight"]
+        c = next(c for c in pf["checks"] if c["check"] == "rdma_read")
+        return {"status": c["status"], "detail": c["detail"]}
+    except (OSError, ValueError, KeyError, StopIteration):
+        return {"status": "unknown", "detail": "no rdma_read check in onsite_report.json"}
+
+
+def _ost_delta(p0: dict, p1: dict, idle_cpu_rate: dict) -> dict:
+    dt = sum(p1[a]["at"] - p0[a]["at"] for a in p0) / len(p0)
+    cpu = sum(max(0.0, p1[a]["cpu_s"] - p0[a]["cpu_s"] - idle_cpu_rate.get(a, 0) * (p1[a]["at"] - p0[a]["at"]))
+              for a in p0)
+    return {"seconds": dt, "net_cpu_s": cpu, "requests": sum(p1[a]["ops"] - p0[a]["ops"] for a in p0),
+            "data_out_bytes": int(sum(p1[a]["data_out_mb"] - p0[a]["data_out_mb"] for a in p0) * 2**20)}
+
+
+def t5_one_sided(args, rep: Report, A: Host, B: Host) -> dict:
+    """Loads from RoCEPool are one-sided: the client's NIC reads the OSTs'
+    memory (RDMA READ of leased parts) and no OST sends the data. Measured on
+    the OSTs themselves: object bytes they sent in replies while B loaded
+    (must stay ~0), and their CPU per MiB loaded vs per MiB stored."""
+    p0 = probe_osts()
+    time.sleep(args.idle_s)
+    p1 = probe_osts()
+    idle = {a: (p1[a]["cpu_s"] - p0[a]["cpu_s"]) / max(1e-6, p1[a]["at"] - p0[a]["at"]) for a in p0}
+    prompts = [make_prompt(A, args.model, f"T5-{args.run_tag}-{i}", args.t5_tokens, 5000 + i)[0]
+               for i in range(args.t5_prompts)]
+    a0 = counters(A)
+    ps0 = probe_osts()
+    for t in prompts:
+        complete(A, args.model, t)
+    a1 = wait_stored(A, a0)
+    ps1 = probe_osts()
+    clear_l1(B)
+    b0 = counters(B)
+    pl0 = probe_osts()
+    for t in prompts:
+        complete(B, args.model, t)
+    pl1 = probe_osts()
+    b1 = counters(B)
+    store, load = _ost_delta(ps0, ps1, idle), _ost_delta(pl0, pl1, idle)
+    stored, loaded = delta(a0, a1, "bytes_stored"), delta(b0, b1, "bytes_loaded")
+    copied, zc = delta(b0, b1, "bytes_copied"), delta(b0, b1, "bytes_zero_copy")
+    us_store = store["net_cpu_s"] * 1e6 / max(1, stored / 2**20)
+    us_load = load["net_cpu_s"] * 1e6 / max(1, loaded / 2**20)
+    hw = preflight_rdma_read(args)
+    checks = {
+        "loaded_from_rocepool": loaded > 0,
+        "client_zero_copy": copied == 0 and zc >= loaded,
+        "osts_sent_no_data": load["data_out_bytes"] <= loaded // 100,
+        "hardware_rdma_read": hw["status"] in ("PASS", "n/a"),
+    }
+    ok = all(checks.values())
+    cpu_note = ("" if args.local or us_load <= 0.5 * us_store else
+                "OST CPU per MiB loaded above half of per MiB stored: check the idle baseline")
+    return {"status": "PASS" if ok else "FAIL", "checks": checks, "rdma_read_preflight": hw,
+            "loaded_bytes": loaded, "stored_bytes": stored,
+            "osts_during_loads": load, "osts_during_stores": store,
+            "ost_cpu_us_per_mib": {"store": round(us_store, 1), "load": round(us_load, 1)},
+            "ost_idle_cpu_per_s": round(sum(idle.values()), 4), "note": cpu_note,
+            "summary": f"{loaded / 2**20:.0f} MiB loaded on B, OSTs sent {load['data_out_bytes'] / 2**20:.2f} MiB "
+                       f"of it; OST CPU {us_load:.0f} us/MiB loaded vs {us_store:.0f} us/MiB stored; "
+                       f"RDMA read in hardware: {hw['status']}"}
+
+
+def lmcache_chunk_bytes(h: Host) -> int | None:
+    """A full chunk's KV bytes as LMCache lays it out (chunk_size x
+    cache_size_per_token from its status)."""
+    code, st = http_json(h.ip, h.lmc_http_port, "GET", "/status", timeout=30)
+    per_tok = find_value(st, "cache_size_per_token")
+    chunk = find_value(st, "chunk_size")
+    return int(per_tok * chunk) if per_tok and chunk else None
+
+
+def find_value(obj, key: str):
+    if isinstance(obj, dict):
+        if key in obj and isinstance(obj[key], (int, float)):
+            return obj[key]
+        for v in obj.values():
+            got = find_value(v, key)
+            if got is not None:
+                return got
+    elif isinstance(obj, list):
+        for v in obj:
+            got = find_value(v, key)
+            if got is not None:
+                return got
+    return None
+
+
+def t6_striping(args, rep: Report, hosts: list[Host]) -> dict:
+    """Large chunks are split into parts spread over every OST."""
+    c = counters(hosts[0])
+    part = int(c.get("part_bytes") or 0)
+    chunk_layout = lmcache_chunk_bytes(hosts[0])
+    chunk_seen = c["bytes_stored"] / c["chunks_stored"] if c.get("chunks_stored") else None
+    chunk = chunk_seen or chunk_layout or 0
+    parts = -(-int(chunk) // part) if part and chunk else 0
+    pr = probe_osts()
+    per = {a: {"objects": v["engine_objects"], "mib": v["engine_bytes_mb"]} for a, v in pr.items()}
+    mib = [v["mib"] for v in per.values()]
+    objects = sum(v["objects"] for v in per.values())
+    balance = max(mib) / max(min(mib), 1e-9) if mib else None
+    # hashing spreads parts evenly only on average: with few objects a 2:1
+    # spread is ordinary; with enough, every OST must hold half its fair share
+    judged = objects >= 400
+    min_share = min(mib) / max(sum(mib), 1e-9) * len(mib) if mib else 0
+    checks = {"chunk_split_into_parts": parts >= 2, "every_ost_holds_data": all(m > 0 for m in mib),
+              "balanced": (min_share >= 0.5) if judged else True}
+    return {"status": "PASS" if all(checks.values()) else "FAIL", "checks": checks,
+            "chunk_bytes": {"stored_mean": chunk_seen, "lmcache_layout": chunk_layout},
+            "part_bytes": part, "parts_per_chunk": parts, "osts": per,
+            "max_over_min_bytes": round(balance, 2) if balance else None, "objects": objects,
+            "smallest_share_of_fair": round(min_share, 2),
+            "balance_judged": judged if judged else f"no: {objects} objects, too few to judge balance",
+            "summary": f"chunks of {chunk / 2**20:.1f} MiB in {parts} parts of {part / 2**20:.1f} MiB, "
+                       f"over {len(per)} OSTs ({', '.join(f'{m:.0f}' for m in mib)} MiB each)"}
+
+
 def t4_zero_copy(args, rep: Report, hosts: list[Host]) -> dict:
     per = {}
     for h in hosts:
@@ -657,6 +822,9 @@ def main() -> int:
     ap.add_argument("--t1-prompts", type=int, default=2)
     ap.add_argument("--t2-prompts", type=int, default=2)
     ap.add_argument("--osts-per-host", type=int, default=2)
+    ap.add_argument("--t5-prompts", type=int, default=3)
+    ap.add_argument("--t5-tokens", type=int, default=8192)
+    ap.add_argument("--idle-s", type=float, default=10, help="OST idle-CPU baseline for T5")
     ap.add_argument("--skip-prepare", action="store_true", help="hosts already prepared (onsite_cluster.json)")
     ap.add_argument("--venv", default=VENV, help="where LMCache and vLLM are installed")
     ap.add_argument("--local", action="store_true", help=argparse.SUPPRESS)   # rehearsal: local hosts, RDMA emulator
@@ -707,6 +875,8 @@ def main() -> int:
         for name, fn in (("T1_correctness", lambda: t1_correctness(args, rep, A)),
                          ("T2_cross_server", lambda: t2_cross_server(args, rep, A, B)),
                          ("T3_ttft", lambda: t3_ttft(args, rep, A, B)),
+                         ("T5_one_sided", lambda: t5_one_sided(args, rep, A, B)),
+                         ("T6_striping", lambda: t6_striping(args, rep, hosts)),
                          ("T4_zero_copy", lambda: t4_zero_copy(args, rep, hosts))):
             rep.stage(name)
             try:

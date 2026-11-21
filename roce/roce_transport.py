@@ -156,6 +156,9 @@ class _Lib:
                     lib.rocepool_native_local_address.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t]
                     lib.rocepool_native_stats.restype = None
                     lib.rocepool_native_stats.argtypes = [ctypes.c_void_p] + [ctypes.POINTER(ctypes.c_uint64)] * 3
+                    if hasattr(lib, "rocepool_native_ost_data_out"):
+                        lib.rocepool_native_ost_data_out.restype = ctypes.c_uint64
+                        lib.rocepool_native_ost_data_out.argtypes = [ctypes.c_void_p]
                     lib.rocepool_native_stop.restype = None
                     lib.rocepool_native_stop.argtypes = [ctypes.c_void_p]
 
@@ -302,7 +305,10 @@ class NativeServerHandle(ServerHandle):
     def stats(self) -> dict:
         objs, byts, ops = ctypes.c_uint64(), ctypes.c_uint64(), ctypes.c_uint64()
         self._lib.rocepool_native_stats(self._ptr, ctypes.byref(objs), ctypes.byref(byts), ctypes.byref(ops))
-        return {"objects": objs.value, "bytes": byts.value, "ops": ops.value}
+        out = {"objects": objs.value, "bytes": byts.value, "ops": ops.value}
+        if hasattr(self._lib, "rocepool_native_ost_data_out"):
+            out["data_out"] = int(self._lib.rocepool_native_ost_data_out(self._ptr))
+        return out
 
 
 class RoCETransport(Transport):

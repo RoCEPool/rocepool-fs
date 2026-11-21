@@ -422,6 +422,10 @@ typedef struct {
     kv_stripe stripes[OST_STRIPES];
     uint64_t wm[OST_WM_BUCKETS];
     atomic_ullong bytes, objects, ops;
+    /* object bytes this OST sent back in replies (GET, GET_V, READ_AT): what
+     * clients read through it. Reads clients make one-sided (RDMA READ of a
+     * leased object) never pass here -- the evidence that they bypass it */
+    atomic_ullong data_out;
     /* capacity tier: every object is written through to it; RAM keeps at
      * most ram_budget bytes of copies (LRU), reads of evicted objects go
      * from the device straight into the reply buffer */
@@ -1204,10 +1208,12 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         uint8_t *out = NULL;
         uint8_t *v = frame_alloc(OP_GET_OK, f, e->size, &out, out_len);
         int rc = 0;
+        size_t sent = v ? e->size : 0;   /* e may go once the lock is released */
         if (v && e->data) { memcpy(v, e->data, e->size); if (s->tier) lru_touch(s, e); }
         else if (v && e->size) { rc = ost_tier_read(s->tier, &e->ext, 0, v, e->size); atomic_fetch_add(&s->tier_reads, 1); }
         pthread_mutex_unlock(&st->lock);
         if (rc) { roce_reply_free(out); return tier_error(f, "read", rc, out_len); }
+        atomic_fetch_add(&s->data_out, sent);
         return out;
     }
     case OP_STAT: {
@@ -1426,6 +1432,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         }
         pthread_mutex_unlock(&st->lock);
         if (rc) { roce_reply_free(out); return tier_error(f, "read", rc, out_len); }
+        if (v) atomic_fetch_add(&s->data_out, n);
         return out;
     }
     case OP_TRUNCATE: {
@@ -3054,6 +3061,10 @@ void rocepool_native_stats(rocepool_native_t *n, uint64_t *objects, uint64_t *by
         *bytes = 0;
         *ops = atomic_load(&n->mdt->ops);
     }
+}
+
+uint64_t rocepool_native_ost_data_out(rocepool_native_t *n) {
+    return n->kind == ROCEPOOL_NATIVE_OST ? atomic_load(&n->ost->data_out) : 0;
 }
 
 void rocepool_native_stop(rocepool_native_t *n) {

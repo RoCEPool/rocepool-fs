@@ -24,9 +24,48 @@ TOOL = os.path.join(ROOT, "tools", "kvcache_e2e.py")
 
 
 def leftovers() -> str:
-    r = subprocess.run(["pgrep", "-af", "fake_inference_server|crossover_node.py ost-native"],
-                       capture_output=True, text=True)
-    return "\n".join(l for l in r.stdout.splitlines() if "pgrep" not in l)
+    """This tree's engines and OSTs still running (absolute paths, as the
+    harness starts them -- not a shell that merely mentions the names)."""
+    import re
+    pat = "|".join(re.escape(os.path.join(ROOT, x)) for x in ("tests/fakes/fake_inference_server.py",
+                                                              "tools/crossover_node.py"))
+    r = subprocess.run(["pgrep", "-af", pat], capture_output=True, text=True)
+    return "\n".join(l for l in r.stdout.splitlines() if "pgrep" not in l and " -c " not in l)
+
+
+class StripingVerdict(unittest.TestCase):
+    """T6's verdict from synthetic OST counters: parts per chunk, every OST
+    holding data, balance judged only with enough objects."""
+
+    def verdict(self, mib, objects_each, chunk=14 << 20, part=4 << 20):
+        sys.path.insert(0, ROOT)
+        from unittest import mock
+        import tools.kvcache_e2e as k
+        osts = {f"10.0.0.{i}:1995{i}": {"engine_objects": objects_each, "engine_bytes_mb": m}
+                for i, m in enumerate(mib)}
+        with mock.patch.object(k, "counters", return_value={"part_bytes": part, "bytes_stored": chunk * 10,
+                                                              "chunks_stored": 10}), \
+                mock.patch.object(k, "lmcache_chunk_bytes", return_value=chunk), \
+                mock.patch.object(k, "probe_osts", return_value=osts):
+            return k.t6_striping(None, None, [None])
+
+    def test_large_chunks_over_balanced_osts_pass(self):
+        r = self.verdict([500, 520, 480, 510], 500)
+        self.assertEqual((r["status"], r["parts_per_chunk"]), ("PASS", 4))
+
+    def test_an_ost_far_below_its_share_fails_when_there_is_enough_to_judge(self):
+        r = self.verdict([700, 700, 700, 150], 500)
+        self.assertEqual(r["status"], "FAIL")
+        self.assertFalse(r["checks"]["balanced"])
+
+    def test_few_objects_are_not_judged_for_balance(self):
+        r = self.verdict([10, 10, 14, 20], 15)
+        self.assertEqual(r["status"], "PASS")
+        self.assertIn("too few", r["balance_judged"])
+
+    def test_chunks_that_fit_one_part_or_an_empty_ost_fail(self):
+        self.assertFalse(self.verdict([500] * 4, 500, chunk=2 << 20)["checks"]["chunk_split_into_parts"])
+        self.assertFalse(self.verdict([500, 500, 500, 0], 500)["checks"]["every_ost_holds_data"])
 
 
 @unittest.skipUnless(shutil.which("gcc"), "needs gcc")
@@ -39,7 +78,8 @@ class KVCacheE2ERehearsal(unittest.TestCase):
 
     def args(self, port_base, fake_args="", lengths="1024,2048"):
         return [sys.executable, TOOL, "--engine", "fake", "--hosts", "127.0.0.1,127.0.0.1", "--lengths", lengths,
-                "--reps", "2", "--t1-tokens", "1536", "--port-base", str(port_base),
+                "--reps", "2", "--t1-tokens", "1536", "--port-base", str(port_base), "--idle-s", "1",
+                "--t5-prompts", "2", "--t5-tokens", "2048",
                 "--report", os.path.join(self.tmp, "report.json"),
                 "--progress", os.path.join(self.tmp, "progress.json"), "--logs", os.path.join(self.tmp, "logs"),
                 *(["--fake-args=" + fake_args] if fake_args else [])]
@@ -54,8 +94,18 @@ class KVCacheE2ERehearsal(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout[-3000:] + r.stderr[-2000:])
         self.assertEqual(rep["verdict"], "PASS")
         t = rep["tests"]
-        self.assertEqual([t[k]["status"] for k in ("T1_correctness", "T2_cross_server", "T3_ttft", "T4_zero_copy")],
-                         ["PASS"] * 4)
+        self.assertEqual([t[k]["status"] for k in ("T1_correctness", "T2_cross_server", "T3_ttft", "T5_one_sided",
+                                                    "T6_striping", "T4_zero_copy")], ["PASS"] * 6)
+        t5 = t["T5_one_sided"]
+        self.assertGreater(t5["loaded_bytes"], 0)
+        self.assertEqual(t5["osts_during_loads"]["data_out_bytes"], 0, "no OST sent the loaded data")
+        self.assertGreater(t5["osts_during_loads"]["requests"], 0, "leases are still asked for")
+        t6 = t["T6_striping"]
+        self.assertEqual(t6["parts_per_chunk"], 2)          # 1 MiB chunks, 0.5 MiB parts in the fake
+        self.assertEqual(t6["chunk_bytes"]["stored_mean"], 1 << 20)
+        self.assertEqual(t6["chunk_bytes"]["lmcache_layout"], 1 << 20)
+        self.assertEqual(len(t6["osts"]), 4)
+        self.assertTrue(all(v["mib"] > 0 for v in t6["osts"].values()))
         for c in t["T1_correctness"]["cases"]:
             self.assertTrue(c["identical"])
             self.assertGreater(c["loaded_from_rocepool_bytes"], 0, "the reload really came from RoCEPool")
@@ -86,8 +136,11 @@ class KVCacheE2ERehearsal(unittest.TestCase):
         r, rep = self.run_e2e(4400, "--no-register")
         self.assertEqual(rep["verdict"], "FAIL")
         t = rep["tests"]
-        self.assertEqual((t["T1_correctness"]["status"], t["T2_cross_server"]["status"], t["T4_zero_copy"]["status"]),
-                         ("PASS", "PASS", "FAIL"))
+        self.assertEqual((t["T1_correctness"]["status"], t["T2_cross_server"]["status"], t["T4_zero_copy"]["status"],
+                          t["T5_one_sided"]["status"]), ("PASS", "PASS", "FAIL", "FAIL"))
+        t5 = t["T5_one_sided"]
+        self.assertFalse(t5["checks"]["osts_sent_no_data"], "loads into unregistered memory go through the OSTs")
+        self.assertGreaterEqual(t5["osts_during_loads"]["data_out_bytes"], t5["loaded_bytes"])
         self.assertTrue(all(h["bytes_copied"] > 0 for h in t["T4_zero_copy"]["hosts"].values()))
 
     def test_an_engine_that_cannot_start_fails_cleanly(self):

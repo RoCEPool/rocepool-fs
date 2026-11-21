@@ -128,7 +128,9 @@ def native_server(kind: str, me: str) -> None:
         print("MEMPROBE " + json.dumps({
             "rss_mb": rss, "threads": threads, "malloc_in_use_mb": round(mi.uordblks / 2**20, 1),
             "malloc_free_retained_mb": round(mi.fordblks / 2**20, 1), "malloc_mmapped_mb": round(mi.hblkhd / 2**20, 1),
-            "engine_bytes_mb": round(st["bytes"] / 2**20, 1), "engine_objects": st["objects"], "ops": st["ops"]}),
+            "engine_bytes_mb": round(st["bytes"] / 2**20, 1), "engine_objects": st["objects"], "ops": st["ops"],
+            # replies' object bytes (not one-sided reads) and this process's CPU time
+            "data_out_mb": round(st.get("data_out", 0) / 2**20, 3), "cpu_s": round(sum(os.times()[:2]), 3)}),
             flush=True)
     signal.signal(signal.SIGUSR1, _probe)
     print(f"READY {me}", flush=True)
