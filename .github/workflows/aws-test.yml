@@ -290,7 +290,7 @@ jobs:
           # vLLM itself needs the GPU stack to install)
           v=$(python3 -c 'import importlib.util as u; s=u.spec_from_file_location("k", "tools/kvcache_e2e.py"); m=u.module_from_spec(s); s.loader.exec_module(m); print(m.VLLM_SPEC.split("==")[1])')
           git -c advice.detachedHead=false clone -q --depth 1 --branch "v$v" https://github.com/vllm-project/vllm.git /tmp/vllm-src
-          VLLM_SRC=/tmp/vllm-src python3 tests/test_kvcache_e2e.py -v VllmCommandLine VllmFlags RootCause
+          VLLM_SRC=/tmp/vllm-src python3 tests/test_kvcache_e2e.py -v VllmCommandLine VllmEnvironment VllmFlags RootCause
       - name: run on AWS
         if: ${{ !inputs.probe_only }}
         env:

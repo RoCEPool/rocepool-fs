@@ -103,6 +103,21 @@ class VllmCommandLine(unittest.TestCase):
             self.assertTrue(f'"--{name}"' in text or field, f"{f} is not a flag of vLLM {m.VLLM_SPEC} ({src})")
 
 
+class VllmEnvironment(unittest.TestCase):
+    """The environment variables the harness gives vLLM exist in the pinned
+    vLLM (VLLM_SRC, as for the flags)."""
+
+    def test_env_vars_exist_in_the_pinned_vllm(self):
+        src = os.environ.get("VLLM_SRC")
+        if not src:
+            self.skipTest("VLLM_SRC not set")
+        m = PinCheck.harness()
+        envs = open(os.path.join(src, "vllm", "envs.py")).read()
+        self.assertTrue(m.VLLM_ENV)
+        for k in m.VLLM_ENV:
+            self.assertIn(f'"{k}"', envs, f"{k} is not read by vLLM {m.VLLM_SPEC}")
+
+
 class VllmFlags(unittest.TestCase):
     def test_extensible_kv_cache_off_from_0_34_only(self):
         m = PinCheck.harness()
@@ -286,7 +301,7 @@ class KVCacheE2ERehearsal(unittest.TestCase):
         vl = [c for c in calls if c["prog"] == "vllm"]
         self.assertEqual(sorted(c["kvt"]["kv_connector_extra_config"]["lmcache.mp.port"] for c in vl),
                          [6555 + 5000, 6555 + 5100], "each vLLM talks to its own host's LMCache")
-        self.assertTrue(all(c["env"] == {"PYTHONHASHSEED": "0", "VLLM_BATCH_INVARIANT": "1"} for c in vl))
+        self.assertTrue(all(c["env"] == {"PYTHONHASHSEED": "0", "VLLM_BATCH_INVARIANT": "1", "VLLM_USE_FLASHINFER_SAMPLER": "0"} for c in vl))
         print("lmcache arguments validated by:", lm[0]["validated"])
         self.assertEqual(leftovers(), "")
 
