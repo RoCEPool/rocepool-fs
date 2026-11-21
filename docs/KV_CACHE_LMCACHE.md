@@ -126,9 +126,65 @@ zero-copy and the bytes copied.
   environment had no PyTorch, so only the imports of torch and numba were
   satisfied by an inert placeholder. The adapter logic under test does not
   use torch.
-- **Not yet run end to end.** No end-to-end run with vLLM on GPUs has been
-  done. That run, and throughput and time-to-first-token figures on real
-  RDMA NICs, are the next step.
+- **Not yet run end to end.** The end-to-end run with vLLM on GPU hosts
+  (below) has been rehearsed locally but not yet run on GPUs.
+
+## End-to-end test on GPU hosts
+
+`tools/kvcache_e2e.py` runs vLLM + LMCache + RoCEPool on two GPU hosts and
+writes `kvcache_e2e_report.json`. Its steps:
+
+1. **prepare:** `tools/roce_onsite.py --bench none` runs the RDMA preflight,
+   builds the tree and ships it to the peer.
+2. **install:** LMCache 0.5.7 and vLLM go into a venv, and the model is
+   downloaded.
+3. **osts:** RoCEPool OSTs start on both hosts.
+4. **engines:** on each host, an LMCache server starts with RoCEPool as L2
+   and its L1 arena registered with the NIC, then vLLM starts with its own
+   prefix cache off.
+5. **tests:**
+
+| Test | Pass when |
+|---|---|
+| T1 correctness | After host A's L1 is cleared, the same prompt loads its KV cache from RoCEPool and the answer equals an L1 hit's. Both answers use the same cached-KV computation, so only different bytes could change it. |
+| T2 cross-server | Host B, which never saw the prompt, loads host A's KV cache from RoCEPool and answers like A's L1 hit. |
+| T3 TTFT | Not pass/fail on time. For each prompt length, median time to first token is recorded for four cases: cold (recompute), L1 hit, L2 hit on the same host, L2 hit on the other host. The cached answers must agree. |
+| T4 zero copy | The connectors' "bytes copied" counters stay at 0 on both hosts, so every byte moved by RDMA. |
+
+**Progress write-back.** Every step and test result is written to
+`kvcache_e2e_progress.json` as soon as it is known, and again every 30 s.
+On AWS, `tools/aws_cluster.py` brings that file and the run's output back
+every 150 s and publishes them to branch `aws-results/<run id>`, so a run
+cut short keeps its partial results.
+
+On AWS, one command creates two GPU hosts with EFA, runs everything,
+publishes the reports and deletes the hosts:
+
+```bash
+gh api -X POST repos/RoCEPool/rocepool-fs/actions/workflows/aws-test.yml/dispatches -f ref=main \
+  -f "inputs[mode]=gpu" -f "inputs[type]=g6.8xlarge" -f "inputs[nodes]=2" \
+  -f "inputs[max_hours]=2.5" -f "inputs[budget_usd]=15" \
+  -f "inputs[disk_gib]=200" -f "inputs[disk_mbps]=250" -f "inputs[disk_iops]=3000" \
+  -f "inputs[command]=python3 tools/kvcache_e2e.py"
+```
+
+**Instance choice.** g6.8xlarge (1 × NVIDIA L4) is the smallest GPU type
+whose EFA supports hardware RDMA read and write (Nitro v4). g5 types have
+EFA without RDMA read or write.
+
+**Hosts of your own:** run `python3 tools/kvcache_e2e.py --hosts <this
+host>,<other host>` on the first host, with root ssh to the other.
+
+**Rehearsal without GPUs:** `tests/test_kvcache_e2e.py` runs the same steps
+and tests locally, in two ways:
+
+- against a stand-in engine (`tests/fakes/fake_inference_server.py`) that
+  serves vLLM's and LMCache's HTTP APIs and moves KV chunks through the
+  real connector;
+- against stand-in `pip`, `uv`, `lmcache` and `vllm` executables, which
+  check the harness's real install script and command lines. The
+  `lmcache server` arguments are checked by LMCache's own parser when
+  LMCache is importable.
 
 ## Not covered yet
 

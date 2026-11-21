@@ -91,7 +91,9 @@ for typ, cls in (("plugin", "RoCEPoolL2Adapter"), ("native_plugin", "RoCEPoolCon
     r["lookup_after_delete"] = bits(until(lambda: ad.query_lookup_and_lock_result(tid)), len(keys))
     u = ad.get_usage()
     r["usage_bytes"] = u.total_bytes_used
-    r["status"] = {k: v for k, v in ad.report_status().items() if k in ("is_healthy", "type", "zero_copy_l1")}
+    full = ad.report_status()
+    r["status"] = {k: v for k, v in full.items() if k in ("is_healthy", "type", "zero_copy_l1")}
+    r["status_counters"] = sorted(full.get("rocepool", {}))
     conn = getattr(ad, "rocepool", None) or ad._client
     st = conn.stats()
     r["zero_copy"], r["copied"] = st["bytes_zero_copy"], st["bytes_copied"]
@@ -143,6 +145,7 @@ class LMCacheAdapterIntegration(unittest.TestCase):
             self.assertEqual(x["usage_bytes"], total - 4096 - (300 << 10), typ)
             self.assertTrue(x["status"]["is_healthy"], typ)
         self.assertEqual(r["plugin"]["adapter"], "RoCEPoolL2Adapter")
+        self.assertIn("bytes_zero_copy", r["plugin"]["status_counters"], "live counters in LMCache's status")
         self.assertTrue(r["plugin"]["status"]["zero_copy_l1"])
         self.assertEqual((r["plugin"]["zero_copy"], r["plugin"]["copied"]), (2 * total, 0))
         self.assertEqual((r["native_plugin"]["zero_copy"], r["native_plugin"]["copied"]), (0, 2 * total))

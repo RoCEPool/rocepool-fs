@@ -647,7 +647,11 @@ class Run:
         if self.state.get("poweroff_at"):
             end = min(end, time.monotonic() + self.state["poweroff_at"] - FETCH_MARGIN_S - time.time())
         rc = None
+        next_progress = time.monotonic() + a.progress_every
         while time.monotonic() < end:
+            if a.progress_every > 0 and time.monotonic() >= next_progress:
+                self.pull_progress()
+                next_progress = time.monotonic() + a.progress_every
             r = self.ssh(head, "cd /root/rocepool; wc -l < aws_run.out 2>/dev/null || echo 0; "
                                "cat aws_run.rc 2>/dev/null || echo running", check=False, timeout=120)
             lines = r.stdout.split()
@@ -669,13 +673,51 @@ class Run:
         self.fetch()
         return 1 if rc is None else rc
 
+    def pull_progress(self) -> None:
+        """Mid-run write-back (every --progress-every seconds): the command's
+        output so far and every *_progress.json it keeps on the head land in
+        the run directory, then --progress-hook publishes them -- so a run
+        cut short (hosts gone, runner gone) still leaves its partial
+        evidence. A private command's output stays on the cluster: nothing
+        is pulled for it. Never fails the run."""
+        if self.args.quiet_command:
+            return
+        head, got = self.state["hosts"][0]["public"], []
+        try:
+            r = self.ssh(head, "cd /root/rocepool && ls aws_run.out *_progress.json 2>/dev/null", check=False,
+                         timeout=60)
+            for f in r.stdout.split():
+                if "/" in f or not (f == "aws_run.out" or f.endswith("_progress.json")):
+                    continue
+                try:
+                    self.scp(f"root@{head}:/root/rocepool/{f}", os.path.join(self.dir, f))
+                    got.append(f)
+                except RuntimeError:
+                    pass
+        except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
+            log(f"progress: could not reach the head ({exc})")
+        with open(os.path.join(self.dir, "progress_pulled.json"), "w") as f:
+            json.dump({"at": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()) + "Z", "files": got}, f)
+        hook = getattr(self.args, "progress_hook", None)
+        if hook:
+            try:
+                h = subprocess.run(hook, shell=True, capture_output=True, text=True, timeout=180,
+                                   env=dict(os.environ, RUN_DIR=self.dir), cwd=ROOT)
+                if h.returncode:
+                    log(f"progress hook failed ({h.returncode}): {(h.stdout + h.stderr)[-300:]}")
+            except subprocess.TimeoutExpired:
+                log("progress hook timed out")
+        log(f"progress written back: {', '.join(got) or 'nothing yet'}")
+
     def fetch(self) -> None:
         head = self.state["hosts"][0]["public"]
         files = ["onsite_report.json", "onsite_io500.json", "onsite_io500_valid.json", "run.log", "aws_run.out",
                  "onsite_crossover.json", "onsite_stress.json", "onsite_ior.json", "onsite_ior_hard.json",
                  "onsite_kv.json", "onsite_gds.json", "onsite_kvcache.json", "selftest.log",
                  "rapidsse_tpch_report.json",  # tools/rapidsse_tpch.py (RapidsSE's TPC-H on rocepool)
-                 "rocepond_sort_report.json"]  # tools/rocepond_sort.py (rocepond's sort on rocepool)
+                 "rocepond_sort_report.json",  # tools/rocepond_sort.py (rocepond's sort on rocepool)
+                 # tools/kvcache_e2e.py (inference engines' KV cache on rocepool)
+                 "kvcache_e2e_report.json", "kvcache_e2e_progress.json", "kvcache_e2e_logs.tar.gz"]
         # targeted measurements (roce_onsite.py --bench writes): onsite_writes_spin<N>.json
         # and the probes before the valid run: ranks per node, OFI endpoints per rank, the rates it was sized by
         r = self.ssh(head, "cd /root/rocepool && ls onsite_writes_*.json onsite_io500_ranks.json onsite_io500_eps*.json "
@@ -809,6 +851,11 @@ def main() -> int:
         p.add_argument("--ssh", default="ssh", help=argparse.SUPPRESS)
         p.add_argument("--scp", default="scp", help=argparse.SUPPRESS)
         p.add_argument("--poll", type=float, default=15.0, help=argparse.SUPPRESS)
+    r.add_argument("--progress-every", type=float, default=150.0,
+                   help="seconds between mid-run write-backs of the head's output and *_progress.json "
+                        "files into the run directory (0: off)")
+    r.add_argument("--progress-hook", help="shell command run here after each write-back (RUN_DIR set), "
+                                           "e.g. to publish the run directory")
     r.add_argument("--run-id", help=argparse.SUPPRESS)
     args = ap.parse_args()
 

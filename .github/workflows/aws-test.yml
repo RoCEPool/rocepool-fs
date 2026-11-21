@@ -282,12 +282,15 @@ jobs:
         env:
           CMD: ${{ inputs.command }}
           PRIVATE: ${{ inputs.private_run && '1' || '' }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -o pipefail
           rc=0
-          extra=()
+          # every 150 s the head's output and progress files come back and go to
+          # branch aws-results/<run id>: a run cut short keeps its partial evidence
+          extra=(--progress-every 150 --progress-hook "bash tools/aws_push_reports.sh $RUN_ID")
           if [ -n "$PRIVATE" ]; then   # the bundle's entry point; its output and files come back sealed
-            CMD="bash private/entry.sh"; extra=(--quiet-command --fetch private_out.tgz)
+            CMD="bash private/entry.sh"; extra=(--quiet-command --fetch private_out.tgz --progress-every 0)
           fi
           python3 -u tools/aws_cluster.py run --run-id "$RUN_ID" --region "${{ inputs.region }}" \
             --mode "${{ inputs.mode }}" --type "${{ inputs.type }}" --nodes "${{ inputs.nodes }}" \
@@ -329,15 +332,11 @@ jobs:
           done
       - name: "reports to branch aws-results/<run id> (no SSH key, no file over 20 MB)"
         if: ${{ always() && !inputs.probe_only }}
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          d="aws_runs/$RUN_ID"; [ -d "$d" ] || exit 0
-          out=$(mktemp -d); mkdir -p "$out/$RUN_ID"
-          (cd "$d" && find . -type f ! -name ssh_key ! -name '*.pem' ! -name 'id_*' ! -name 'cluster.conf' ! -name 'rocepool.tar.gz' -size -20M -print0 \
-             | xargs -0 -I{} cp --parents {} "$out/$RUN_ID/")
-          [ -f aws_run.log ] && cp aws_run.log "$out/$RUN_ID/"
-          cd "$out" && git init -q && git checkout -q -b "aws-results/$RUN_ID" && git add -A
-          git -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit -qm "aws-test reports $RUN_ID"
-          git push -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" "aws-results/$RUN_ID"
+          [ -d "aws_runs/$RUN_ID" ] || exit 0
+          bash tools/aws_push_reports.sh "$RUN_ID" "aws_runs/$RUN_ID" aws_run.log
           echo "::notice title=reports::branch aws-results/$RUN_ID"
       - name: "reports (without the run SSH key: artifacts of a public repository are readable)"
         if: always()
