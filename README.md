@@ -29,6 +29,14 @@ hosts and is moved with RDMA (RoCE v2, or AWS EFA through libfabric).
   command checks the hosts, builds everything (offline: all third-party
   sources are in `deps/`), starts the servers, picks the fastest client mode,
   runs IO500 and writes a report with a bottleneck analysis.
+  **Official result:** IO500 score 102.30 (bandwidth 12.29 GiB/s, metadata
+  851.18 kIOP/s) on 6 client nodes, ranked 101st of 162 on the SC26 Research
+  list ([io500.org entry](https://io500.org/submissions/view/819); details in
+  [English](docs/reports/io500-sc26/IO500_SC26_Official_Result.md),
+  [Japanese](docs/reports/io500-sc26/IO500_SC26_公式結果.md),
+  [German](docs/reports/io500-sc26/IO500_SC26_Offizielles_Ergebnis.md),
+  [Spanish](docs/reports/io500-sc26/IO500_SC26_Resultado_oficial.md),
+  [French](docs/reports/io500-sc26/IO500_SC26_Résultat_officiel.md)).
 
 ## Download
 
