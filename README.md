@@ -21,6 +21,10 @@ hosts and is moved with RDMA (RoCE v2, or AWS EFA through libfabric).
   (prefix caching, prefill/decode disaggregation), with a benchmark of the
   time to first token (TTFT) it saves. See
   [docs/GPUDIRECT_STORAGE.md](docs/GPUDIRECT_STORAGE.md).
+- **KV-cache backend for inference engines**: an LMCache storage adapter,
+  so vLLM and SGLang can offload and share KV cache on RoCEPool. Chunks are
+  striped over all OSTs and moved zero-copy between the OSTs and LMCache's
+  pinned memory. See [docs/KV_CACHE_LMCACHE.md](docs/KV_CACHE_LMCACHE.md).
 - **Two transports, one API** (`roce/native/roce_transport.h`): verbs/rdma_cm
   for RoCE NICs and Soft-RoCE, libfabric `FI_EP_RDM` for EFA. A software RDMA
   emulator (`roce/native/softverbs/`) runs the whole system, tests included,

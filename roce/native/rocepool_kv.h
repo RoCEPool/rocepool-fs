@@ -72,6 +72,13 @@ typedef struct rpkv_dev rpkv_dev_t;
  * not device memory of the runtime, or no runtime. */
 rpkv_dev_t *rpkv_dev_register(rpkv_t *kv, void *base, size_t len);
 void rpkv_dev_deregister(rpkv_dev_t *d);
+/* the same for a HOST buffer (e.g. an inference engine's pinned KV-cache
+ * arena): registered with the NIC once, then every *_dev call on it is
+ * zero-copy -- gets are one-sided RDMA READs into it, puts are RDMA READs
+ * by the OST out of it. rpkv_dev_direct() is 0 when the NIC registration
+ * failed (transfers then go through memcpy). Release with
+ * rpkv_dev_deregister. */
+rpkv_dev_t *rpkv_host_register(rpkv_t *kv, void *base, size_t len);
 int rpkv_dev_direct(const rpkv_dev_t *d);   /* 1: the NIC reaches it; 0: transfers bounce */
 
 /* the value <-> d at byte offset off (an offset from the base given to
