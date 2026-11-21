@@ -24,7 +24,10 @@ hosts and is moved with RDMA (RoCE v2, or AWS EFA through libfabric).
 - **KV-cache backend for inference engines**: an LMCache storage adapter,
   so vLLM and SGLang can offload and share KV cache on RoCEPool. Chunks are
   striped over all OSTs and moved zero-copy between the OSTs and LMCache's
-  pinned memory. See [docs/KV_CACHE_LMCACHE.md](docs/KV_CACHE_LMCACHE.md).
+  pinned memory. Tested end to end with vLLM on two AWS g6.8xlarge hosts:
+  no CPU copy, and no OST CPU on the data path of loads. At 16K tokens, the
+  time to first token falls from 5.4 s (recompute) to 0.4–0.6 s. See
+  [docs/KV_CACHE_LMCACHE.md](docs/KV_CACHE_LMCACHE.md).
 - **Two transports, one API** (`roce/native/roce_transport.h`): verbs/rdma_cm
   for RoCE NICs and Soft-RoCE, libfabric `FI_EP_RDM` for EFA. A software RDMA
   emulator (`roce/native/softverbs/`) runs the whole system, tests included,
