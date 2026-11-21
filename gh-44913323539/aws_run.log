@@ -1,0 +1,45 @@
+[aws 14:20:12] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 14:20:13] 2 x g6.8xlarge: 32 vCPU, 128 GiB, 25 Gigabit, NVMe 900 GB, EFA yes
+[aws 14:20:13] gpu hosts with EFA (RDMA between them)
+[aws 14:20:14] vCPU quota 64 >= 64 needed (instances already running count against it too)
+[aws 14:20:14] AMI: base-oss-nvidia-driver-gpu-ubuntu-24.04 (ami-0ac221eaf31b5b104)
+[aws 14:20:25] launched i-0409b9613b98633e1, i-04de7a9fd6aac8044
+[aws 14:20:42] running: 3.142.35.193 (172.31.1.141), 3.17.187.189 (172.31.7.94)
+[aws 14:22:26] 3.142.35.193: ready (gpu, EFA)
+[aws 14:22:26] 3.17.187.189: ready (gpu, EFA)
+[aws 14:22:33] command started on 3.142.35.193 (2 hosts); following its progress
+  | == prepare
+[aws 14:25:17] progress written back: aws_run.out, kvcache_e2e_progress.json
+[aws 14:28:01] progress written back: aws_run.out, kvcache_e2e_progress.json
+  | [PASS] prepare  2 hosts, transport verbs
+  | == install
+[aws 14:30:46] progress written back: aws_run.out, kvcache_e2e_progress.json
+  | [PASS] install  vLLM 0.33.0, LMCache 0.5.7.post1, torch 2.14.0+cu130 (CUDA 13.0), GPU NVIDIA L4
+  | == osts
+  | [PASS] osts  4 OSTs (RAM): 172.31.1.141:19950,172.31.1.141:19951,172.31.7.94:19950,172.31.7.94:19951
+  | == engines
+  | [PASS] engines  LMCache servers (RoCEPool L2) and vLLM up on A, B
+  | == T1_correctness
+[aws 14:33:32] progress written back: aws_run.out, kvcache_e2e_progress.json
+  | [PASS] T1_correctness  2/2 answers identical after a reload from RoCEPool (reference: an L1 hit), 2/2 also equal to the cold recompute, 420.0 MiB loaded
+  | == T2_cross_server
+  | [PASS] T2_cross_server  2/2 prompts computed on A were loaded on B from RoCEPool and answered identically
+  | == T3_ttft
+  | [RUNNING] T3_ttft_partial  
+  | [RUNNING] T3_ttft_partial  
+  | [RUNNING] T3_ttft_partial  
+[aws 14:36:20] progress written back: aws_run.out, kvcache_e2e_progress.json
+  | [RUNNING] T3_ttft_partial  
+  | [PASS] T3_ttft  1016 tok: cold 268 ms, L2 local 139 ms, L2 other host 107 ms; 4086 tok: cold 1150 ms, L2 local 224 ms, L2 other host 157 ms; 8182 tok: cold 2452 ms, L2 local 340 ms, L2 other host 240 ms; 16374 tok: cold 5441 ms, L2 local 562 ms, L2 other host 395 ms
+  | == T5_one_sided
+  | [PASS] T5_one_sided  1302 MiB loaded on B, OSTs sent 0.00 MiB of it; OST CPU 24 us/MiB loaded vs 48 us/MiB stored; RDMA read in hardware: PASS
+  | == T6_striping
+  | [PASS] T6_striping  chunks of 14.0 MiB in 4 parts of 4.0 MiB, over 4 OSTs (1684, 1672, 1748, 1742 MiB each)
+  | == T4_zero_copy
+  | [PASS] T4_zero_copy  17.96 GiB moved by RDMA, 0 bytes copied by the CPU
+  | == cleanup
+  | verdict: PASS   report: /root/rocepool/kvcache_e2e_report.json
+[aws 14:37:57] reports in aws_runs/gh-44913323539/: onsite_report.json, aws_run.out, onsite_crossover.json, kvcache_e2e_report.json, kvcache_e2e_progress.json, kvcache_e2e_logs.tar.gz, host0_kernel.txt, host1_kernel.txt
+[aws 14:37:57] run.sh exit code 0
+[aws 14:37:58] terminating i-0409b9613b98633e1, i-04de7a9fd6aac8044
+[aws 14:45:06] all resources released

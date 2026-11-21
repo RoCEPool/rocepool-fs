@@ -1,0 +1,220 @@
+[Sat Nov 21 14:20:42 2026] EXT4-fs (nvme0n1p16): Supports (experimental) DIO atomic writes awu_min: 4096, awu_max: 4096
+[Sat Nov 21 14:20:42 2026] EXT4-fs (nvme0n1p16): mounted filesystem 90d3e893-d7e7-488a-8f02-d2b664e358bf r/w with ordered data mode. Quota mode: none.
+[Sat Nov 21 14:20:42 2026] nvidia: unknown parameter 'NVreg_GrdmaPciTopoCheckOverride' ignored
+[Sat Nov 21 14:20:42 2026] nvidia-nvlink: Nvlink Core is being initialized, major device number 235
+
+[Sat Nov 21 14:20:42 2026] nvidia 0000:36:00.0: enabling device (0000 -> 0002)
+[Sat Nov 21 14:20:42 2026] pcieport 0000:35:00.0: can't derive routing for PCI INT A
+[Sat Nov 21 14:20:42 2026] nvidia 0000:36:00.0: PCI INT A: no GSI
+[Sat Nov 21 14:20:42 2026] input: ImPS/2 Generic Wheel Mouse as /devices/platform/i8042/serio1/input/input4
+[Sat Nov 21 14:20:48 2026] NVRM: loading NVIDIA UNIX Open Kernel Module for x86_64  620.70.06  Release Build  (dvs-builder@U22-I3-H15-02-4)  Sat Oct 31 19:11:53 UTC 2026
+[Sat Nov 21 14:20:48 2026] EFA NV Peermem v1.2.3
+[Sat Nov 21 14:20:49 2026] nvidia_fs: Initializing nvfs driver module
+[Sat Nov 21 14:20:49 2026] nvidia_fs: registered correctly with major number 510
+[Sat Nov 21 14:20:49 2026] max_peer_devs : 128 and max_pci_depth : 16
+[Sat Nov 21 14:20:49 2026] audit: type=1400 audit(1795270849.401:2): apparmor="STATUS" operation="profile_load" profile="unconfined" name="1password" pid=756 comm="apparmor_parser"
+[Sat Nov 21 14:20:49 2026] audit: type=1400 audit(1795270849.401:3): apparmor="STATUS" operation="profile_load" profile="unconfined" name="Discord" pid=757 comm="apparmor_parser"
+[Sat Nov 21 14:20:49 2026] audit: type=1400 audit(1795270849.401:4): apparmor="STATUS" operation="profile_load" profile="unconfined" name="QtWebEngineProcess" pid=759 comm="apparmor_parser"
+[Sat Nov 21 14:20:49 2026] audit: type=1400 audit(1795270849.401:5): apparmor="STATUS" operation="profile_load" profile="unconfined" name=4D6F6E676F444220436F6D70617373 pid=758 comm="apparmor_parser"
+[Sat Nov 21 14:20:49 2026] audit: type=1400 audit(1795270849.434:6): apparmor="STATUS" operation="profile_load" profile="unconfined" name="evolution" pid=772 comm="apparmor_parser"
+[Sat Nov 21 14:20:49 2026] audit: type=1400 audit(1795270849.434:7): apparmor="STATUS" operation="profile_load" profile="unconfined" name="geary" pid=776 comm="apparmor_parser"
+[Sat Nov 21 14:20:49 2026] audit: type=1400 audit(1795270849.434:8): apparmor="STATUS" operation="profile_load" profile="unconfined" name="buildah" pid=762 comm="apparmor_parser"
+[Sat Nov 21 14:20:49 2026] audit: type=1400 audit(1795270849.434:9): apparmor="STATUS" operation="profile_load" profile="unconfined" name="ch-run" pid=765 comm="apparmor_parser"
+[Sat Nov 21 14:20:49 2026] audit: type=1400 audit(1795270849.434:10): apparmor="STATUS" operation="profile_load" profile="unconfined" name="cam" pid=763 comm="apparmor_parser"
+[Sat Nov 21 14:20:49 2026] audit: type=1400 audit(1795270849.434:11): apparmor="STATUS" operation="profile_load" profile="unconfined" name="crun" pid=768 comm="apparmor_parser"
+[Sat Nov 21 14:20:56 2026] 8021q: 802.1Q VLAN Support v1.8
+[Sat Nov 21 14:20:56 2026] cfg80211: Loading compiled-in X.509 certificates for regulatory database
+[Sat Nov 21 14:20:56 2026] Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+[Sat Nov 21 14:20:56 2026] Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+[Sat Nov 21 14:21:02 2026] EXT4-fs (nvme0n1p1): resizing filesystem from 19398395 to 52166395 blocks
+[Sat Nov 21 14:21:02 2026] EXT4-fs (nvme0n1p1): resized filesystem to 52166395
+[Sat Nov 21 14:21:03 2026] kauditd_printk_skb: 112 callbacks suppressed
+[Sat Nov 21 14:21:03 2026] audit: type=1400 audit(1795270863.850:124): apparmor="STATUS" operation="profile_replace" info="same as current profile, skipping" profile="unconfined" name="rsyslogd" pid=1266 comm="apparmor_parser"
+[Sat Nov 21 14:21:04 2026] loop3: detected capacity change from 0 to 8
+[Sat Nov 21 14:21:04 2026] audit: type=1400 audit(1795270864.078:125): apparmor="STATUS" operation="profile_replace" profile="unconfined" name="/usr/lib/snapd/snap-confine" pid=1426 comm="apparmor_parser"
+[Sat Nov 21 14:21:04 2026] block nvme1n1: No UUID available providing old NGUID
+[Sat Nov 21 14:21:04 2026] NET: Registered PF_QIPCRTR protocol family
+[Sat Nov 21 14:21:06 2026] nvidia-modeset: Loading NVIDIA UNIX Open Kernel Mode Setting Driver for x86_64  620.70.06  Release Build  (dvs-builder@U22-I3-H15-02-4)  Sat Oct 31 18:58:05 UTC 2026
+[Sat Nov 21 14:21:06 2026] gdrdrv:gdrdrv_init:loading gdrdrv version 2.6 built for opensource NVIDIA driver
+[Sat Nov 21 14:21:06 2026] gdrdrv:gdrdrv_init:device registered with major number 508
+[Sat Nov 21 14:21:06 2026] gdrdrv:gdrdrv_init:dbg traces disabled, info traces disabled
+[Sat Nov 21 14:21:06 2026] gdrdrv:gdrdrv_init:Persistent mapping will be used
+[Sat Nov 21 14:21:06 2026] EXT4-fs (dm-0): mounted filesystem 72421d81-f26f-47ee-8b26-c9d780c34a79 r/w with ordered data mode. Quota mode: none.
+[Sat Nov 21 14:21:07 2026] systemd-journald[398]: /var/log/journal/ec236c92544c560ba08969a5cd80d1e6/user-1000.journal: Journal file uses a different sequence number ID, rotating.
+[Sat Nov 21 14:21:19 2026] audit: type=1400 audit(1795270879.582:126): apparmor="STATUS" operation="profile_load" profile="unconfined" name="docker-default" pid=2571 comm="apparmor_parser"
+[Sat Nov 21 14:21:19 2026] Initializing XFRM netlink socket
+[Sat Nov 21 14:21:19 2026] bridge: filtering via arp/ip/ip6tables is no longer available by default. Update your scripts to load br_netfilter if you need this.
+[Sat Nov 21 14:22:24 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:22:24 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:22:24 2026] efa: Acquired peer memory using P2P
+[Sat Nov 21 14:22:24 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:22:24 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:22:24 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:22:24 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:22:24 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:22:24 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:24:19 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:24:19 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:24:19 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:24:19 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:24:41 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:24:41 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:24:41 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:24:41 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:24:57 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:24:57 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:24:57 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:24:57 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:24:57 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:24:57 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:24:57 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:24:57 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:24:59 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:24:59 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-148) [-22]
+[Sat Nov 21 14:25:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-145) [-22]
+[Sat Nov 21 14:25:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-142) [-22]
+[Sat Nov 21 14:25:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-140) [-22]
+[Sat Nov 21 14:25:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-138) [-22]
+[Sat Nov 21 14:25:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-136) [-22]
+[Sat Nov 21 14:25:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-134) [-22]
+[Sat Nov 21 14:25:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-132) [-22]
+[Sat Nov 21 14:25:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-124) [-22]
+[Sat Nov 21 14:25:01 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-147) [-22]
+[Sat Nov 21 14:25:02 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:25:02 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:25:02 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:25:02 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:25:03 2026] efa_com_cmd_exec: 15 callbacks suppressed
+[Sat Nov 21 14:25:03 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:03 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:03 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:03 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:03 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:03 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:03 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:03 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:03 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:03 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:05 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:25:05 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:25:05 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:25:05 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:25:06 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:25:06 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:25:06 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:25:06 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:25:09 2026] efa_com_cmd_exec: 16 callbacks suppressed
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:09 2026] efa_com_dereg_mr: 25 callbacks suppressed
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-256) [-22]
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-250) [-22]
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-255) [-22]
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-249) [-22]
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-246) [-22]
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-243) [-22]
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-241) [-22]
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-242) [-22]
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:09 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-239) [-22]
+[Sat Nov 21 14:25:10 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:10 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-240) [-22]
+[Sat Nov 21 14:25:14 2026] efa_com_cmd_exec: 18 callbacks suppressed
+[Sat Nov 21 14:25:14 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:14 2026] efa_com_dereg_mr: 18 callbacks suppressed
+[Sat Nov 21 14:25:14 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-2097237) [-22]
+[Sat Nov 21 14:25:14 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:14 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-2097225) [-22]
+[Sat Nov 21 14:25:14 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:14 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-2097288) [-22]
+[Sat Nov 21 14:25:14 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:14 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-2097286) [-22]
+[Sat Nov 21 14:25:14 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:14 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-2097228) [-22]
+[Sat Nov 21 14:25:14 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:14 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-2097292) [-22]
+[Sat Nov 21 14:25:14 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:14 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-2097231) [-22]
+[Sat Nov 21 14:25:15 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:25:15 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-2097284) [-22]
+[Sat Nov 21 14:25:15 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:25:15 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:25:15 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:25:15 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:25:16 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-3145841) [-22]
+[Sat Nov 21 14:25:16 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-3145877) [-22]
+[Sat Nov 21 14:28:00 2026] efa_com_cmd_exec: 16 callbacks suppressed
+[Sat Nov 21 14:28:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:28:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:28:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:28:00 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:30:35 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:30:35 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:30:35 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:30:35 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:30:35 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:30:35 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:30:35 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:30:35 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:33:31 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:33:31 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:33:31 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command REG_MR (opcode 7) err -22
+[Sat Nov 21 14:33:31 2026] efa 0000:2f:00.0 rdmap47s0: Failed to register mr [-22]
+[Sat Nov 21 14:37:10 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:37:10 2026] efa_com_dereg_mr: 14 callbacks suppressed
+[Sat Nov 21 14:37:10 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-4194416) [-22]
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-4194387) [-22]
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-4194395) [-22]
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-2097333) [-22]
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-4194365) [-22]
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-4194420) [-22]
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-4194423) [-22]
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-4194393) [-22]
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-4194443) [-22]
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:37:11 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-4194388) [-22]
+[Sat Nov 21 14:37:15 2026] efa_com_cmd_exec: 6 callbacks suppressed
+[Sat Nov 21 14:37:15 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:37:15 2026] efa_com_dereg_mr: 6 callbacks suppressed
+[Sat Nov 21 14:37:15 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-3145822) [-22]
+[Sat Nov 21 14:37:16 2026] efa 0000:2f:00.0 rdmap47s0: Failed to process command DEREG_MR (opcode 8) err -22
+[Sat Nov 21 14:37:16 2026] efa 0000:2f:00.0 rdmap47s0: Failed to de-register mr(lkey-3145824) [-22]
+
+               total        used        free      shared  buff/cache   available
+Mem:          124061        9355       83668           3       31974      114706
+Swap:              0           0           0
+
+    PID   RSS    VSZ STAT     ELAPSED COMMAND
+   2467 94440 2759844 Ssl       16:40 dockerd
+   2347 46208 2561788 Ssl       16:43 containerd
+   1134 44348 2494292 Ssl       16:48 soci-snapshotte
+   1133 44300 3111408 Ssl       16:48 snapd
+   1114 40208 1123352 Ssl       16:49 nv-hostengine
+    472 27432 354504 SLsl       17:10 multipathd
+   1236 22952 110072 Ssl        16:48 unattended-upgr
+   1130 21960 2423960 Ssl       16:49 amazon-ssm-agen
+   1111 20976  32560 Ss         16:49 networkd-dispat
+    398 18444  66916 S<s        17:11 systemd-journal
+      1 14044  22948 Ss         17:18 systemd
+   1153 13928 469080 Ssl        16:48 udisksd
+    746 12940  21620 Ss         17:03 systemd-resolve
+   1398 12808 391896 Ssl        16:48 ModemManager

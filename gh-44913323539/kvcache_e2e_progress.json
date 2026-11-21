@@ -1,0 +1,422 @@
+{
+  "started": "2026-11-21 14:22:33Z",
+  "meta": {
+    "engine": "vllm",
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "hosts": [
+      "172.31.1.141",
+      "172.31.7.94"
+    ],
+    "lmcache": "0.5.7.post1",
+    "vllm_spec": "vllm==0.33.0",
+    "lengths": [
+      1024,
+      4096,
+      8192,
+      16384
+    ],
+    "reps": 3,
+    "instance_type": "g6.8xlarge"
+  },
+  "stage": "done",
+  "steps": {
+    "prepare": {
+      "status": "PASS",
+      "detail": "2 hosts, transport verbs",
+      "at_s": 347.2,
+      "transport": "verbs"
+    },
+    "install": {
+      "status": "PASS",
+      "detail": "vLLM 0.33.0, LMCache 0.5.7.post1, torch 2.14.0+cu130 (CUDA 13.0), GPU NVIDIA L4",
+      "at_s": 482.2,
+      "hosts": {
+        "A": {
+          "ok": true,
+          "versions": {
+            "torch": "2.14.0+cu130",
+            "torch_cuda": "13.0",
+            "cuda_available": true,
+            "gpu": "NVIDIA L4",
+            "vllm": "0.33.0",
+            "lmcache": "0.5.7.post1"
+          },
+          "nvidia_smi": "NVIDIA L4, 620.70.06, 23034 MiB",
+          "error": ""
+        },
+        "B": {
+          "ok": true,
+          "versions": {
+            "torch": "2.14.0+cu130",
+            "torch_cuda": "13.0",
+            "cuda_available": true,
+            "gpu": "NVIDIA L4",
+            "vllm": "0.33.0",
+            "lmcache": "0.5.7.post1"
+          },
+          "nvidia_smi": "NVIDIA L4, 620.70.06, 23034 MiB",
+          "error": ""
+        }
+      }
+    },
+    "osts": {
+      "status": "PASS",
+      "detail": "4 OSTs (RAM): 172.31.1.141:19950,172.31.1.141:19951,172.31.7.94:19950,172.31.7.94:19951",
+      "at_s": 483.0,
+      "osts": "172.31.1.141:19950,172.31.1.141:19951,172.31.7.94:19950,172.31.7.94:19951"
+    },
+    "engines": {
+      "status": "PASS",
+      "detail": "LMCache servers (RoCEPool L2) and vLLM up on A, B",
+      "at_s": 631.1,
+      "zero_copy_l1": {
+        "A": true,
+        "B": true
+      },
+      "batch_invariant": true
+    }
+  },
+  "tests": {
+    "T1_correctness": {
+      "status": "PASS",
+      "cases": [
+        {
+          "prompt_tokens": 4087,
+          "identical": true,
+          "matches_cold_recompute": true,
+          "first_difference_at": null,
+          "stored_bytes": 220200960,
+          "loaded_from_rocepool_bytes": 220200960,
+          "loaded_on_l1_hit_bytes": 0,
+          "ttft_s": {
+            "cold": 1.4189534760000697,
+            "l1": 0.12277440499997283,
+            "l2": 0.24305102400001033
+          },
+          "texts": {
+            "cold": " work house work force work family member house work force work force work force work force work force work force work force work force work force work force work force work force",
+            "l1": " work house work force work family member house work force work force work force work force work force work force work force work force work force work force work force work force",
+            "l2": " work house work force work family member house work force work force work force work force work force work force work force work force work force work force work force work force"
+          }
+        },
+        {
+          "prompt_tokens": 4087,
+          "identical": true,
+          "matches_cold_recompute": true,
+          "first_difference_at": null,
+          "stored_bytes": 220200960,
+          "loaded_from_rocepool_bytes": 220200960,
+          "loaded_on_l1_hit_bytes": 0,
+          "ttft_s": {
+            "cold": 1.1345763960000568,
+            "l1": 0.12199326400002519,
+            "l2": 0.21688738200009539
+          },
+          "texts": {
+            "cold": " place work place work place work place work place work place work place work place work place work place work place work place work place work place work place work place work",
+            "l1": " place work place work place work place work place work place work place work place work place work place work place work place work place work place work place work place work",
+            "l2": " place work place work place work place work place work place work place work place work place work place work place work place work place work place work place work place work"
+          }
+        }
+      ],
+      "summary": "2/2 answers identical after a reload from RoCEPool (reference: an L1 hit), 2/2 also equal to the cold recompute, 420.0 MiB loaded"
+    },
+    "T2_cross_server": {
+      "status": "PASS",
+      "cases": [
+        {
+          "prompt_tokens": 4087,
+          "identical": true,
+          "loaded_on_B_bytes": 220200960,
+          "first_difference_at": null,
+          "matches_cold_recompute": true,
+          "ttft_s": {
+            "A_cold": 1.1392237390000446,
+            "A_l1": 0.12392607900005714,
+            "B_from_rocepool": 1.0745053910000024
+          }
+        },
+        {
+          "prompt_tokens": 4087,
+          "identical": true,
+          "loaded_on_B_bytes": 220200960,
+          "first_difference_at": null,
+          "matches_cold_recompute": true,
+          "ttft_s": {
+            "A_cold": 1.133669040999962,
+            "A_l1": 0.12340302600000541,
+            "B_from_rocepool": 0.2512635909999972
+          }
+        }
+      ],
+      "summary": "2/2 prompts computed on A were loaded on B from RoCEPool and answered identically"
+    },
+    "T3_ttft": {
+      "status": "PASS",
+      "rows": [
+        {
+          "target_tokens": 1024,
+          "prompt_tokens": 1016,
+          "ttft_median_s": {
+            "cold": 0.26790836899999704,
+            "l1": 0.09543833799989443,
+            "l2_local": 0.13935884299996815,
+            "l2_remote": 0.10695503199997347
+          },
+          "ttft_samples_s": {
+            "cold": [
+              0.26731559400002425,
+              0.26801771199995983,
+              0.26790836899999704
+            ],
+            "l1": [
+              0.09543833799989443,
+              0.09517722099997172,
+              0.09608074599998417
+            ],
+            "l2_local": [
+              0.15360662300008698,
+              0.10710207599993282,
+              0.13935884299996815
+            ],
+            "l2_remote": [
+              0.10467582299997957,
+              0.10695503199997347,
+              0.10776504099999329
+            ]
+          },
+          "loaded_mib_median": {
+            "l2_local": 42.0,
+            "l2_remote": 42.0
+          },
+          "speedup_vs_cold": {
+            "l1": 2.807135734072542,
+            "l2_local": 1.9224353706786894,
+            "l2_remote": 2.504869233268646
+          }
+        },
+        {
+          "target_tokens": 4096,
+          "prompt_tokens": 4086,
+          "ttft_median_s": {
+            "cold": 1.149814724999942,
+            "l1": 0.12349108500006878,
+            "l2_local": 0.22399849600003563,
+            "l2_remote": 0.1572560260000273
+          },
+          "ttft_samples_s": {
+            "cold": [
+              1.146439545000021,
+              1.149814724999942,
+              1.1533584669999755
+            ],
+            "l1": [
+              0.12349108500006878,
+              0.12401836099991215,
+              0.12244581899994955
+            ],
+            "l2_local": [
+              0.25610466200009796,
+              0.21198494100008247,
+              0.22399849600003563
+            ],
+            "l2_remote": [
+              0.1572560260000273,
+              0.15663279099999272,
+              0.16398141199999827
+            ]
+          },
+          "loaded_mib_median": {
+            "l2_local": 210.0,
+            "l2_remote": 210.0
+          },
+          "speedup_vs_cold": {
+            "l1": 9.31091280799178,
+            "l2_local": 5.133135916232933,
+            "l2_remote": 7.311737134955593
+          }
+        },
+        {
+          "target_tokens": 8192,
+          "prompt_tokens": 8182,
+          "ttft_median_s": {
+            "cold": 2.4522675419999587,
+            "l1": 0.15915028899996742,
+            "l2_local": 0.33999952599992866,
+            "l2_remote": 0.2398244880000675
+          },
+          "ttft_samples_s": {
+            "cold": [
+              2.4468861530000368,
+              2.4522675419999587,
+              2.4660638899999867
+            ],
+            "l1": [
+              0.15806816600002094,
+              0.16070992899994962,
+              0.15915028899996742
+            ],
+            "l2_local": [
+              0.33999952599992866,
+              0.33907197799999267,
+              0.34851906400001553
+            ],
+            "l2_remote": [
+              0.241096309999989,
+              0.23194597900010194,
+              0.2398244880000675
+            ]
+          },
+          "loaded_mib_median": {
+            "l2_local": 434.0,
+            "l2_remote": 434.0
+          },
+          "speedup_vs_cold": {
+            "l1": 15.408501972625766,
+            "l2_local": 7.2125616492785145,
+            "l2_remote": 10.22525915701848
+          }
+        },
+        {
+          "target_tokens": 16384,
+          "prompt_tokens": 16374,
+          "ttft_median_s": {
+            "cold": 5.44066232199998,
+            "l1": 0.2312617830000363,
+            "l2_local": 0.5619642339999018,
+            "l2_remote": 0.39498838300005445
+          },
+          "ttft_samples_s": {
+            "cold": [
+              5.42981663899991,
+              5.44066232199998,
+              5.459989816999951
+            ],
+            "l1": [
+              0.2312617830000363,
+              0.23043066100001397,
+              0.23363717300003373
+            ],
+            "l2_local": [
+              0.5619642339999018,
+              0.5639871729999868,
+              0.5325892359999216
+            ],
+            "l2_remote": [
+              0.38428520699994806,
+              0.39498838300005445,
+              0.3960279210000408
+            ]
+          },
+          "loaded_mib_median": {
+            "l2_local": 882.0,
+            "l2_remote": 882.0
+          },
+          "speedup_vs_cold": {
+            "l1": 23.525989687622214,
+            "l2_local": 9.681509948195263,
+            "l2_remote": 13.7742337652478
+          }
+        }
+      ],
+      "identical_cached_answers": true,
+      "summary": "1016 tok: cold 268 ms, L2 local 139 ms, L2 other host 107 ms; 4086 tok: cold 1150 ms, L2 local 224 ms, L2 other host 157 ms; 8182 tok: cold 2452 ms, L2 local 340 ms, L2 other host 240 ms; 16374 tok: cold 5441 ms, L2 local 562 ms, L2 other host 395 ms"
+    },
+    "T5_one_sided": {
+      "status": "PASS",
+      "checks": {
+        "loaded_from_rocepool": true,
+        "client_zero_copy": true,
+        "osts_sent_no_data": true,
+        "hardware_rdma_read": true
+      },
+      "rdma_read_preflight": {
+        "status": "PASS",
+        "detail": "g6.8xlarge: EFA does RDMA read in hardware -- one-sided reads cost the server no CPU"
+      },
+      "loaded_bytes": 1365245952,
+      "stored_bytes": 1365245952,
+      "osts_during_loads": {
+        "seconds": 8.594901173499977,
+        "net_cpu_s": 0.030687190112296037,
+        "requests": 493,
+        "data_out_bytes": 0
+      },
+      "osts_during_stores": {
+        "seconds": 16.7044036705,
+        "net_cpu_s": 0.062312866218405816,
+        "requests": 614,
+        "data_out_bytes": 0
+      },
+      "ost_cpu_us_per_mib": {
+        "store": 47.9,
+        "load": 23.6
+      },
+      "ost_idle_cpu_per_s": 16.0199,
+      "note": "",
+      "summary": "1302 MiB loaded on B, OSTs sent 0.00 MiB of it; OST CPU 24 us/MiB loaded vs 48 us/MiB stored; RDMA read in hardware: PASS"
+    },
+    "T6_striping": {
+      "status": "PASS",
+      "checks": {
+        "chunk_split_into_parts": true,
+        "every_ost_holds_data": true,
+        "balanced": true
+      },
+      "chunk_bytes": {
+        "stored_mean": 14680064.0,
+        "lmcache_layout": 14680064
+      },
+      "part_bytes": 4194304,
+      "parts_per_chunk": 4,
+      "osts": {
+        "172.31.1.141:19950": {
+          "objects": 600,
+          "mib": 1684.0
+        },
+        "172.31.1.141:19951": {
+          "objects": 606,
+          "mib": 1672.0
+        },
+        "172.31.7.94:19950": {
+          "objects": 622,
+          "mib": 1748.0
+        },
+        "172.31.7.94:19951": {
+          "objects": 617,
+          "mib": 1742.0
+        }
+      },
+      "max_over_min_bytes": 1.05,
+      "objects": 2445,
+      "smallest_share_of_fair": 0.98,
+      "balance_judged": true,
+      "summary": "chunks of 14.0 MiB in 4 parts of 4.0 MiB, over 4 OSTs (1684, 1672, 1748, 1742 MiB each)"
+    },
+    "T4_zero_copy": {
+      "status": "PASS",
+      "hosts": {
+        "A": {
+          "zero_copy_l1": true,
+          "bytes_zero_copy": 12551454720,
+          "bytes_copied": 0,
+          "bytes_stored": 7178551296,
+          "bytes_loaded": 5372903424,
+          "parts_failed": 0
+        },
+        "B": {
+          "zero_copy_l1": true,
+          "bytes_zero_copy": 6738149376,
+          "bytes_copied": 0,
+          "bytes_stored": 0,
+          "bytes_loaded": 6738149376,
+          "parts_failed": 0
+        }
+      },
+      "summary": "17.96 GiB moved by RDMA, 0 bytes copied by the CPU"
+    }
+  },
+  "updated": "2026-11-21 14:37:18Z",
+  "elapsed_s": 884.6,
+  "verdict": "PASS"
+}

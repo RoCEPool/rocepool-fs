@@ -1,0 +1,27 @@
+== prepare
+[PASS] prepare  2 hosts, transport verbs
+== install
+[PASS] install  vLLM 0.33.0, LMCache 0.5.7.post1, torch 2.14.0+cu130 (CUDA 13.0), GPU NVIDIA L4
+== osts
+[PASS] osts  4 OSTs (RAM): 172.31.1.141:19950,172.31.1.141:19951,172.31.7.94:19950,172.31.7.94:19951
+== engines
+[PASS] engines  LMCache servers (RoCEPool L2) and vLLM up on A, B
+== T1_correctness
+[PASS] T1_correctness  2/2 answers identical after a reload from RoCEPool (reference: an L1 hit), 2/2 also equal to the cold recompute, 420.0 MiB loaded
+== T2_cross_server
+[PASS] T2_cross_server  2/2 prompts computed on A were loaded on B from RoCEPool and answered identically
+== T3_ttft
+[RUNNING] T3_ttft_partial  
+[RUNNING] T3_ttft_partial  
+[RUNNING] T3_ttft_partial  
+[RUNNING] T3_ttft_partial  
+[PASS] T3_ttft  1016 tok: cold 268 ms, L2 local 139 ms, L2 other host 107 ms; 4086 tok: cold 1150 ms, L2 local 224 ms, L2 other host 157 ms; 8182 tok: cold 2452 ms, L2 local 340 ms, L2 other host 240 ms; 16374 tok: cold 5441 ms, L2 local 562 ms, L2 other host 395 ms
+== T5_one_sided
+[PASS] T5_one_sided  1302 MiB loaded on B, OSTs sent 0.00 MiB of it; OST CPU 24 us/MiB loaded vs 48 us/MiB stored; RDMA read in hardware: PASS
+== T6_striping
+[PASS] T6_striping  chunks of 14.0 MiB in 4 parts of 4.0 MiB, over 4 OSTs (1684, 1672, 1748, 1742 MiB each)
+== T4_zero_copy
+[PASS] T4_zero_copy  17.96 GiB moved by RDMA, 0 bytes copied by the CPU
+== cleanup
+
+verdict: PASS   report: /root/rocepool/kvcache_e2e_report.json
