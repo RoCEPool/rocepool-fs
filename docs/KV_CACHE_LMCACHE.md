@@ -136,7 +136,7 @@ writes `kvcache_e2e_report.json`. Its steps:
 
 1. **prepare:** `tools/roce_onsite.py --bench none` runs the RDMA preflight,
    builds the tree and ships it to the peer.
-2. **install:** LMCache 0.5.7 (PyPI release 0.5.7.post1) and vLLM go into a venv, and the model is
+2. **install:** LMCache 0.5.7 (PyPI release 0.5.7.post1) and vLLM 0.33.0 (the vLLM release LMCache's CI validated 0.5.7 with) go into a venv, and the model is
    downloaded.
 3. **osts:** RoCEPool OSTs start on both hosts.
 4. **engines:** on each host, an LMCache server starts with RoCEPool as L2

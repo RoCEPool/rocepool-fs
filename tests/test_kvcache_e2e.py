@@ -78,6 +78,55 @@ class PinCheck(unittest.TestCase):
         self.assertEqual(self.harness().LMCACHE_VERSION, "0.5.7.post1")
 
 
+class VllmCommandLine(unittest.TestCase):
+    """The flags the harness gives `vllm serve` exist in the pinned vLLM.
+    Needs that vLLM's source (VLLM_SRC: a checkout of the pinned tag), since
+    vLLM cannot be installed without the GPU stack; the kvenv stub checks
+    the same flags everywhere else."""
+
+    def test_flags_exist_in_the_pinned_vllm(self):
+        src = os.environ.get("VLLM_SRC")
+        if not src:
+            self.skipTest("VLLM_SRC not set")
+        import re
+        m = PinCheck.harness()
+        text = "".join(open(os.path.join(src, *f.split("/"))).read()
+                       for f in ("vllm/engine/arg_utils.py", "vllm/entrypoints/common/cli_args.py"))
+        code = open(TOOL).read()
+        start = code.index('"vllm", "serve"') if '"vllm", "serve"' in code else code.index('/bin/vllm", "serve"')
+        flags = set(re.findall(r'"(--[a-z0-9-]+)"', code[start:start + 2500]))
+        flags |= set(m.vllm_flags(m.VLLM_SPEC.split("==")[1]))
+        for f in sorted(flags):
+            name = f[5:] if f.startswith("--no-") else f[2:]
+            # a flag is spelled out, or generated from a config field of that name
+            field = re.search(rf"^\s+{name.replace('-', '_')}\s*:", text, re.M)
+            self.assertTrue(f'"--{name}"' in text or field, f"{f} is not a flag of vLLM {m.VLLM_SPEC} ({src})")
+
+
+class VllmFlags(unittest.TestCase):
+    def test_extensible_kv_cache_off_from_0_34_only(self):
+        m = PinCheck.harness()
+        self.assertEqual(m.vllm_flags("0.33.0"), [])          # does not know the flag
+        self.assertEqual(m.vllm_flags("0.34.0"), ["--no-enable-extensible-kv-cache"])
+        self.assertEqual(m.vllm_flags("0.35.1rc1.dev12+g1234"), ["--no-enable-extensible-kv-cache"])
+        self.assertEqual(m.vllm_flags(""), [])
+
+    def test_the_pin_is_what_lmcache_validated(self):
+        self.assertEqual(PinCheck.harness().VLLM_SPEC, "vllm==0.33.0")
+
+
+class RootCause(unittest.TestCase):
+    def test_last_error_names_the_root_cause(self):
+        m = PinCheck.harness()
+        with tempfile.NamedTemporaryFile("w", suffix=".log", delete=False) as f:
+            f.write("(EngineCore pid=1) ERROR [core.py:1] RuntimeError: invalid device pointer: 0x320000000\n"
+                    "Traceback (most recent call last):\n"
+                    "RuntimeError: Engine core initialization failed. See root cause above.\n")
+        self.assertEqual(m.last_error(f.name), "RuntimeError: invalid device pointer: 0x320000000")
+        os.unlink(f.name)
+        self.assertEqual(m.last_error("/nonexistent.log"), "")
+
+
 class StripingVerdict(unittest.TestCase):
     """T6's verdict from synthetic OST counters: parts per chunk, every OST
     holding data, balance judged only with enough objects."""
@@ -228,7 +277,7 @@ class KVCacheE2ERehearsal(unittest.TestCase):
         for c in calls:
             if c["prog"] == "uv":   # one install shell per host
                 per_host.setdefault(c["ppid"], []).append(c["argv"][-1])
-        self.assertEqual(sorted(per_host.values()), [["lmcache==0.5.7.post1", "vllm"]] * 2)
+        self.assertEqual(sorted(per_host.values()), [["lmcache==0.5.7.post1", "vllm==0.33.0"]] * 2)
         self.assertEqual(sum(1 for c in calls if c["prog"] == "python" and c.get("check")), 2)
         self.assertTrue(any("snapshot_download('Qwen/Qwen2.5-7B-Instruct')" in c.get("code", "") for c in calls))
         lm = [c for c in calls if c["prog"] == "lmcache"]

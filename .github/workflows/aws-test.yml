@@ -277,7 +277,7 @@ jobs:
           rm -rf "$bd" "$hs"
           echo "PRIVATE_KEY_DIR=$kd" >> "$GITHUB_ENV"
           echo "::notice title=private bundle::opened ($(du -sh private | cut -f1))"
-      - name: pinned packages are on PyPI (before any host is created)
+      - name: pinned packages are on PyPI, vLLM takes our flags (before any host is created)
         if: ${{ !inputs.probe_only && !inputs.private_run && contains(inputs.command, 'kvcache_e2e.py') }}
         env:
           CMD: ${{ inputs.command }}
@@ -286,6 +286,11 @@ jobs:
           # does not have fails there, after the hosts are paid for
           rest=${CMD#*kvcache_e2e.py}
           python3 tools/kvcache_e2e.py --check-pins $rest
+          # the flags given to `vllm serve` exist in the pinned vLLM (its source;
+          # vLLM itself needs the GPU stack to install)
+          v=$(python3 -c 'import importlib.util as u; s=u.spec_from_file_location("k", "tools/kvcache_e2e.py"); m=u.module_from_spec(s); s.loader.exec_module(m); print(m.VLLM_SPEC.split("==")[1])')
+          git -c advice.detachedHead=false clone -q --depth 1 --branch "v$v" https://github.com/vllm-project/vllm.git /tmp/vllm-src
+          VLLM_SRC=/tmp/vllm-src python3 tests/test_kvcache_e2e.py -v VllmCommandLine VllmFlags RootCause
       - name: run on AWS
         if: ${{ !inputs.probe_only }}
         env:
