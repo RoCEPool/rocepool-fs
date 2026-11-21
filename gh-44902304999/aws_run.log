@@ -1,0 +1,28 @@
+[aws 12:07:55] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 12:07:56] 2 x g6.8xlarge: 32 vCPU, 128 GiB, 25 Gigabit, NVMe 900 GB, EFA yes
+[aws 12:07:56] gpu hosts with EFA (RDMA between them)
+[aws 12:07:56] vCPU quota 64 >= 64 needed (instances already running count against it too)
+[aws 12:07:57] AMI: base-oss-nvidia-driver-gpu-ubuntu-24.04 (ami-0ac221eaf31b5b104)
+[aws 12:08:07] launched i-011153b40cd492f10, i-09be076f9ffc6b86a
+[aws 12:08:24] running: 3.133.147.86 (172.31.12.37), 13.184.239.126 (172.31.1.26)
+[aws 12:10:07] 3.133.147.86: ready (gpu, EFA)
+[aws 12:10:07] 13.184.239.126: ready (gpu, EFA)
+[aws 12:10:13] command started on 3.133.147.86 (2 hosts); following its progress
+  | == prepare
+[aws 12:12:56] progress written back: aws_run.out, kvcache_e2e_progress.json
+[aws 12:15:39] progress written back: aws_run.out, kvcache_e2e_progress.json
+  | [PASS] prepare  2 hosts, transport verbs
+  | == install
+[aws 12:18:22] progress written back: aws_run.out, kvcache_e2e_progress.json
+  | [PASS] install  vLLM 0.34.0, LMCache 0.5.7.post1, torch 2.14.0+cu130 (CUDA 13.0), GPU NVIDIA L4
+  | == osts
+  | [PASS] osts  4 OSTs (RAM): 172.31.12.37:19950,172.31.12.37:19951,172.31.1.26:19950,172.31.1.26:19951
+  | == engines
+[aws 12:21:05] progress written back: aws_run.out, kvcache_e2e_progress.json
+  | [FAIL] error  host A vLLM exited (1) before answering
+  | == cleanup
+  | verdict: FAIL   report: /root/rocepool/kvcache_e2e_report.json
+[aws 12:22:36] reports in aws_runs/gh-44902304999/: onsite_report.json, aws_run.out, onsite_crossover.json, kvcache_e2e_report.json, kvcache_e2e_progress.json, kvcache_e2e_logs.tar.gz, host0_kernel.txt, host1_kernel.txt
+[aws 12:22:36] run.sh exit code 1
+[aws 12:22:38] terminating i-011153b40cd492f10, i-09be076f9ffc6b86a
+[aws 12:29:30] all resources released

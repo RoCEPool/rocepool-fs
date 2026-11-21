@@ -1,0 +1,11 @@
+== prepare
+[PASS] prepare  2 hosts, transport verbs
+== install
+[PASS] install  vLLM 0.34.0, LMCache 0.5.7.post1, torch 2.14.0+cu130 (CUDA 13.0), GPU NVIDIA L4
+== osts
+[PASS] osts  4 OSTs (RAM): 172.31.12.37:19950,172.31.12.37:19951,172.31.1.26:19950,172.31.1.26:19951
+== engines
+[FAIL] error  host A vLLM exited (1) before answering
+== cleanup
+
+verdict: FAIL   report: /root/rocepool/kvcache_e2e_report.json

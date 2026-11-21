@@ -1,0 +1,78 @@
+{
+  "started": "2026-11-21 12:10:13Z",
+  "meta": {
+    "engine": "vllm",
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "hosts": [
+      "172.31.12.37",
+      "172.31.1.26"
+    ],
+    "lmcache": "0.5.7.post1",
+    "vllm_spec": "vllm",
+    "lengths": [
+      1024,
+      4096,
+      8192,
+      16384
+    ],
+    "reps": 3,
+    "instance_type": "g6.8xlarge"
+  },
+  "stage": "done",
+  "steps": {
+    "prepare": {
+      "status": "PASS",
+      "detail": "2 hosts, transport verbs",
+      "at_s": 368.3,
+      "transport": "verbs"
+    },
+    "install": {
+      "status": "PASS",
+      "detail": "vLLM 0.34.0, LMCache 0.5.7.post1, torch 2.14.0+cu130 (CUDA 13.0), GPU NVIDIA L4",
+      "at_s": 494.6,
+      "hosts": {
+        "A": {
+          "ok": true,
+          "versions": {
+            "torch": "2.14.0+cu130",
+            "torch_cuda": "13.0",
+            "cuda_available": true,
+            "gpu": "NVIDIA L4",
+            "vllm": "0.34.0",
+            "lmcache": "0.5.7.post1"
+          },
+          "nvidia_smi": "NVIDIA L4, 620.70.06, 23034 MiB",
+          "error": ""
+        },
+        "B": {
+          "ok": true,
+          "versions": {
+            "torch": "2.14.0+cu130",
+            "torch_cuda": "13.0",
+            "cuda_available": true,
+            "gpu": "NVIDIA L4",
+            "vllm": "0.34.0",
+            "lmcache": "0.5.7.post1"
+          },
+          "nvidia_smi": "NVIDIA L4, 620.70.06, 23034 MiB",
+          "error": ""
+        }
+      }
+    },
+    "osts": {
+      "status": "PASS",
+      "detail": "4 OSTs (RAM): 172.31.12.37:19950,172.31.12.37:19951,172.31.1.26:19950,172.31.1.26:19951",
+      "at_s": 495.5,
+      "osts": "172.31.12.37:19950,172.31.12.37:19951,172.31.1.26:19950,172.31.1.26:19951"
+    },
+    "error": {
+      "status": "FAIL",
+      "detail": "host A vLLM exited (1) before answering",
+      "at_s": 711.3
+    }
+  },
+  "tests": {},
+  "updated": "2026-11-21 12:22:09Z",
+  "elapsed_s": 715.9,
+  "verdict": "FAIL"
+}
