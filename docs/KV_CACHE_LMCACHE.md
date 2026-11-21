@@ -126,8 +126,8 @@ zero-copy and the bytes copied.
   environment had no PyTorch, so only the imports of torch and numba were
   satisfied by an inert placeholder. The adapter logic under test does not
   use torch.
-- **Not yet run end to end.** The end-to-end run with vLLM on GPU hosts
-  (below) has been rehearsed locally but not yet run on GPUs.
+- **End to end on GPUs.** Passed on two AWS g6.8xlarge hosts on
+  2026-11-21. See [Results on AWS g6.8xlarge](#results-on-aws-g68xlarge-2026-11-21).
 
 ## End-to-end test on GPU hosts
 
@@ -187,6 +187,47 @@ and tests locally, in two ways:
   check the harness's real install script and command lines. The
   `lmcache server` arguments are checked by LMCache's own parser when
   LMCache is importable.
+
+## Results on AWS g6.8xlarge (2026-11-21)
+
+| | |
+|---|---|
+| Hosts | 2 × g6.8xlarge (1 × NVIDIA L4 24 GB, 32 vCPU), EFA with hardware RDMA read |
+| Software | vLLM 0.33.0, LMCache 0.5.7.post1, torch 2.14.0 (CUDA 13.0), RoCEPool `7c853db` |
+| Model | Qwen/Qwen2.5-7B-Instruct, bf16 |
+| RoCEPool | 4 OSTs in RAM, 2 per host, over EFA (libfabric) |
+| Run | GitHub Actions run 44913323539; report and logs on branch `aws-results/gh-44913323539` |
+
+Every test passed:
+
+| Test | Result |
+|---|---|
+| T1 correctness | 2/2 answers identical after a reload from RoCEPool (reference: an L1 hit), and equal to the cold recompute; 420 MiB loaded |
+| T2 cross-server | 2/2 prompts computed on host A were loaded on host B from RoCEPool and answered identically |
+| T4 zero copy | 17.96 GiB moved by RDMA over both hosts, 0 bytes copied by the CPU |
+| T5 one-sided | Host B loaded 1302 MiB stored by A. The OSTs sent 0 bytes of it, so B's NIC read the data itself. Hardware RDMA read confirmed by the preflight. |
+| T6 striping | LMCache chunks of 14.0 MiB stored as 4 parts of 4.0 MiB over 4 OSTs (1672 to 1748 MiB each; 2445 objects; largest/smallest 1.05) |
+
+**T5 in detail.** During B's loads, the OSTs still answered 493 small
+requests: the lookups of the 24-byte commit records that say a chunk is
+complete. These took 30 ms of OST CPU in 8.6 s, which is 24 µs per MiB
+loaded. Stores took 48 µs of OST CPU per MiB. Both figures are after
+subtracting the OSTs' idle busy-polling. The data itself does not pass
+through the OST's CPU; the commit lookups do.
+
+**T3, time to first token** (median of 3):
+
+| Prompt tokens | KV loaded | Cold (recompute) | L1 hit | L2, same host | L2, other host |
+|---|---|---|---|---|---|
+| 1016 | 42 MiB | 268 ms | 95 ms | 139 ms | 107 ms |
+| 4086 | 210 MiB | 1150 ms | 123 ms | 224 ms | 157 ms |
+| 8182 | 434 MiB | 2452 ms | 159 ms | 340 ms | 240 ms |
+| 16374 | 882 MiB | 5441 ms | 231 ms | 562 ms | 395 ms |
+
+At 16K tokens, loading the KV cache from RoCEPool cuts the time to first
+token from 5.4 s to 0.4–0.6 s. Loads on the other host were faster than on
+the host that stored the chunks. This run does not show why; the test
+records the times but not where they are spent.
 
 ## Not covered yet
 
