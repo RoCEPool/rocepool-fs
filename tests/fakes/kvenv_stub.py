@@ -112,6 +112,9 @@ elif prog == "vllm":
         a = p.parse_args(argv)
     except SystemExit:
         fail("unexpected vllm arguments")
+    if os.environ.get("VLLM_USE_FLASHINFER_SAMPLER") != "0":
+        # vLLM 0.33 on a host without ninja: the FlashInfer sampler's JIT build fails
+        fail("vLLM started without VLLM_USE_FLASHINFER_SAMPLER=0")
     if os.environ.get("KVENV_STUB_REJECT_BI") and os.environ.get("VLLM_BATCH_INVARIANT") == "1":
         log(rejected_batch_invariant=True)   # as a GPU without batch-invariant kernels would
         sys.exit(1)
@@ -132,7 +135,7 @@ elif prog == "vllm":
     except ImportError:
         pass
     log(kvt=kvt, model=a.model, port=a.port, connector_module=mod,
-        env={k: os.environ.get(k) for k in ("PYTHONHASHSEED", "VLLM_BATCH_INVARIANT")})
+        env={k: os.environ.get(k) for k in ("PYTHONHASHSEED", "VLLM_BATCH_INVARIANT", "VLLM_USE_FLASHINFER_SAMPLER")})
     while True:
         time.sleep(3600)
 else:

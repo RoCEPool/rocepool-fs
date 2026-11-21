@@ -75,6 +75,7 @@ LMCACHE_VERSION = "0.5.7.post1"
 # one LMCache's wheels are built against. "The latest" vLLM (0.34) is newer
 # than LMCache 0.5.7 and broke its connector (see vllm_flags).
 VLLM_SPEC = "vllm==0.33.0"
+VLLM_ENV = {"VLLM_USE_FLASHINFER_SAMPLER": "0"}   # see launch() in start_engines
 DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct"
 VENV = "/opt/kvenv"
 VENV_IN_USE = [VENV]   # --venv: what the clean-up's patterns name
@@ -536,7 +537,13 @@ def start_engines(args, rep: Report, hosts: list[Host], osts: str) -> list:
                               "kv_connector_extra_config": {"lmcache.mp.host": "127.0.0.1",
                                                             "lmcache.mp.port": h.lmc_port,
                                                             "lmcache.mp.autostart": False}})
-            env = ["env", "PYTHONHASHSEED=0", f"PYTHONPATH={ROOT}"] + \
+            # VLLM_USE_FLASHINFER_SAMPLER=0: vLLM 0.33 turns FlashInfer off
+            # when its kernels cannot be built (no prebuilt cubins, no ninja),
+            # but its sampler does not check that and JIT-builds FlashInfer's
+            # top-k/top-p kernel in start-up profiling, which then fails
+            # ("No such file or directory: 'ninja'", g6 run of 2026-11-21).
+            # PyTorch's top-k/top-p is used instead; greedy decoding is the same.
+            env = ["env", "PYTHONHASHSEED=0", f"PYTHONPATH={ROOT}"] + [f"{k}={v}" for k, v in VLLM_ENV.items()] + \
                 (["VLLM_BATCH_INVARIANT=1"] if batch_invariant else [])
             p = h.spawn(env + [f"{args.venv}/bin/vllm", "serve", args.model, "--host", "0.0.0.0",
                                "--port", str(h.vllm_port), "--max-model-len", str(args.max_model_len),
