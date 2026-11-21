@@ -33,6 +33,51 @@ def leftovers() -> str:
     return "\n".join(l for l in r.stdout.splitlines() if "pgrep" not in l and " -c " not in l)
 
 
+class PinCheck(unittest.TestCase):
+    """--check-pins: the exact versions the install step pins are on PyPI,
+    checked before any host is paid for (the first g6 install asked for
+    lmcache==0.5.7, which PyPI has only as 0.5.7.post1)."""
+
+    @staticmethod
+    def harness():
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("kvcache_e2e_pins", TOOL)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    @staticmethod
+    def opener(published: dict):
+        import io
+        import urllib.error
+
+        def op(url, timeout=0):
+            name, ver = url.split("/")[-3:-1]
+            if (name, ver) not in published:
+                raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+            info = published[(name, ver)]
+            return io.BytesIO(json.dumps(info).encode())
+        return op
+
+    def test_published_pins_pass(self):
+        m = self.harness()
+        pub = {("lmcache", m.LMCACHE_VERSION): {"info": {"yanked": False}, "urls": [{"filename": "x.whl"}]},
+               ("vllm", "0.19.1"): {"info": {"yanked": False}, "urls": [{"filename": "y.whl"}]}}
+        self.assertEqual(m.check_pins("vllm==0.19.1", opener=self.opener(pub)), [])
+        self.assertEqual(m.check_pins("vllm", opener=self.opener(pub)), [])   # unpinned: not checked
+
+    def test_missing_and_yanked_pins_fail(self):
+        m = self.harness()
+        pub = {("lmcache", m.LMCACHE_VERSION): {"info": {"yanked": True}, "urls": [{"filename": "x.whl"}]}}
+        bad = m.check_pins("vllm==9.9.9", opener=self.opener(pub))
+        self.assertEqual(len(bad), 2, bad)
+        self.assertIn("yanked", bad[0])
+        self.assertIn("vllm==9.9.9 is not on PyPI (HTTP 404)", bad[1])
+
+    def test_the_pin_is_the_post_release(self):
+        self.assertEqual(self.harness().LMCACHE_VERSION, "0.5.7.post1")
+
+
 class StripingVerdict(unittest.TestCase):
     """T6's verdict from synthetic OST counters: parts per chunk, every OST
     holding data, balance judged only with enough objects."""
@@ -176,14 +221,14 @@ class KVCacheE2ERehearsal(unittest.TestCase):
         self.assertEqual(rep["verdict"], "PASS")
         inst = rep["steps"]["install"]
         self.assertEqual(inst["status"], "PASS")
-        self.assertIn("LMCache 0.5.7", inst["detail"])
+        self.assertIn("LMCache 0.5.7.post1", inst["detail"])
         self.assertEqual(set(inst["hosts"]), {"A", "B"})
         # install order: LMCache pinned, then vLLM; the model fetched; the check run
         per_host: dict = {}
         for c in calls:
             if c["prog"] == "uv":   # one install shell per host
                 per_host.setdefault(c["ppid"], []).append(c["argv"][-1])
-        self.assertEqual(sorted(per_host.values()), [["lmcache==0.5.7", "vllm"]] * 2)
+        self.assertEqual(sorted(per_host.values()), [["lmcache==0.5.7.post1", "vllm"]] * 2)
         self.assertEqual(sum(1 for c in calls if c["prog"] == "python" and c.get("check")), 2)
         self.assertTrue(any("snapshot_download('Qwen/Qwen2.5-7B-Instruct')" in c.get("code", "") for c in calls))
         lm = [c for c in calls if c["prog"] == "lmcache"]

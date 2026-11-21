@@ -53,7 +53,7 @@ elif prog == "python":
             fail("the install check does not import the connector and the server")
         log(check=True)
         print("KVENV " + json.dumps({"torch": "2.9.0+cu130", "torch_cuda": "13.0", "cuda_available": True,
-                                     "gpu": "NVIDIA L40S", "vllm": "0.19.1", "lmcache": "0.5.7"}))
+                                     "gpu": "NVIDIA L40S", "vllm": "0.19.1", "lmcache": "0.5.7.post1"}))
     elif argv[:1] == ["-c"]:
         log(code=argv[1])
     else:

@@ -66,7 +66,10 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-LMCACHE_VERSION = "0.5.7"
+# LMCache's 0.5.7 is on PyPI as 0.5.7.post1 only (the same code as tag
+# v0.5.7, re-cut for packaging); a pin PyPI does not have fails the install
+# on the paid hosts, so --check-pins checks it before any are started
+LMCACHE_VERSION = "0.5.7.post1"
 DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct"
 VENV = "/opt/kvenv"
 VENV_IN_USE = [VENV]   # --venv: what the clean-up's patterns name
@@ -807,7 +810,52 @@ def stop_all(hosts: list[Host], procs: list, pats: list[str] | None = None) -> N
             pass
 
 
+def pinned_specs(vllm_spec: str) -> list[tuple[str, str]]:
+    """(package, version) of every exact pin the install step uses"""
+    out = [("lmcache", LMCACHE_VERSION)]
+    if "==" in vllm_spec:
+        name, ver = vllm_spec.split("==", 1)
+        out.append((name.strip(), ver.strip()))
+    return out
+
+
+def check_pins(vllm_spec: str, index: str = "https://pypi.org/pypi", opener=None) -> list[str]:
+    """Problems with the pinned versions on PyPI ([] = all published). Run on
+    the dispatching machine before hosts are created (the first g6 run lost
+    its install step to a version PyPI did not have)."""
+    import urllib.error
+    import urllib.request
+    opener = opener or urllib.request.urlopen
+    bad = []
+    for name, ver in pinned_specs(vllm_spec):
+        url = f"{index}/{name}/{ver}/json"
+        try:
+            with opener(url, timeout=30) as r:
+                info = json.load(r)
+            if info.get("info", {}).get("yanked"):
+                bad.append(f"{name}=={ver} is yanked on PyPI")
+            elif not info.get("urls"):
+                bad.append(f"{name}=={ver} has no files on PyPI")
+        except urllib.error.HTTPError as e:
+            bad.append(f"{name}=={ver} is not on PyPI (HTTP {e.code})" if e.code == 404 else
+                       f"{name}=={ver}: PyPI answered HTTP {e.code}")
+        except (OSError, ValueError) as e:
+            bad.append(f"{name}=={ver}: PyPI not reachable ({e})")
+    return bad
+
+
 def main() -> int:
+    if "--check-pins" in sys.argv:
+        ap = argparse.ArgumentParser()
+        ap.add_argument("--check-pins", action="store_true")
+        ap.add_argument("--vllm-spec", default="vllm")
+        a, _ = ap.parse_known_args()
+        bad = check_pins(a.vllm_spec)
+        for b in bad:
+            print(f"pin: {b}", file=sys.stderr)
+        if not bad:
+            print("pins: " + ", ".join(f"{n}=={v}" for n, v in pinned_specs(a.vllm_spec)) + " published on PyPI")
+        return 1 if bad else 0
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--hosts", help="IPs, this host first (default: HEAD_IP and PEER_IPS from aws_cluster.py)")
     ap.add_argument("--engine", choices=("vllm", "fake"), default="vllm")
