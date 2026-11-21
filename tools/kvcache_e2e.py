@@ -70,6 +70,11 @@ sys.path.insert(0, ROOT)
 # v0.5.7, re-cut for packaging); a pin PyPI does not have fails the install
 # on the paid hosts, so --check-pins checks it before any are started
 LMCACHE_VERSION = "0.5.7.post1"
+# vLLM is pinned too, to the release LMCache's own CI validated LMCache 0.5.7
+# with (its tested_runtimes record of 2026-11-03). Its torch, 2.14.0, is the
+# one LMCache's wheels are built against. "The latest" vLLM (0.34) is newer
+# than LMCache 0.5.7 and broke its connector (see vllm_flags).
+VLLM_SPEC = "vllm==0.33.0"
 DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct"
 VENV = "/opt/kvenv"
 VENV_IN_USE = [VENV]   # --venv: what the clean-up's patterns name
@@ -178,6 +183,37 @@ def http_json(host: str, port: int, method: str, path: str, body: dict | None = 
         return r.status, (json.loads(data) if data else None)
     finally:
         conn.close()
+
+
+def version_tuple(v: str) -> tuple:
+    import re
+    return tuple(int(x) for x in re.findall(r"\d+", v.split("+")[0])[:3])
+
+
+def vllm_flags(installed: str) -> list[str]:
+    """Flags a given vLLM needs for LMCache's MP connector. From 0.34, vLLM
+    maps the KV cache with the driver's virtual-memory API by default
+    ("extensible KV cache"); CUDA IPC, which the connector shares the KV
+    cache with, cannot export that memory ("invalid device pointer", g6 run
+    of 2026-11-21). vLLM turns it off for the connector by its name, but not
+    when the connector is given by module path, as here."""
+    return ["--no-enable-extensible-kv-cache"] if installed and version_tuple(installed) >= (0, 34) else []
+
+
+def last_error(log: str) -> str:
+    """The last exception line of a log (the root cause in the report, not
+    only "exited (1)"), or ''"""
+    import re
+    try:
+        lines = open(log, errors="replace").read().splitlines()
+    except OSError:
+        return ""
+    pat = re.compile(r"\b([A-Za-z_.]*(Error|Exception)): (.+)")
+    for line in reversed(lines):
+        m = pat.search(line)
+        if m and "Engine core initialization failed" not in line:
+            return f"{m.group(1)}: {m.group(3)}"[:300]
+    return ""
 
 
 def wait_http(host: str, port: int, path: str, timeout: float, proc=None, what: str = "") -> None:
@@ -396,6 +432,7 @@ def install(args, rep: Report, hosts: list[Host]) -> dict:
                        for k, v in res.items() if not v["ok"]), hosts=res)
     if not ok:
         raise RuntimeError("install failed")
+    args.vllm_installed = str(v0.get("vllm") or "")
     return res
 
 
@@ -504,12 +541,17 @@ def start_engines(args, rep: Report, hosts: list[Host], osts: str) -> list:
             p = h.spawn(env + [f"{args.venv}/bin/vllm", "serve", args.model, "--host", "0.0.0.0",
                                "--port", str(h.vllm_port), "--max-model-len", str(args.max_model_len),
                                "--gpu-memory-utilization", "0.88", "--no-enable-prefix-caching",
+                               *vllm_flags(getattr(args, "vllm_installed", "")),
                                "--kv-transfer-config", kvt],
                         os.path.join(args.logs, f"vllm_{h.name}{'' if batch_invariant else '_retry'}.log"))
             vprocs.append((h, p))
         try:
             for h, p in vprocs:
-                wait_http(h.ip, h.vllm_port, "/health", 1500, p, f"host {h.name} vLLM")
+                try:
+                    wait_http(h.ip, h.vllm_port, "/health", 1500, p, f"host {h.name} vLLM")
+                except RuntimeError as e:
+                    log = os.path.join(args.logs, f"vllm_{h.name}{'' if batch_invariant else '_retry'}.log")
+                    raise RuntimeError(f"{e}: {last_error(log)}") from None
         except RuntimeError:
             stop_all(hosts, [p for _, p in vprocs], [own_patterns(args.venv)["vllm"]])
             raise
@@ -848,7 +890,7 @@ def main() -> int:
     if "--check-pins" in sys.argv:
         ap = argparse.ArgumentParser()
         ap.add_argument("--check-pins", action="store_true")
-        ap.add_argument("--vllm-spec", default="vllm")
+        ap.add_argument("--vllm-spec", default=VLLM_SPEC)
         a, _ = ap.parse_known_args()
         bad = check_pins(a.vllm_spec)
         for b in bad:
@@ -860,8 +902,8 @@ def main() -> int:
     ap.add_argument("--hosts", help="IPs, this host first (default: HEAD_IP and PEER_IPS from aws_cluster.py)")
     ap.add_argument("--engine", choices=("vllm", "fake"), default="vllm")
     ap.add_argument("--model", default=DEFAULT_MODEL)
-    ap.add_argument("--vllm-spec", default="vllm", help="pip requirement for vLLM (default: what LMCache's "
-                                                       "install guide uses, the current release)")
+    ap.add_argument("--vllm-spec", default=VLLM_SPEC, help="pip requirement for vLLM (default: the pinned release "
+                                                       "its torch matches LMCache's wheels)")
     ap.add_argument("--max-model-len", type=int, default=20480)
     ap.add_argument("--l1-gb", type=float, default=16)
     ap.add_argument("--lengths", default="1024,4096,8192,16384")

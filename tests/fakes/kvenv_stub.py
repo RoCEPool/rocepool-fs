@@ -20,6 +20,7 @@ import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 prog = os.path.basename(sys.argv[0])
+VLLM_VERSION = os.environ.get("KVENV_STUB_VLLM", "0.33.0")   # what the stub vLLM reports and parses as
 # KVENV_STUB_SITE: a directory whose sitecustomize.py makes LMCache importable
 # (a source tree) -- for checking lmcache's arguments with LMCache's own parser
 if os.environ.get("KVENV_STUB_SITE"):
@@ -53,7 +54,7 @@ elif prog == "python":
             fail("the install check does not import the connector and the server")
         log(check=True)
         print("KVENV " + json.dumps({"torch": "2.9.0+cu130", "torch_cuda": "13.0", "cuda_available": True,
-                                     "gpu": "NVIDIA L40S", "vllm": "0.19.1", "lmcache": "0.5.7.post1"}))
+                                     "gpu": "NVIDIA L40S", "vllm": VLLM_VERSION, "lmcache": "0.5.7.post1"}))
     elif argv[:1] == ["-c"]:
         log(code=argv[1])
     else:
@@ -102,6 +103,11 @@ elif prog == "vllm":
     for f in ("--host", "--port", "--max-model-len", "--gpu-memory-utilization", "--kv-transfer-config"):
         p.add_argument(f, required=True)
     p.add_argument("--no-enable-prefix-caching", action="store_true", required=True)
+    # vLLM 0.34's extensible KV cache cannot be shared by CUDA IPC, which
+    # LMCache's MP connector uses: the harness must turn it off there, and
+    # must not pass the flag to an older vLLM, which does not know it
+    if tuple(int(x) for x in VLLM_VERSION.split(".")[:2]) >= (0, 34):
+        p.add_argument("--no-enable-extensible-kv-cache", action="store_true", required=True)
     try:
         a = p.parse_args(argv)
     except SystemExit:
