@@ -1,0 +1,6 @@
+== prepare
+[FAIL] prepare  roce_onsite: {'functional': '[PASS] smoke [PASS] pool [PASS] mpi [PASS] hpc [FAIL] stream'}
+[FAIL] error  prepare failed
+== cleanup
+
+verdict: FAIL   report: /root/rocepool/kvcache_e2e_report.json

@@ -1,0 +1,38 @@
+{
+  "started": "2026-11-21 10:40:41Z",
+  "meta": {
+    "engine": "vllm",
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "hosts": [
+      "172.31.9.24",
+      "172.31.4.88"
+    ],
+    "lmcache": "0.5.7",
+    "vllm_spec": "vllm",
+    "lengths": [
+      1024,
+      4096,
+      8192,
+      16384
+    ],
+    "reps": 3,
+    "instance_type": "g6.8xlarge"
+  },
+  "stage": "done",
+  "steps": {
+    "prepare": {
+      "status": "FAIL",
+      "detail": "roce_onsite: {'functional': '[PASS] smoke [PASS] pool [PASS] mpi [PASS] hpc [FAIL] stream'}",
+      "at_s": 167.1
+    },
+    "error": {
+      "status": "FAIL",
+      "detail": "prepare failed",
+      "at_s": 167.1
+    }
+  },
+  "tests": {},
+  "updated": "2026-11-21 10:43:29Z",
+  "elapsed_s": 167.1,
+  "verdict": "FAIL"
+}

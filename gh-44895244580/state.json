@@ -1,0 +1,46 @@
+{
+  "run_id": "gh-44895244580",
+  "region": "us-east-2",
+  "mode": "gpu",
+  "type": "g6.8xlarge",
+  "nodes": 2,
+  "facts": {
+    "arch": "amd64",
+    "efa": true,
+    "vcpus": 32,
+    "mem_mib": 131072,
+    "network": "25 Gigabit",
+    "nvme": 900,
+    "network_cards": 1,
+    "efa_max": 1
+  },
+  "efa": true,
+  "ami": "ami-0ac221eaf31b5b104",
+  "ami_name": "/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-24.04/latest/ami-id",
+  "vpc": "vpc-0599fd0abc5040937",
+  "az": "us-east-2a",
+  "subnet": "subnet-099d60c7e4b358f02",
+  "key": null,
+  "sg": null,
+  "pg": null,
+  "instances": [],
+  "placement_group_used": true,
+  "roles": {
+    "i-08cf9fbf85382b9ff": "storage",
+    "i-01963a7db9f71a13b": "storage"
+  },
+  "poweroff_at": 1795266517.9664207,
+  "hosts": [
+    {
+      "public": "3.142.198.195",
+      "private": "172.31.9.24"
+    },
+    {
+      "public": "18.219.138.1",
+      "private": "172.31.4.88"
+    }
+  ],
+  "gpu_hosts": [],
+  "setup": true,
+  "down": true
+}

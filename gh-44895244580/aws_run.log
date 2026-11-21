@@ -1,0 +1,20 @@
+[aws 10:38:24] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 10:38:25] 2 x g6.8xlarge: 32 vCPU, 128 GiB, 25 Gigabit, NVMe 900 GB, EFA yes
+[aws 10:38:25] gpu hosts with EFA (RDMA between them)
+[aws 10:38:25] vCPU quota 64 >= 64 needed (instances already running count against it too)
+[aws 10:38:26] AMI: base-oss-nvidia-driver-gpu-ubuntu-24.04 (ami-0ac221eaf31b5b104)
+[aws 10:38:37] launched i-08cf9fbf85382b9ff, i-01963a7db9f71a13b
+[aws 10:38:55] running: 3.142.198.195 (172.31.9.24), 18.219.138.1 (172.31.4.88)
+[aws 10:40:37] 3.142.198.195: ready (gpu, EFA)
+[aws 10:40:37] 18.219.138.1: ready (gpu, EFA)
+[aws 10:40:41] command started on 3.142.198.195 (2 hosts); following its progress
+  | == prepare
+[aws 10:43:18] progress written back: aws_run.out, kvcache_e2e_progress.json
+  | [FAIL] prepare  roce_onsite: {'functional': '[PASS] smoke [PASS] pool [PASS] mpi [PASS] hpc [FAIL] stream'}
+  | [FAIL] error  prepare failed
+  | == cleanup
+  | verdict: FAIL   report: /root/rocepool/kvcache_e2e_report.json
+[aws 10:43:47] reports in aws_runs/gh-44895244580/: onsite_report.json, aws_run.out, onsite_crossover.json, kvcache_e2e_report.json, kvcache_e2e_progress.json, kvcache_e2e_logs.tar.gz, host0_kernel.txt, host1_kernel.txt
+[aws 10:43:47] run.sh exit code 1
+[aws 10:43:48] terminating i-08cf9fbf85382b9ff, i-01963a7db9f71a13b
+[aws 10:50:40] all resources released
