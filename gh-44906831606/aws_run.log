@@ -1,0 +1,28 @@
+[aws 13:02:56] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 13:02:57] 2 x g6.8xlarge: 32 vCPU, 128 GiB, 25 Gigabit, NVMe 900 GB, EFA yes
+[aws 13:02:57] gpu hosts with EFA (RDMA between them)
+[aws 13:02:57] vCPU quota 64 >= 64 needed (instances already running count against it too)
+[aws 13:02:58] AMI: base-oss-nvidia-driver-gpu-ubuntu-24.04 (ami-0ac221eaf31b5b104)
+[aws 13:03:06] launched i-0308efb52d5aa5a17, i-04f865d0a2ec9503d
+[aws 13:03:23] running: 13.185.91.132 (172.31.15.136), 3.144.114.181 (172.31.1.37)
+[aws 13:05:03] 13.185.91.132: ready (gpu, EFA)
+[aws 13:05:03] 3.144.114.181: ready (gpu, EFA)
+[aws 13:05:06] command started on 13.185.91.132 (2 hosts); following its progress
+  | == prepare
+[aws 13:07:43] progress written back: aws_run.out, kvcache_e2e_progress.json
+[aws 13:10:19] progress written back: aws_run.out, kvcache_e2e_progress.json
+  | [PASS] prepare  2 hosts, transport verbs
+  | == install
+[aws 13:12:56] progress written back: aws_run.out, kvcache_e2e_progress.json
+  | [PASS] install  vLLM 0.33.0, LMCache 0.5.7.post1, torch 2.14.0+cu130 (CUDA 13.0), GPU NVIDIA L4
+  | == osts
+  | [PASS] osts  4 OSTs (RAM): 172.31.15.136:19950,172.31.15.136:19951,172.31.1.37:19950,172.31.1.37:19951
+  | == engines
+[aws 13:15:32] progress written back: aws_run.out, kvcache_e2e_progress.json
+  | [FAIL] error  host A vLLM exited (1) before answering: FileNotFoundError: [Errno 2] No such file or directory: 'ninja'
+  | == cleanup
+  | verdict: FAIL   report: /root/rocepool/kvcache_e2e_report.json
+[aws 13:16:47] reports in aws_runs/gh-44906831606/: onsite_report.json, aws_run.out, onsite_crossover.json, kvcache_e2e_report.json, kvcache_e2e_progress.json, kvcache_e2e_logs.tar.gz, host0_kernel.txt, host1_kernel.txt
+[aws 13:16:47] run.sh exit code 1
+[aws 13:16:48] terminating i-0308efb52d5aa5a17, i-04f865d0a2ec9503d
+[aws 13:23:40] all resources released

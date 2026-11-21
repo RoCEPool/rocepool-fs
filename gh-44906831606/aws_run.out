@@ -1,0 +1,11 @@
+== prepare
+[PASS] prepare  2 hosts, transport verbs
+== install
+[PASS] install  vLLM 0.33.0, LMCache 0.5.7.post1, torch 2.14.0+cu130 (CUDA 13.0), GPU NVIDIA L4
+== osts
+[PASS] osts  4 OSTs (RAM): 172.31.15.136:19950,172.31.15.136:19951,172.31.1.37:19950,172.31.1.37:19951
+== engines
+[FAIL] error  host A vLLM exited (1) before answering: FileNotFoundError: [Errno 2] No such file or directory: 'ninja'
+== cleanup
+
+verdict: FAIL   report: /root/rocepool/kvcache_e2e_report.json
