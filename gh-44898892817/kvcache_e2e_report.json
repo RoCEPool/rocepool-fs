@@ -1,0 +1,58 @@
+{
+  "started": "2026-11-21 11:26:40Z",
+  "meta": {
+    "engine": "vllm",
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "hosts": [
+      "172.31.5.61",
+      "172.31.1.232"
+    ],
+    "lmcache": "0.5.7",
+    "vllm_spec": "vllm",
+    "lengths": [
+      1024,
+      4096,
+      8192,
+      16384
+    ],
+    "reps": 3,
+    "instance_type": "g6.8xlarge"
+  },
+  "stage": "done",
+  "steps": {
+    "prepare": {
+      "status": "PASS",
+      "detail": "2 hosts, transport verbs",
+      "at_s": 362.9,
+      "transport": "verbs"
+    },
+    "install": {
+      "status": "FAIL",
+      "detail": "A: NVIDIA L4, 620.70.06, 23034 MiB\nerror: No solution found when resolving dependencies\n  cause: Because there is no version of lmcache==0.5.7 and you require lmcache==0.5.7, we can conclude that your requirements are unsatisfiable.\n; B: NVIDIA L4, 620.70.06, 23034 MiB\nerror: No solution found when resolving dependencies\n  cause: Because there is no version of lmcache==0.5.7 and you require lmcache==0.5.7, we can conclude that your requirements are unsatisfiable.\n",
+      "at_s": 368.2,
+      "hosts": {
+        "A": {
+          "ok": false,
+          "versions": {},
+          "nvidia_smi": "NVIDIA L4, 620.70.06, 23034 MiB",
+          "error": "NVIDIA L4, 620.70.06, 23034 MiB\nerror: No solution found when resolving dependencies\n  cause: Because there is no version of lmcache==0.5.7 and you require lmcache==0.5.7, we can conclude that your requirements are unsatisfiable.\n"
+        },
+        "B": {
+          "ok": false,
+          "versions": {},
+          "nvidia_smi": "NVIDIA L4, 620.70.06, 23034 MiB",
+          "error": "NVIDIA L4, 620.70.06, 23034 MiB\nerror: No solution found when resolving dependencies\n  cause: Because there is no version of lmcache==0.5.7 and you require lmcache==0.5.7, we can conclude that your requirements are unsatisfiable.\n"
+        }
+      }
+    },
+    "error": {
+      "status": "FAIL",
+      "detail": "install failed",
+      "at_s": 368.2
+    }
+  },
+  "tests": {},
+  "updated": "2026-11-21 11:32:53Z",
+  "elapsed_s": 372.9,
+  "verdict": "FAIL"
+}

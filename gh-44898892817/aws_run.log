@@ -1,0 +1,23 @@
+[aws 11:24:22] account 243478201880 as arn:aws:iam::243478201880:user/rocepool-ci, region us-east-2
+[aws 11:24:22] 2 x g6.8xlarge: 32 vCPU, 128 GiB, 25 Gigabit, NVMe 900 GB, EFA yes
+[aws 11:24:22] gpu hosts with EFA (RDMA between them)
+[aws 11:24:23] vCPU quota 64 >= 64 needed (instances already running count against it too)
+[aws 11:24:24] AMI: base-oss-nvidia-driver-gpu-ubuntu-24.04 (ami-0ac221eaf31b5b104)
+[aws 11:24:34] launched i-019cd5dbb7134f3ce, i-0bcaec6f31582fd0b
+[aws 11:24:51] running: 52.15.243.140 (172.31.5.61), 13.185.106.73 (172.31.1.232)
+[aws 11:26:33] 52.15.243.140: ready (gpu, EFA)
+[aws 11:26:33] 13.185.106.73: ready (gpu, EFA)
+[aws 11:26:40] command started on 52.15.243.140 (2 hosts); following its progress
+  | == prepare
+[aws 11:29:23] progress written back: aws_run.out, kvcache_e2e_progress.json
+[aws 11:32:05] progress written back: aws_run.out, kvcache_e2e_progress.json
+  | [PASS] prepare  2 hosts, transport verbs
+  | == install
+  | [FAIL] install  A: NVIDIA L4, 620.70.06, 23034 MiB
+  | [FAIL] error  install failed
+  | == cleanup
+  | verdict: FAIL   report: /root/rocepool/kvcache_e2e_report.json
+[aws 11:33:21] reports in aws_runs/gh-44898892817/: onsite_report.json, aws_run.out, onsite_crossover.json, kvcache_e2e_report.json, kvcache_e2e_progress.json, kvcache_e2e_logs.tar.gz, host0_kernel.txt, host1_kernel.txt
+[aws 11:33:21] run.sh exit code 1
+[aws 11:33:22] terminating i-019cd5dbb7134f3ce, i-0bcaec6f31582fd0b
+[aws 11:40:14] all resources released

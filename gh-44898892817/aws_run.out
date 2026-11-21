@@ -1,0 +1,14 @@
+== prepare
+[PASS] prepare  2 hosts, transport verbs
+== install
+[FAIL] install  A: NVIDIA L4, 620.70.06, 23034 MiB
+error: No solution found when resolving dependencies
+  cause: Because there is no version of lmcache==0.5.7 and you require lmcache==0.5.7, we can conclude that your requirements are unsatisfiable.
+; B: NVIDIA L4, 620.70.06, 23034 MiB
+error: No solution found when resolving dependencies
+  cause: Because there is no version of lmcache==0.5.7 and you require lmcache==0.5.7, we can conclude that your requirements are unsatisfiable.
+
+[FAIL] error  install failed
+== cleanup
+
+verdict: FAIL   report: /root/rocepool/kvcache_e2e_report.json
