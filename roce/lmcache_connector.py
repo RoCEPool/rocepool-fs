@@ -229,3 +229,14 @@ if NativeConnectorL2Adapter is not None:
                              extra_status={"osts": client.osts, "namespace": client.namespace,
                                            "zero_copy_l1": zero_copy})
             self.rocepool = client
+
+        def report_status(self) -> dict[str, Any]:
+            """LMCache's status (GET /status on its HTTP server) with the
+            connector's live counters under "rocepool": bytes stored and
+            loaded, bytes moved zero-copy and bytes copied."""
+            status = super().report_status()
+            try:
+                status["rocepool"] = self.rocepool.stats()
+            except Exception:  # closed
+                pass
+            return status

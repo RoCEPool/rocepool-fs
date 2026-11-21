@@ -32,7 +32,16 @@ elif "ROCEPOOL_SETUP" in cmd:
 elif "ssh-keygen" in cmd:
     print("ssh-ed25519 AAAAfake rocepool-cluster")
 elif "wc -l < aws_run.out" in cmd:
-    print("3\nrunning" if os.environ.get("FAKE_SSH_RUNNING") else "3\n0")   # running: the command never ends
+    polls = os.environ.get("FAKE_SSH_RUNNING_POLLS")   # running for that many polls, then exit 0
+    if polls:
+        counter = os.environ["FAKE_SSH_LOG"] + ".polls"
+        n = int(open(counter).read()) if os.path.exists(counter) else 0
+        open(counter, "w").write(str(n + 1))
+        print("3\nrunning" if n < int(polls) else "3\n0")
+    else:
+        print("3\nrunning" if os.environ.get("FAKE_SSH_RUNNING") else "3\n0")   # running: the command never ends
+elif "ls aws_run.out *_progress.json" in cmd:   # what the running command has written so far
+    print(os.environ.get("FAKE_SSH_PROGRESS", "aws_run.out"))
 elif cmd.startswith("sed -n"):
     print("== 3/4 运行\n[PASS] io500  score 123.4\nverdict: PASS")
 sys.exit(0)

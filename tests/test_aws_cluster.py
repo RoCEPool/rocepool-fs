@@ -140,6 +140,41 @@ class AwsClusterTests(unittest.TestCase):
                         "an unreachable host costs seconds per file, not the TCP connect timeout")
         self.assertTrue(self.aws_calls("ec2", "terminate-instances"), "released as always")
 
+    def test_progress_is_written_back_while_the_command_runs(self):
+        # every --progress-every seconds: the head's output and *_progress.json
+        # come back into the run directory and the hook publishes them, so a
+        # run cut short keeps its partial evidence
+        hook_log = os.path.join(self.tmp, "hook.log")
+        r = self.run_tool("--mode", "efa", "--nodes", "2", "--command", "long job",
+                          "--progress-every", "0.01", "--progress-hook", f"echo \"$RUN_DIR\" >> {hook_log}",
+                          env_extra={"FAKE_SSH_RUNNING_POLLS": "4",
+                                     "FAKE_SSH_PROGRESS": "aws_run.out\nkvcache_e2e_progress.json\n../x_progress.json",
+                                     "FAKE_SCP_EXTRA": "aws_run.out,kvcache_e2e_progress.json"},
+                          run_id="rp-progress")
+        run_dir = os.path.join(ROOT, "aws_runs", "rp-progress")
+        for f in ("aws_run.out", "kvcache_e2e_progress.json", "progress_pulled.json"):
+            self.assertTrue(os.path.exists(os.path.join(run_dir, f)), f)
+        self.assertEqual(json.load(open(os.path.join(run_dir, "progress_pulled.json")))["files"],
+                         ["aws_run.out", "kvcache_e2e_progress.json"], "only names in the tree")
+        hooks = open(hook_log).read().split()
+        self.assertGreaterEqual(len(hooks), 2, "written back repeatedly, not once")
+        self.assertTrue(all(h == run_dir for h in hooks), "the hook is told where the run directory is")
+        self.assertIn("progress written back", r.stdout)
+        self.assertTrue(self.aws_calls("ec2", "terminate-instances"), "released as always")
+
+    def test_progress_write_back_is_off_for_a_private_command_and_never_fails_the_run(self):
+        hook_log = os.path.join(self.tmp, "hook.log")
+        r = self.run_tool("--mode", "efa", "--nodes", "2", "--command", "bash private/entry.sh", "--quiet-command",
+                          "--progress-every", "0.01", "--progress-hook", f"echo x >> {hook_log}",
+                          env_extra={"FAKE_SCP_EXTRA": "aws_run.out"}, run_id="rp-progress-private")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse(os.path.exists(hook_log), "a private run's output stays on the cluster")
+        r2 = self.run_tool("--mode", "efa", "--nodes", "2", "--command", "long job",
+                           "--progress-every", "0.01", "--progress-hook", "exit 7",
+                           env_extra={"FAKE_SSH_RUNNING_POLLS": "3"}, run_id="rp-progress-hookfail")
+        self.assertIn("progress hook failed (7)", r2.stdout)
+        self.assertEqual(r2.returncode, 0, "a failing hook does not fail the run")
+
     def test_rxe_mode_sets_up_soft_roce_without_efa(self):
         r = self.run_tool("--mode", "rxe", "--nodes", "2")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
