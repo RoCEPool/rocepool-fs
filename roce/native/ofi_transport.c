@@ -1619,6 +1619,14 @@ struct worker {
     int nthreads;
     pthread_mutex_t pick;
     uint8_t *claimed;
+    /* Clients whose request is still being served here (under `pick`): its
+     * payload pull, its handler or its large reply in flight. A client's
+     * next request waits until then, so each client's requests are handled,
+     * and answered, in the order it sent them -- a PUT then a GET on one
+     * connection must find the PUT's data, and a stream connection reads
+     * its replies in order. Other clients' requests go ahead meanwhile. */
+    fi_addr_t *busy;
+    int nbusy, busy_cap;
     struct bufpool *pool;
     /* STATS "transport": requests handled; arrival -> picked up (queued
      * behind others); picked up -> reply posted / sent (handler, bulk
@@ -1811,6 +1819,30 @@ static struct txslot *tx_slot(struct worker *w) {
 }
 
 /* large replies whose send completed: their buffers back, their peers released */
+/* w->busy: see struct worker. tl_kept is set when a request outlives the
+ * call that took it (its pull or its large reply in flight): the client
+ * stays busy until that finishes. */
+static __thread int tl_kept;
+static int busy_has(struct worker *w, fi_addr_t a) {
+    for (int i = 0; i < w->nbusy; i++) if (w->busy[i] == a) return 1;
+    return 0;
+}
+static void busy_end(struct worker *w, fi_addr_t a) {
+    pthread_mutex_lock(&w->pick);
+    for (int i = 0; i < w->nbusy; i++)
+        if (w->busy[i] == a) { w->busy[i] = w->busy[--w->nbusy]; break; }
+    pthread_mutex_unlock(&w->pick);
+}
+/* the client a received request is from, or FI_ADDR_NOTAVAIL (a request
+ * that will be dropped as malformed: nobody to keep in order) */
+static fi_addr_t slot_client(struct ofi_ep *e, int i) {
+    struct op *slot = &e->slots[i];
+    if (slot->err || slot->len < REQ_HDR) return FI_ADDR_NOTAVAIL;
+    uint64_t rt;
+    memcpy(&rt, e->slab + (size_t)i * SMALL_FRAME + offsetof(struct req_hdr, reply_to), sizeof(rt));
+    return (fi_addr_t)(rt & 0xffffffffu);
+}
+
 static void big_reap(struct worker *w) {
     int k = 0;
     for (int i = 0; i < tl_nbig; i++) {
@@ -1823,6 +1855,7 @@ static void big_reap(struct worker *w) {
         if (b->own) pool_put(w->pool, b->own);
         if (b->resp) roce_reply_free(b->resp);
         peer_release(w->s, b->to);
+        busy_end(w, b->to);  /* its client's next request may go */
         free(b);
     }
     tl_nbig = k;
@@ -1883,6 +1916,7 @@ static int send_reply(struct worker *w, fi_addr_t to, uint64_t tag, uint32_t sta
             b->resp = pooled ? resp : NULL;
             b->to = to;
             tl_big[tl_nbig++] = b;
+            tl_kept = 1;
             __atomic_add_fetch(&w->st_big_async, 1, __ATOMIC_RELAXED);
             return pooled ? 2 : 0;  /* 2: the reply buffer is ours until the send completes */
         }
@@ -2033,6 +2067,7 @@ static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *
             pl->t_p = now_ns();
             pl->deadline_ms = now_ms() + 30000;
             tl_pulls[tl_npulls++] = pl;
+            tl_kept = 1;
             if ((uint64_t)tl_npulls > __atomic_load_n(&w->st_pull_pipe_max, __ATOMIC_RELAXED))
                 __atomic_store_n(&w->st_pull_pipe_max, (uint64_t)tl_npulls, __ATOMIC_RELAXED);
             return;
@@ -2130,6 +2165,7 @@ static void pulls_reap(struct worker *w) {
         struct pull *p = tl_pulls[i];
         int st = pull_state(p);
         if (!st) { tl_pulls[k++] = p; continue; }
+        tl_kept = 0;
         if (p->ok) {
             int j = p->local ? 0 : 1;
             __atomic_add_fetch(&w->st_pull_n[j], 1, __ATOMIC_RELAXED);
@@ -2144,6 +2180,9 @@ static void pulls_reap(struct worker *w) {
             tl_alive = NULL;
         } else {
             send_reply(w, p->to, p->h.tag, 3, NULL, 0);
+        }
+        if (!tl_kept) busy_end(w, p->to);  /* else its large reply ends it */
+        if (!p->ok) {
             /* timed out: a read may still complete into the frame and into
              * p->ops -- neither is reused (leaked, as the waiting path's frame) */
             if (st < 0) continue;
@@ -2191,12 +2230,23 @@ static void *worker_main(void *arg) {
         /* the oldest arrived request nobody has claimed -- unless this
          * thread already has all the payload pulls in flight it may */
         int best = -1;
+        fi_addr_t client = FI_ADDR_NOTAVAIL;
         if (tl_npulls < w->s->pull_pipe) {
             pthread_mutex_lock(&w->pick);
+            /* ...whose client has no earlier request still being served */
             for (int i = 0; i < e->nslots; i++)
                 if (!w->claimed[i] && __atomic_load_n(&e->slots[i].done, __ATOMIC_ACQUIRE) &&
-                    (best < 0 || e->slots[i].seq < e->slots[best].seq)) best = i;
-            if (best >= 0) w->claimed[best] = 1;
+                    (best < 0 || e->slots[i].seq < e->slots[best].seq)) {
+                    fi_addr_t c = slot_client(e, i);
+                    if (c != FI_ADDR_NOTAVAIL && busy_has(w, c)) continue;
+                    best = i;
+                    client = c;
+                }
+            if (best >= 0) {
+                w->claimed[best] = 1;
+                if (client != FI_ADDR_NOTAVAIL && w->nbusy < w->busy_cap) w->busy[w->nbusy++] = client;
+                else client = FI_ADDR_NOTAVAIL;
+            }
             pthread_mutex_unlock(&w->pick);
         }
         if (best < 0 && (tl_npulls || tl_nbig)) {
@@ -2221,7 +2271,9 @@ static void *worker_main(void *arg) {
         }
         uint64_t t_pick = now_ns();
         __atomic_add_fetch(&w->st_queue_ns, t_pick - e->slots[best].t_ns, __ATOMIC_RELAXED);
+        tl_kept = 0;
         handle_slot(w, best);
+        if (client != FI_ADDR_NOTAVAIL && !tl_kept) busy_end(w, client);
         __atomic_add_fetch(&w->st_busy_ns, now_ns() - t_pick, __ATOMIC_RELAXED);
         __atomic_add_fetch(&w->st_reqs, 1, __ATOMIC_RELAXED);
         uint64_t t_r = now_ns();
@@ -2553,7 +2605,10 @@ roce_server_t *roce_server_start(const char *bind_address, roce_request_handler 
      * Several threads sharing an EFA endpoint broke on i3en (2026-10-25):
      * a 300 KB PUT was answered twice (ERROR, then PUT_OK) and the transport
      * checks ran 5x slower -- correct on libfabric's tcp provider, not yet
-     * on EFA, so opt-in until it is */
+     * on EFA, so opt-in until it is. Known cause of the reordering: threads
+     * reading the shared completion queue at once can mark a client's later
+     * request arrived before its earlier one, and w->busy then keeps the
+     * wrong one waiting (tests/test_ofi_order.py checks one thread) */
     uint32_t per = env_u32("ROCE_OFI_SERVER_THREADS", 1);
     if (per < 1) per = 1;
     s->w = calloc(k, sizeof(*s->w));
@@ -2598,7 +2653,9 @@ roce_server_t *roce_server_start(const char *bind_address, roce_request_handler 
         w->nthreads = (int)per;
         w->threads = calloc(per, sizeof(*w->threads));
         w->claimed = calloc(depth, 1);
-        if (!w->threads || !w->claimed) { set_error("out of memory"); goto fail; }
+        w->busy_cap = depth;  /* at most one per claimed slot */
+        w->busy = calloc((size_t)depth, sizeof(*w->busy));
+        if (!w->threads || !w->claimed || !w->busy) { set_error("out of memory"); goto fail; }
         e->nslots = (int)depth;
         e->slots = calloc(depth, sizeof(*e->slots));
         e->slab = mmap(NULL, (size_t)depth * SMALL_FRAME, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
