@@ -277,6 +277,15 @@ jobs:
           rm -rf "$bd" "$hs"
           echo "PRIVATE_KEY_DIR=$kd" >> "$GITHUB_ENV"
           echo "::notice title=private bundle::opened ($(du -sh private | cut -f1))"
+      - name: pinned packages are on PyPI (before any host is created)
+        if: ${{ !inputs.probe_only && !inputs.private_run && contains(inputs.command, 'kvcache_e2e.py') }}
+        env:
+          CMD: ${{ inputs.command }}
+        run: |
+          # the KV-cache run installs exact versions on the hosts; one PyPI
+          # does not have fails there, after the hosts are paid for
+          rest=${CMD#*kvcache_e2e.py}
+          python3 tools/kvcache_e2e.py --check-pins $rest
       - name: run on AWS
         if: ${{ !inputs.probe_only }}
         env:
