@@ -40,7 +40,7 @@ for _ in range(3):
 after = sum(o.stats()["data_out"] for o in osts)
 st = c.stats()
 print("RESULT " + json.dumps({"read": 3 * n, "data_out": after - before, "zero_copy": st["bytes_zero_copy"],
-                              "copied": st["bytes_copied"]}))
+                              "copied": st["bytes_copied"]}), flush=True)
 c.close()
 os._exit(0)
 """
