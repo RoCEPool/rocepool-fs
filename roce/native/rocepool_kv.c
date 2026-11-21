@@ -357,6 +357,36 @@ rpkv_dev_t *rpkv_dev_register(rpkv_t *kv, void *base, size_t len) {
     return d;
 }
 
+/* host memory through the same zero-copy paths: the NIC reads into it and
+ * the OST RDMA-reads out of it; the "device copies" are plain memcpy for
+ * the transfers that still bounce (an unregistrable region, a server with
+ * no one-sided path) */
+static int host_copy(void *dst, const void *src, size_t n, void *ctx) {
+    (void)ctx;
+    memcpy(dst, src, n);
+    return 0;
+}
+static int host_zero(void *dst, size_t n, void *ctx) {
+    (void)ctx;
+    memset(dst, 0, n);
+    return 0;
+}
+static const rp_devrt_t g_host_rt = {"host", NULL, {host_copy, host_copy, host_zero, NULL}};
+
+rpkv_dev_t *rpkv_host_register(rpkv_t *kv, void *base, size_t len) {
+    if (!kv || !base || !len) return NULL;
+    rpkv_dev_t *d = calloc(1, sizeof(*d));
+    if (!d) return NULL;
+    d->kv = kv;
+    d->base = base;
+    d->len = len;
+    d->fd = -1;
+    d->rt = &g_host_rt;
+    const char *bounce = getenv("ROCEPOOL_GDS_BOUNCE");
+    if (!(bounce && !strcmp(bounce, "1"))) d->mem = roce_mem_register(base, len);
+    return d;
+}
+
 void rpkv_dev_deregister(rpkv_dev_t *d) {
     if (!d) return;
     roce_mem_release(d->mem);

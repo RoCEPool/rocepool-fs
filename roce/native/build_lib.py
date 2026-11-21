@@ -201,8 +201,8 @@ DEVMEM = os.path.join(NATIVE, "rocepool_devmem.c")
 def ensure_kv_lib() -> tuple[str, str]:
     lib, bench = os.path.join(_outdir(), "librocepool_kv.so"), os.path.join(_outdir(), "rocepool-kv-bench")
     srcs, cflags, ldflags = _transport()
-    core = [KV_MAIN, os.path.join(NATIVE, "rocepool_client.c"), DEVMEM]
-    all_src = core + ALL_TRANSPORTS + [os.path.join(NATIVE, "rocepool_kv.h")]
+    core = [KV_MAIN, os.path.join(NATIVE, "rocepool_client.c"), DEVMEM, os.path.join(NATIVE, "rocepool_lmc.c")]
+    all_src = core + ALL_TRANSPORTS + [os.path.join(NATIVE, "rocepool_kv.h"), os.path.join(NATIVE, "rocepool_lmc.h")]
     for out, extra in ((lib, ["-fPIC", "-shared"]), (bench, ["-DRPKV_BENCH"])):
         if _stale(out, all_src):
             subprocess.run([*CC, *extra, *cflags, *core, *srcs, "-o", out, *ldflags, "-ldl"], check=True)
