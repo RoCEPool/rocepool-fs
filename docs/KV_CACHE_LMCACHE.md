@@ -225,9 +225,24 @@ through the OST's CPU; the commit lookups do.
 | 16374 | 882 MiB | 5441 ms | 231 ms | 562 ms | 395 ms |
 
 At 16K tokens, loading the KV cache from RoCEPool cuts the time to first
-token from 5.4 s to 0.4–0.6 s. Loads on the other host were faster than on
-the host that stored the chunks. This run does not show why; the test
-records the times but not where they are spent.
+token from 5.4 s to 0.4–0.6 s.
+
+Loads on the other host were faster than on the host that stored the chunks.
+In this run, host A always read freshly stored chunks first and host B
+second. The logs place the difference in LMCache's lookup, which fetches
+chunks from RoCEPool into L1. That step took about 330 ms on A and about
+150 ms on B at 16K tokens. Moving data from L1 to the GPU took 33 ms on
+both hosts. The gap grows with the amount of data, by about 0.17 ms per MiB.
+
+The likely cause was in the OST. It registered each 64 MiB arena chunk with
+the NIC when an object in that chunk was first leased, not when the chunk
+was made. So the first reader of new data paid for pinning the chunks, while
+holding the OST's store lock. Chunks are now registered by the write that
+makes them, and `tests/test_ost_first_read.py` checks that reads register
+none. T3 now alternates which host reads first, and has each host load the
+chunks a second time. Its `order_study` reports whether slow loads go with
+the first read or with host A. The next GPU run confirms whether the gap is
+gone.
 
 ## Not covered yet
 
