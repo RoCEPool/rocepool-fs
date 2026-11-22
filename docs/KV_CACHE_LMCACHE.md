@@ -152,7 +152,7 @@ writes `kvcache_e2e_report.json`. Its steps:
 | T4 zero copy | The connectors' "bytes copied" counters stay at 0 on both hosts, so every byte moved by RDMA. |
 | T5 one-sided | Host B loads prompts host A stored. The OSTs' own `data_out` counter (object bytes sent in replies) stays at about 0 while B loads, so B's NIC read the data itself. The RDMA preflight confirms hardware RDMA read. OST CPU per MiB loaded is reported next to OST CPU per MiB stored, with idle busy-polling subtracted. |
 | T6 striping | A chunk (LMCache's chunk size, about 14 MiB for Qwen2.5-7B) is stored as at least 2 parts, and every OST holds data. When there are enough objects to judge (400 or more), every OST must also hold at least half its fair share. |
-| T7 first read | The first read of freshly stored chunks is no slower than later reads. No arena chunk is registered with the NIC by a read (OST counter `lease_registrations` stays 0); T3's order study finds no difference above 1.3x by order or by host; at the longest prompt, the L2 loads on the two hosts are within 10%. On the RDMA emulator only the counter is judged. |
+| T7 first read | The first read of freshly stored chunks is no slower than later reads. From the start of T3, no arena chunk is registered with the NIC by a read (OST counter `lease_registrations` stays 0); T3's order study finds no difference above 1.3x by order or by host; at the longest prompt, the L2 loads on the two hosts are within 10%. On the RDMA emulator only the counter is judged. |
 
 **Progress write-back.** Every step and test result is written to
 `kvcache_e2e_progress.json` as soon as it is known, and again every 30 s.
@@ -238,9 +238,10 @@ both hosts. The gap grows with the amount of data, by about 0.17 ms per MiB.
 The likely cause was in the OST. It registered each 64 MiB arena chunk with
 the NIC when an object in that chunk was first leased, not when the chunk
 was made. So the first reader of new data paid for pinning the chunks, while
-holding the OST's store lock. Chunks are now registered by the write that
-makes them, and `tests/test_ost_first_read.py` checks that reads register
-none. T3 now alternates which host reads first, and has each host load the
+holding the OST's store lock. Since an OST's first one-sided read, chunks
+are registered by the write that makes them. An OST that is never read
+one-sided registers nothing. That is the case for IO500 runs with direct
+reads off, as on i3en. `tests/test_ost_first_read.py` checks both cases. T3 now alternates which host reads first, and has each host load the
 chunks a second time. Its `order_study` reports whether slow loads go with
 the first read or with host A. The next GPU run confirms whether the gap is
 gone (T7).
