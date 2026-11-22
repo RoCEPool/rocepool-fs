@@ -745,6 +745,46 @@ def order_study(reads: list[dict], ratio: float = 1.3) -> dict:
             "note": "ms per MiB above host A's L1-hit time to first token, per load"}
 
 
+def t7_first_read(args, first_probe: dict, t3: dict | None, gap: float = 0.10) -> dict:
+    """The first read of freshly stored chunks is no slower than later ones.
+    The criteria were set before the run (2026-11-22). The g6 run of
+    2026-11-21 had host A, which always read first, at 562 ms against B's
+    395 ms at 16K tokens. Cause found: the OSTs registered arena chunks at
+    the first lease; they now do it on the write.
+      1. no arena chunk is registered by a read (OST lease_registrations);
+      2. T3's order study finds no difference above 1.3x by order or host;
+      3. at the longest prompt, L2 loads on A and B within 10%.
+    Locally (RDMA emulator, stand-in engines) timings mean nothing, so only
+    criterion 1 is judged there."""
+    last = probe_osts()
+    regs = {a: int(last[a].get("lease_registrations", 0)) - int(first_probe.get(a, {}).get("lease_registrations", 0))
+            for a in last}
+    checks = {"no_chunk_registered_by_a_read": all(v == 0 for v in regs.values())}
+    detail: dict = {"lease_registrations": regs}
+    if t3 and t3.get("rows"):
+        study = t3.get("order_study") or {}
+        row = max(t3["rows"], key=lambda r: r["target_tokens"])
+        loc, rem = row["ttft_median_s"]["l2_local"], row["ttft_median_s"]["l2_remote"]
+        diff = abs(loc - rem) / min(loc, rem) if min(loc, rem) > 0 else None
+        detail.update({"order_study": study.get("diagnosis"), "tokens": row["prompt_tokens"],
+                       "l2_ms": {"A": round(loc * 1e3), "B": round(rem * 1e3)},
+                       "a_b_difference": round(diff, 3) if diff is not None else None})
+        timed = {"first_read_not_slower": "no difference" in (study.get("diagnosis") or ""),
+                 "hosts_within_10pct": diff is not None and diff <= gap}
+    else:
+        timed = {"first_read_not_slower": False, "hosts_within_10pct": False}
+        detail["t3"] = "no T3 results"
+    if args.local:
+        detail["timing_checks_not_judged"] = timed     # emulator timings: reported only
+    else:
+        checks.update(timed)
+    ok = all(checks.values())
+    summary = (f"chunks registered by reads: {sum(regs.values())}; order study: {detail.get('order_study')}; "
+               f"{detail.get('tokens')} tok L2 A {detail.get('l2_ms', {}).get('A')} ms vs "
+               f"B {detail.get('l2_ms', {}).get('B')} ms")
+    return {"status": "PASS" if ok else "FAIL", "checks": checks, **detail, "summary": summary}
+
+
 def preflight_rdma_read(args) -> dict:
     """The RDMA preflight's verdict on hardware RDMA read (EFA: by instance
     family, from AWS's documentation)."""
@@ -1031,12 +1071,14 @@ def main() -> int:
         rep.stage("engines")
         procs += start_engines(args, rep, hosts, osts)
         results = {}
+        first_probe = probe_osts()
         for name, fn in (("T1_correctness", lambda: t1_correctness(args, rep, A)),
                          ("T2_cross_server", lambda: t2_cross_server(args, rep, A, B)),
                          ("T3_ttft", lambda: t3_ttft(args, rep, A, B)),
                          ("T5_one_sided", lambda: t5_one_sided(args, rep, A, B)),
                          ("T6_striping", lambda: t6_striping(args, rep, hosts)),
-                         ("T4_zero_copy", lambda: t4_zero_copy(args, rep, hosts))):
+                         ("T4_zero_copy", lambda: t4_zero_copy(args, rep, hosts)),
+                         ("T7_first_read", lambda: t7_first_read(args, first_probe, results.get("T3_ttft")))):
             rep.stage(name)
             try:
                 results[name] = fn()

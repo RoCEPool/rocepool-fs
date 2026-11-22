@@ -142,6 +142,48 @@ class RootCause(unittest.TestCase):
         self.assertEqual(m.last_error("/nonexistent.log"), "")
 
 
+class FirstReadVerdict(unittest.TestCase):
+    """T7's criteria, fixed before the run that judges them."""
+
+    @staticmethod
+    def t3(local_ms, remote_ms, diagnosis):
+        return {"rows": [{"target_tokens": 1024, "prompt_tokens": 1016,
+                          "ttft_median_s": {"l2_local": 0.139, "l2_remote": 0.107}},
+                         {"target_tokens": 16384, "prompt_tokens": 16374,
+                          "ttft_median_s": {"l2_local": local_ms / 1e3, "l2_remote": remote_ms / 1e3}}],
+                "order_study": {"diagnosis": diagnosis}}
+
+    def verdict(self, t3, regs=0, local=False):
+        import types
+        m = PinCheck.harness()
+        first = {"o1": {"lease_registrations": 3}, "o2": {"lease_registrations": 0}}
+        m.probe_osts = lambda: {"o1": {"lease_registrations": 3 + regs}, "o2": {"lease_registrations": 0}}
+        return m.t7_first_read(types.SimpleNamespace(local=local), first, t3)
+
+    def test_fixed(self):
+        v = self.verdict(self.t3(400, 395, "no difference above 1.3x by order or by host"))
+        self.assertEqual(v["status"], "PASS", v)
+        self.assertEqual(v["l2_ms"], {"A": 400, "B": 395})
+
+    def test_the_g6_run_of_2026_11_21_fails(self):
+        v = self.verdict(self.t3(562, 395, "the first read of freshly stored chunks is slower, whichever host does it; "
+                                           "later reads are not"))
+        self.assertEqual(v["status"], "FAIL")
+        self.assertEqual(v["checks"], {"no_chunk_registered_by_a_read": True, "first_read_not_slower": False,
+                                       "hosts_within_10pct": False})
+
+    def test_a_read_registering_a_chunk_fails(self):
+        v = self.verdict(self.t3(400, 395, "no difference above 1.3x by order or by host"), regs=2)
+        self.assertEqual(v["status"], "FAIL")
+        self.assertEqual(v["lease_registrations"], {"o1": 2, "o2": 0})
+
+    def test_locally_only_registrations_are_judged(self):
+        v = self.verdict(self.t3(562, 395, "the first read ... is slower"), local=True)
+        self.assertEqual(v["status"], "PASS")
+        self.assertFalse(v["timing_checks_not_judged"]["hosts_within_10pct"])
+        self.assertEqual(self.verdict(None, regs=1, local=True)["status"], "FAIL")
+
+
 class OrderStudy(unittest.TestCase):
     """T3's order study: which loads are slow -- the first read of freshly
     stored chunks, or host A's -- from per-load cost per MiB."""
@@ -276,6 +318,11 @@ class KVCacheE2ERehearsal(unittest.TestCase):
             self.assertEqual(set(study["ms_per_mib_median"][h]), {"first_read", "later_read"}, study)
         self.assertNotIn("not enough loads", study["diagnosis"])
         self.assertIn("Order study:", t["T3_ttft"]["summary"])
+        t7 = t["T7_first_read"]
+        self.assertEqual(t7["status"], "PASS", t7)
+        self.assertEqual(len(t7["lease_registrations"]), 4)
+        self.assertTrue(all(v == 0 for v in t7["lease_registrations"].values()), t7)
+        self.assertIn("timing_checks_not_judged", t7)            # emulator timings are not judged
         z = t["T4_zero_copy"]["hosts"]
         self.assertTrue(all(h["bytes_copied"] == 0 and h["bytes_zero_copy"] > 0 for h in z.values()))
         self.assertNotIn("T3_ttft_partial", t)
