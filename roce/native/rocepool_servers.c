@@ -262,13 +262,19 @@ typedef struct {
     atomic_ullong bytes, seq_gen;
     void (*notify)(void *base, size_t len, void *user);
     void *notify_user;
-    /* the server that publishes one-sided reads of this arena: a chunk is
-     * registered with its device when the chunk is made (arena_grow), on
-     * the write that needs it. Registered at the first lease instead, the
-     * first read of freshly stored data paid for pinning 64 MiB chunks, with
-     * the store lock held: on g6 (EFA), loads of new KV cache ran at half
-     * the rate of later loads (2026-11-21). */
+    /* Registration of chunks with the server's device (for one-sided reads).
+     * Until the first lease, a chunk is registered only if a lease asks for
+     * it: clients that never read one-sided (IO500 on i3en ran with direct
+     * reads off) cost the OST no registration at all. From the first lease
+     * on (`eager`), every chunk made is registered by the write that makes
+     * it, and the chunks made before are registered at that first lease.
+     * Registered at the first lease of each chunk instead, the first read of
+     * freshly stored data paid for pinning 64 MiB chunks, with the store
+     * lock held: on g6 (EFA), new KV cache loaded at half the rate of later
+     * loads (2026-11-21). */
     _Atomic(roce_server_t *) server;
+    atomic_int eager;
+    atomic_ullong registered;   /* chunks registered with the device, however */
 } obj_arena_t;
 
 static size_t arena_slab_bytes(uint32_t cls) {  /* header + data + tail, page multiple */
@@ -297,7 +303,10 @@ static int arena_grow(obj_arena_t *a) {
     c->mem = roce_mem_register(c->base, c->len);
     if (!c->mem) { munmap(c->base, c->len); free(c); return -ENOMEM; }
     roce_server_t *srv = atomic_load(&a->server);
-    if (srv && !roce_server_mem_rkey(srv, c->mem, &c->rkey)) c->rkey_ok = 1;  /* else at the first lease */
+    if (srv && atomic_load(&a->eager) && !roce_server_mem_rkey(srv, c->mem, &c->rkey)) {
+        c->rkey_ok = 1;  /* else at its first lease */
+        atomic_fetch_add(&a->registered, 1);
+    }
     if (a->notify) a->notify(c->base, c->len, a->notify_user);
     c->next = a->chunks;
     a->chunks = c;
@@ -480,6 +489,22 @@ typedef struct {
     int rd_threads;
     atomic_ullong async_reads, async_rereads;
 } ost_store;
+
+/* The first lease on this OST: from now on chunks are registered as they
+ * are made, and the ones made before are registered now (see obj_arena_t). */
+static void arena_go_eager(ost_store *s) {
+    obj_arena_t *a = &s->arena;
+    roce_server_t *srv = atomic_load(&a->server);
+    if (!srv) return;
+    pthread_mutex_lock(&a->lock);
+    if (!atomic_exchange(&a->eager, 1))
+        for (arena_chunk_t *c = a->chunks; c; c = c->next)
+            if (!c->rkey_ok && !roce_server_mem_rkey(srv, c->mem, &c->rkey)) {
+                c->rkey_ok = 1;
+                atomic_fetch_add(&a->registered, 1);
+            }
+    pthread_mutex_unlock(&a->lock);
+}
 
 static void arena_tier_notify(void *base, size_t len, void *user) { ost_tier_notify_chunk(user, base, len); }
 
@@ -1491,6 +1516,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
             else {
                 c->rkey_ok = 1;
                 atomic_fetch_add(&s->lease_registrations, 1);
+                atomic_fetch_add(&s->arena.registered, 1);
             }
         }
         if (!c) {
@@ -1510,6 +1536,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         ok[40] = rk >> 24; ok[41] = rk >> 16; ok[42] = rk >> 8; ok[43] = rk;
         pthread_mutex_unlock(&st->lock);
         atomic_fetch_add(&s->leases, 1);
+        if (!atomic_load(&s->arena.eager)) arena_go_eager(s);
         /* the copy just made resident counts against the RAM budget like a
          * write's: without this, one-sided reads of a tier-backed OST grew
          * its cache without bound (site: 29 GiB budget, 117 GiB, OOM kill).
@@ -3033,14 +3060,7 @@ rocepool_native_t *rocepool_native_start(int kind, const char *bind_address, siz
     if (!n->server) return NULL;  /* store intentionally not freed: see rocepool_native_stop */
     if (n->ost) {
         n->ost->server = n->server;
-        /* chunks made from now on are registered as they are made; any made
-         * already, now */
-        obj_arena_t *a = &n->ost->arena;
-        pthread_mutex_lock(&a->lock);
-        atomic_store(&a->server, n->server);
-        for (arena_chunk_t *c = a->chunks; c; c = c->next)
-            if (!c->rkey_ok && !roce_server_mem_rkey(n->server, c->mem, &c->rkey)) c->rkey_ok = 1;
-        pthread_mutex_unlock(&a->lock);
+        atomic_store(&n->ost->arena.server, n->server);  /* registration: see obj_arena_t */
     }
     if (n->mdt) n->mdt->server = n->server;
     if (n->mdt && n->mdt->tab.base && n->mdt->tab.mem) {
@@ -3088,6 +3108,9 @@ void rocepool_native_stats(rocepool_native_t *n, uint64_t *objects, uint64_t *by
     }
 }
 
+uint64_t rocepool_native_ost_arena_registered(rocepool_native_t *n) {
+    return n->kind == ROCEPOOL_NATIVE_OST ? atomic_load(&n->ost->arena.registered) : 0;
+}
 uint64_t rocepool_native_ost_lease_registrations(rocepool_native_t *n) {
     return n->kind == ROCEPOOL_NATIVE_OST ? atomic_load(&n->ost->lease_registrations) : 0;
 }

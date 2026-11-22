@@ -751,7 +751,9 @@ def t7_first_read(args, first_probe: dict, t3: dict | None, gap: float = 0.10) -
     2026-11-21 had host A, which always read first, at 562 ms against B's
     395 ms at 16K tokens. Cause found: the OSTs registered arena chunks at
     the first lease; they now do it on the write.
-      1. no arena chunk is registered by a read (OST lease_registrations);
+      1. from T3's start, no arena chunk is registered by a read (OST
+         lease_registrations): the chunks of the data T3 stores are
+         registered by the writes that make them;
       2. T3's order study finds no difference above 1.3x by order or host;
       3. at the longest prompt, L2 loads on A and B within 10%.
     Locally (RDMA emulator, stand-in engines) timings mean nothing, so only
@@ -1071,10 +1073,12 @@ def main() -> int:
         rep.stage("engines")
         procs += start_engines(args, rep, hosts, osts)
         results = {}
-        first_probe = probe_osts()
+        # T7's baseline: T3's start. Before it, T1's first one-sided reads
+        # turned on the OSTs' registering chunks as they are made.
+        first_probe: dict = {}
         for name, fn in (("T1_correctness", lambda: t1_correctness(args, rep, A)),
                          ("T2_cross_server", lambda: t2_cross_server(args, rep, A, B)),
-                         ("T3_ttft", lambda: t3_ttft(args, rep, A, B)),
+                         ("T3_ttft", lambda: (first_probe.update(probe_osts()), t3_ttft(args, rep, A, B))[1]),
                          ("T5_one_sided", lambda: t5_one_sided(args, rep, A, B)),
                          ("T6_striping", lambda: t6_striping(args, rep, hosts)),
                          ("T4_zero_copy", lambda: t4_zero_copy(args, rep, hosts)),

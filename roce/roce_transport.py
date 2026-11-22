@@ -162,6 +162,9 @@ class _Lib:
                     if hasattr(lib, "rocepool_native_ost_lease_registrations"):
                         lib.rocepool_native_ost_lease_registrations.restype = ctypes.c_uint64
                         lib.rocepool_native_ost_lease_registrations.argtypes = [ctypes.c_void_p]
+                    if hasattr(lib, "rocepool_native_ost_arena_registered"):
+                        lib.rocepool_native_ost_arena_registered.restype = ctypes.c_uint64
+                        lib.rocepool_native_ost_arena_registered.argtypes = [ctypes.c_void_p]
                     lib.rocepool_native_stop.restype = None
                     lib.rocepool_native_stop.argtypes = [ctypes.c_void_p]
 
@@ -313,6 +316,8 @@ class NativeServerHandle(ServerHandle):
             out["data_out"] = int(self._lib.rocepool_native_ost_data_out(self._ptr))
         if hasattr(self._lib, "rocepool_native_ost_lease_registrations"):
             out["lease_registrations"] = int(self._lib.rocepool_native_ost_lease_registrations(self._ptr))
+        if hasattr(self._lib, "rocepool_native_ost_arena_registered"):
+            out["arena_registered"] = int(self._lib.rocepool_native_ost_arena_registered(self._ptr))
         return out
 
 
