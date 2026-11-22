@@ -129,7 +129,15 @@ def ensure_mpi() -> str:
     .bench_cache/ so a second run is instant."""
     system_mpicc = shutil.which("mpicc")
     if system_mpicc:
-        return os.path.dirname(system_mpicc)
+        d = os.path.dirname(system_mpicc)
+        # the runs assume MPICH (hydra's -launcher, mpichversion): another
+        # MPI on PATH -- OpenMPI from a distribution, or the one AWS's EFA
+        # installer puts under /opt/amazon/openmpi -- made every IO500 run
+        # fail ("mpiexec: Error: unknown option -launcher")
+        if os.path.exists(os.path.join(d, "mpichversion")):
+            return d
+        print(f"[mpi] {system_mpicc} is not MPICH (no mpichversion next to it): using RoCEPool's own MPICH",
+              flush=True)
     bin_dir = os.path.join(MPICH_PREFIX, "bin")
     if os.path.exists(os.path.join(bin_dir, "mpicc")):
         have = mpich_configure(bin_dir)
