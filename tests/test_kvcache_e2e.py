@@ -142,6 +142,49 @@ class RootCause(unittest.TestCase):
         self.assertEqual(m.last_error("/nonexistent.log"), "")
 
 
+class OrderStudy(unittest.TestCase):
+    """T3's order study: which loads are slow -- the first read of freshly
+    stored chunks, or host A's -- from per-load cost per MiB."""
+
+    @staticmethod
+    def reads(cost):
+        """cost(host, read) -> ms per MiB; 3 reps, A first on even reps, as T3 runs them"""
+        out = []
+        for r in range(3):
+            order = ["A", "B"] if r % 2 == 0 else ["B", "A"]
+            plan = [(h, i + 1) for i, h in enumerate(order)] + [(h, i + 3) for i, h in enumerate(reversed(order))]
+            for h, nth in plan:
+                out.append({"tokens": 16374, "host": h, "read": nth, "loaded_mib": 882.0,
+                            "l1_ttft_s": 0.231, "ttft_s": 0.231 + cost(h, nth) * 882.0 / 1e3})
+        return out
+
+    def study(self, cost):
+        return PinCheck.harness().order_study(self.reads(cost))
+
+    def test_first_read_effect(self):
+        d = self.study(lambda h, nth: 0.375 if nth == 1 else 0.186)
+        self.assertIn("first read of freshly stored chunks is slower", d["diagnosis"])
+        self.assertEqual(d["loads"]["A"], {"first_read": 2, "later_read": 4})
+        self.assertEqual(d["loads"]["B"], {"first_read": 1, "later_read": 5})
+
+    def test_host_a_slower(self):
+        d = self.study(lambda h, nth: 0.375 if h == "A" else 0.186)
+        self.assertIn("host A", d["diagnosis"])
+        self.assertAlmostEqual(d["ms_per_mib_median"]["A"]["first_read"], 0.375, places=3)
+
+    def test_both_and_neither(self):
+        both = self.study(lambda h, nth: (0.4 if nth == 1 else 0.2) * (2 if h == "A" else 1))
+        self.assertIn("both", both["diagnosis"])
+        flat = self.study(lambda h, nth: 0.19)
+        self.assertIn("no difference", flat["diagnosis"])
+
+    def test_g6_run_as_measured_cannot_tell(self):
+        # 2026-11-21: A always read first, B second, no repeat loads
+        reads = [{"tokens": 16374, "host": h, "read": n, "loaded_mib": 882.0, "l1_ttft_s": 0.231, "ttft_s": t}
+                 for h, n, t in (("A", 1, 0.562), ("B", 2, 0.395))]
+        self.assertIn("not enough loads", PinCheck.harness().order_study(reads)["diagnosis"])
+
+
 class StripingVerdict(unittest.TestCase):
     """T6's verdict from synthetic OST counters: parts per chunk, every OST
     holding data, balance judged only with enough objects."""
@@ -223,8 +266,16 @@ class KVCacheE2ERehearsal(unittest.TestCase):
         rows = t["T3_ttft"]["rows"]
         self.assertEqual([r_["target_tokens"] for r_ in rows], [1024, 2048])
         for row in rows:
-            self.assertEqual(set(row["ttft_median_s"]), {"cold", "l1", "l2_local", "l2_remote"})
-            self.assertGreater(row["loaded_mib_median"]["l2_remote"], 0)
+            self.assertEqual(set(row["ttft_median_s"]), {"cold", "l1", "l2_local", "l2_remote",
+                                                         "l2_local_again", "l2_remote_again"})
+            # every load, the repeats included, came from RoCEPool
+            self.assertTrue(all(v > 0 for v in row["loaded_mib_median"].values()), row["loaded_mib_median"])
+            self.assertEqual(row["first_reader"][:2], ["A", "B"])        # the order alternates
+        study = t["T3_ttft"]["order_study"]
+        for h in ("A", "B"):
+            self.assertEqual(set(study["ms_per_mib_median"][h]), {"first_read", "later_read"}, study)
+        self.assertNotIn("not enough loads", study["diagnosis"])
+        self.assertIn("Order study:", t["T3_ttft"]["summary"])
         z = t["T4_zero_copy"]["hosts"]
         self.assertTrue(all(h["bytes_copied"] == 0 and h["bytes_zero_copy"] > 0 for h in z.values()))
         self.assertNotIn("T3_ttft_partial", t)

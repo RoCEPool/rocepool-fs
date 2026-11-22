@@ -646,11 +646,20 @@ def t2_cross_server(args, rep: Report, A: Host, B: Host) -> dict:
 
 
 def t3_ttft(args, rep: Report, A: Host, B: Host) -> dict:
-    rows, consistent = [], True
+    """Time to first token: cold, L1 hit, and loads from RoCEPool on the
+    host that stored the chunks (A) and on the other host (B).
+
+    The order of the loads alternates (A first on even repetitions, B first
+    on odd ones), and after both, each host loads the chunks once more. The
+    g6 run of 2026-11-21 measured A first every time and found A's loads
+    about twice as slow per MiB; order_study tells a slower first read of
+    freshly stored chunks apart from a slower host A."""
+    rows, consistent, reads = [], True, []
     for L in args.lengths:
-        samples = {"cold": [], "l1": [], "l2_local": [], "l2_remote": []}
-        loaded = {"l2_local": [], "l2_remote": []}
-        n_tok = None
+        samples = {"cold": [], "l1": [], "l2_local": [], "l2_remote": [],
+                   "l2_local_again": [], "l2_remote_again": []}
+        loaded = {k: [] for k in ("l2_local", "l2_remote", "l2_local_again", "l2_remote_again")}
+        first_reader, n_tok = [], None
         for r in range(args.reps):
             text, n_tok = make_prompt(A, args.model, f"T3-{args.run_tag}-{L}-{r}", L, 3000 + L + r)
             a0 = counters(A)
@@ -658,29 +667,82 @@ def t3_ttft(args, rep: Report, A: Host, B: Host) -> dict:
             wait_stored(A, a0)
             l1 = complete(A, args.model, text)
             clear_l1(A)
-            a2 = counters(A)
-            l2 = complete(A, args.model, text)
-            a3 = counters(A)
-            b0 = counters(B)
-            rem = complete(B, args.model, text)
-            b1 = counters(B)
-            consistent &= l1["text"] == l2["text"] == rem["text"]
-            for k, v in (("cold", cold), ("l1", l1), ("l2_local", l2), ("l2_remote", rem)):
-                samples[k].append(v["ttft_s"])
-            loaded["l2_local"].append(delta(a2, a3, "bytes_loaded"))
-            loaded["l2_remote"].append(delta(b0, b1, "bytes_loaded"))
+            order = [(A, "l2_local"), (B, "l2_remote")]
+            if r % 2:
+                order.reverse()
+            first_reader.append(order[0][0].name)
+            answers = [l1["text"]]
+            # each host's first load (read 1 and 2 of these chunks), then,
+            # with both L1s cleared, a load each again in the other order
+            # (reads 3 and 4)
+            plan = [(h, k, i + 1) for i, (h, k) in enumerate(order)] + \
+                   [(h, k + "_again", i + 3) for i, (h, k) in enumerate(reversed(order))]
+            for h, k, nth in plan:
+                if nth == 3:
+                    clear_l1(A)
+                    clear_l1(B)
+                c0 = counters(h)
+                got = complete(h, args.model, text)
+                c1 = counters(h)
+                answers.append(got["text"])
+                samples[k].append(got["ttft_s"])
+                mib = delta(c0, c1, "bytes_loaded") / 2**20
+                loaded[k].append(delta(c0, c1, "bytes_loaded"))
+                reads.append({"tokens": n_tok, "host": h.name, "read": nth, "ttft_s": got["ttft_s"],
+                              "l1_ttft_s": l1["ttft_s"], "loaded_mib": mib})
+            samples["cold"].append(cold["ttft_s"])
+            samples["l1"].append(l1["ttft_s"])
+            consistent &= len(set(answers)) == 1
         med = {k: statistics.median(v) for k, v in samples.items()}
         row = {"target_tokens": L, "prompt_tokens": n_tok, "ttft_median_s": med, "ttft_samples_s": samples,
+               "first_reader": first_reader,
                "loaded_mib_median": {k: statistics.median(v) / 2**20 for k, v in loaded.items()},
                "speedup_vs_cold": {k: (med["cold"] / med[k]) if med[k] else None
                                    for k in ("l1", "l2_local", "l2_remote")}}
         rows.append(row)
         rep.test("T3_ttft_partial", {"status": "RUNNING", "rows": rows})
+    study = order_study(reads)
     summary = "; ".join(f"{r['prompt_tokens']} tok: cold {r['ttft_median_s']['cold'] * 1e3:.0f} ms, "
                         f"L2 local {r['ttft_median_s']['l2_local'] * 1e3:.0f} ms, "
                         f"L2 other host {r['ttft_median_s']['l2_remote'] * 1e3:.0f} ms" for r in rows)
     return {"status": "PASS" if consistent else "FAIL", "rows": rows, "identical_cached_answers": consistent,
-            "summary": summary}
+            "order_study": study, "summary": summary + f". Order study: {study['diagnosis']}"}
+
+
+def order_study(reads: list[dict], ratio: float = 1.3) -> dict:
+    """Load cost per MiB (time to first token above the L1 hit's) by host
+    and by whether it was the first read of freshly stored chunks.
+    The diagnosis names what the slower loads go with: the first read
+    (whichever host does it), host A (whatever the order), or neither."""
+    cost: dict = {}
+    for x in reads:
+        if x["loaded_mib"] < 1:
+            continue
+        kind = "first_read" if x["read"] == 1 else "later_read"
+        ms = max(x["ttft_s"] - x["l1_ttft_s"], 0) * 1e3 / x["loaded_mib"]
+        cost.setdefault(x["host"], {}).setdefault(kind, []).append(ms)
+    med = {h: {k: round(statistics.median(v), 4) for k, v in d.items()} for h, d in cost.items()}
+    n = {h: {k: len(v) for k, v in d.items()} for h, d in cost.items()}
+
+    def m(h, k):
+        return med.get(h, {}).get(k)
+    have = all(m(h, k) for h in ("A", "B") for k in ("first_read", "later_read"))
+    if not have:
+        diagnosis = "not enough loads to tell (each host needs first and later reads)"
+    else:
+        first_slower = all(m(h, "first_read") > ratio * m(h, "later_read") for h in ("A", "B"))
+        a_slower = all(m("A", k) > ratio * m("B", k) for k in ("first_read", "later_read"))
+        if first_slower and not a_slower:
+            diagnosis = ("the first read of freshly stored chunks is slower, whichever host does it; "
+                         "later reads are not")
+        elif a_slower and not first_slower:
+            diagnosis = "host A (where the chunks were stored) loads slower, whatever the order"
+        elif first_slower and a_slower:
+            diagnosis = "both: first reads are slower, and host A is slower in either order"
+        else:
+            diagnosis = f"no difference above {ratio}x by order or by host"
+    return {"ms_per_mib_median": med, "loads": n, "diagnosis": diagnosis,
+            "note": "ms per MiB above host A's L1-hit time to first token, per load"}
 
 
 def preflight_rdma_read(args) -> dict:
