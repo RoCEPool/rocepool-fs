@@ -130,7 +130,9 @@ def native_server(kind: str, me: str) -> None:
             "malloc_free_retained_mb": round(mi.fordblks / 2**20, 1), "malloc_mmapped_mb": round(mi.hblkhd / 2**20, 1),
             "engine_bytes_mb": round(st["bytes"] / 2**20, 1), "engine_objects": st["objects"], "ops": st["ops"],
             # replies' object bytes (not one-sided reads) and this process's CPU time
-            "data_out_mb": round(st.get("data_out", 0) / 2**20, 3), "cpu_s": round(sum(os.times()[:2]), 3)}),
+            "data_out_mb": round(st.get("data_out", 0) / 2**20, 3), "cpu_s": round(sum(os.times()[:2]), 3),
+            # arena chunks registered by a read rather than by the write that made them
+            "lease_registrations": st.get("lease_registrations", 0)}),
             flush=True)
     signal.signal(signal.SIGUSR1, _probe)
     print(f"READY {me}", flush=True)
