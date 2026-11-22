@@ -1,0 +1,84 @@
+name: arm-compare
+# x86 vs ARM on GitHub's runners (free for public repositories): RoCEPool's
+# whole test suite on ARM, and RoCEPool's own benchmarks on both, over the
+# RDMA emulator. A hint whether ARM hosts (AWS Graviton) are worth paying
+# for; not a result to publish -- the runners are shared virtual machines.
+on:
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: "benchmark rounds per runner (medians are compared)"
+        default: "3"
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            label: x86
+          - runner: ubuntu-24.04-arm
+            label: arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+      - name: packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ make cmake pkg-config autoconf automake libtool fuse3 iproute2 \
+            libibverbs-dev librdmacm-dev openmpi-bin libopenmpi-dev
+          sudo modprobe fuse || true
+          mkdir -p out && lscpu | tee out/cpu.txt
+      - name: tests (the whole suite)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          sudo -E env "PATH=$PATH" python3 -m unittest discover -s tests -t . 2>&1 | tee out/unittest.log
+      - name: benchmarks
+        env:
+          ROUNDS: ${{ inputs.rounds }}
+        run: |
+          for r in $(seq 1 "$ROUNDS"); do
+            sudo -E env "PATH=$PATH" python3 tools/bench_kv.py --seconds 5 --report out/kv_$r.json > out/kv_$r.log 2>&1 || true
+            sudo -E env "PATH=$PATH" python3 tools/bench_ior.py --backend dist --quick --scale 16 --mdtest-n 2000 \
+              --report out/ior_$r.json > out/ior_$r.log 2>&1 || true
+            sudo -E env "PATH=$PATH" python3 tools/bench_ior.py --backend dist --hard --hard-segments 2000 --mdtest-n 2000 \
+              --report out/hard_$r.json > out/hard_$r.log 2>&1 || true
+          done
+          sudo chown -R "$(id -u)" out
+          python3 tools/arm_compare.py summarize out ${{ matrix.label }}
+      - name: summary
+        if: always()
+        run: |
+          r=$(grep -E '^Ran [0-9]+ tests' out/unittest.log | tail -1); v=$(grep -E '^(OK|FAILED)' out/unittest.log | tail -1)
+          echo "::notice title=tests on ${{ matrix.label }}::$r -- $v"
+          grep -E '^(FAIL|ERROR):' out/unittest.log | head -30 | sed 's/^/::error title=test on ${{ matrix.label }}::/' || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: arm-compare-${{ matrix.label }}
+          path: out/
+
+  compare:
+    needs: run
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          path: res
+      - name: compare
+        run: |
+          python3 tools/arm_compare.py compare res/arm-compare-x86/summary.json res/arm-compare-arm/summary.json | tee compare.md
+          cat compare.md >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^Geometric mean' compare.md | sed 's/^/::notice title=ARM vs x86::/' || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arm-compare-result
+          path: compare.md
