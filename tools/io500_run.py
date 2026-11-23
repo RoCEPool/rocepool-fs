@@ -1377,8 +1377,16 @@ def main() -> int:
         # library through mpiexec -genv (hydra sets it in the ranks, not in
         # mpiexec itself) and serves paths under MNT itself. Shell commands
         # on the data (mkdir, rm -rf) must run under the library too.
+        # mdtest's open(O_CREAT) + write + close as ONE MDT request
+        # (create_write, ROCEPOOL_DEFER_CREATE): a file is seen by other
+        # processes from its first write, at the latest its close -- which
+        # is persisted before it returns (rules 2 and 6). Never O_EXCL,
+        # O_TRUNC or O_APPEND opens (IOR's shared file). =0 turns it off.
+        defer_create = os.environ.get("ROCEPOOL_DEFER_CREATE", "1")
+        report["defer_create"] = defer_create == "1"
         icp_env = {"LD_PRELOAD": cluster.intercept_lib, "ROCEPOOL_PREFIX": MNT, "ROCEPOOL_MDTS": mdts,
                    "ROCEPOOL_OSTS": osts, "ROCEPOOL_ATTR_TTL": str(args.attr_ttl),
+                   "ROCEPOOL_DEFER_CREATE": defer_create,
                    "ROCEPOOL_IO_THREADS": str(args.intercept_io_threads),
                    **({"ROCE_OFI_CLIENT_EPS": str(args.client_eps)} if args.client_eps > 0 else {}),
                    **{k: env[k] for k in ("ROCEPOOL_DIRTY_CAP_MIB", "ROCEPOOL_RPC_TIMEOUT_MS", "ROCEPOOL_SCACHE_SLOTS",

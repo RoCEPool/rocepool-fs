@@ -104,17 +104,19 @@ __attribute__((destructor)) static void intercept_dtor(void) {
     unsigned long long orr = 0, mr = 0;
     for (int i = 0; i < cfg.nost; i++) orr += atomic_load(&g_osts[i].rpcs);
     for (int i = 0; i < cfg.nmdt; i++) mr += atomic_load(&g_mdts[i].rpcs);
-    unsigned long long pend, repl, lost;
+    unsigned long long pend, repl, lost, dcc, dcp, dcn;
     rpfs_commit_stats(&pend, &repl, &lost);
+    rpfs_defer_stats(&dcc, &dcp, &dcn);
     uint64_t rai, rah, raw;
     rp_stride_ra_stats(&rai, &rah, &raw);
     fprintf(stderr, "rocepool_intercept[%d]: stats mdt_rpcs=%llu ost_rpcs=%llu direct_reads=%llu direct_bytes=%llu "
                     "leases=%llu stale_leases=%llu direct_lookups=%llu direct_lookup_misses=%llu "
                     "mdt_uncommitted=%llu mdt_replayed=%llu mdt_lost=%llu "
-                    "stride_ra_issued=%llu stride_ra_hits=%llu stride_ra_wasted=%llu\n", (int)getpid(), mr, orr,
+                    "stride_ra_issued=%llu stride_ra_hits=%llu stride_ra_wasted=%llu "
+                    "creates_with_data=%llu creates_plain=%llu creates_pending=%llu\n", (int)getpid(), mr, orr,
             (unsigned long long)dr, (unsigned long long)db, (unsigned long long)dl, (unsigned long long)ds,
             (unsigned long long)lk, (unsigned long long)lm, pend, repl, lost,
-            (unsigned long long)rai, (unsigned long long)rah, (unsigned long long)raw);
+            (unsigned long long)rai, (unsigned long long)rah, (unsigned long long)raw, dcc, dcp, dcn);
 }
 static void load_libc(void) {
 #define LOAD(name) real_##name = sym(#name)
@@ -369,7 +371,14 @@ static int do_open(const char *rel, int flags, mode_t mode) {
          * for a new file), then the create: mdtest-easy-write took two
          * requests per file and ran at half the MDTs' rate (2 x i3en, run
          * 40195061844: 123 k creates/s against 248 k stats/s). */
-        rc = fs_create_file_excl(rel, (flags & O_EXCL) != 0, &a);
+        /* mdtest's open(O_CREAT): the create goes with the first write,
+         * one MDT request with it (ROCEPOOL_DEFER_CREATE; never with O_EXCL,
+         * which must answer at the open, nor O_TRUNC / O_APPEND -- IOR's
+         * ranks all open a shared file O_CREAT|O_TRUNC at once) */
+        if (!(flags & (O_EXCL | O_TRUNC | O_APPEND)) && (flags & O_ACCMODE) != O_RDONLY)
+            rc = fs_create_deferred(rel, &a);
+        else
+            rc = fs_create_file_excl(rel, (flags & O_EXCL) != 0, &a);
         if (rc == 0 && a.is_dir && (flags & O_ACCMODE) != O_RDONLY) rc = -EISDIR;
         if (rc) {
             if (g_log) fprintf(stderr, "rocepool_intercept[%d]: create %s flags %#x failed: %d\n", (int)getpid(), rel, flags, rc);

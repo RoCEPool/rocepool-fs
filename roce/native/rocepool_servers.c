@@ -2131,7 +2131,7 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
     md_bucket *bk = NULL;
     uint64_t tw = mono_ns(), th = tw;
     if (op != 5 && op != 6 && op != 13) {
-        pd = md_get_dir(m, parent, parent_len, op == 2);
+        pd = md_get_dir(m, parent, parent_len, op == 2 || op == 15);
         if (pd) {
             bk = md_bucket_of(pd, nh);
             pthread_mutex_lock(&bk->lock);
@@ -2380,6 +2380,64 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         }
         break;
     }
+    case 15: {  /* create_write: u8 flags (bit0 has_layout, bit1 inline_ok),
+                 * [u32 stripe_count, u64 stripe_size, u32 stripe_offset],
+                 * u64 LE offset, data. A file's create and its first inline
+                 * write in one request (mdtest-hard: open, write 3901 bytes,
+                 * close -- was a create at the open and a write_inline at
+                 * the close). Non-exclusive, files only. All or nothing: a
+                 * new file that could not keep the data inline is not
+                 * created (NOT_INLINE / INLINE_FULL, the client then creates
+                 * and writes as before), so only a full success is logged.
+                 * Replied to once durable, as any write into an entry. */
+        if (f->val_len < 2) { out = frame_error(f, "MDT_INTERNAL", "short create_write", out_len); break; }
+        int has_layout = f->val[1] & 1, inline_ok = f->val[1] & 2;
+        size_t p0 = 2 + (has_layout ? ENTRY_LAYOUT : 0);
+        if (f->val_len < p0 + 8) { out = frame_error(f, "MDT_INTERNAL", "short create_write", out_len); break; }
+        if (!bk) { out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
+        uint64_t off = rd_u64le(f->val + p0), n = f->val_len - p0 - 8, end = off + n;
+        const uint8_t *data = f->val + p0 + 8;
+        md_entry **pp = md_find(bk, name, name_len, nh);
+        md_entry *e = *pp;
+        if (e) {  /* there already: write into it, as write_inline */
+            if (e->is_dir) { out = frame_error(f, "IS_DIR", path, out_len); break; }
+            if (!e->inl) { out = frame_error(f, "NOT_INLINE", path, out_len); break; }
+            if (e->frozen) { out = frame_error(f, "FROZEN", path, out_len); break; }
+            if (end > inline_limit(e) || end < off) { out = frame_error(f, "INLINE_FULL", path, out_len); break; }
+            int rr = end > e->size ? inline_resize(e, end) : 0;
+            if (rr == -2) { out = frame_error(f, "INLINE_FULL", path, out_len); break; }
+            if (rr) { out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
+        } else {
+            md_entry t = {0};
+            t.has_layout = has_layout ? 1 : 0;
+            if (has_layout) { t.sc = rd_u32le(f->val + 2); t.ss = rd_u64le(f->val + 6); t.so = rd_u32le(f->val + 14); }
+            uint64_t lim = inline_limit(&t);
+            if (!inline_ok || !lim || !inline_room(lim)) { out = frame_error(f, "NOT_INLINE", path, out_len); break; }
+            if (end > lim || end < off) { out = frame_error(f, "INLINE_FULL", path, out_len); break; }
+            e = calloc(1, sizeof(*e));
+            char *nm = malloc(name_len + 1);
+            if (!e || !nm) { free(e); free(nm); out = frame_error(f, "MDT_INTERNAL", "out of memory", out_len); break; }
+            *e = t;
+            memcpy(nm, name, name_len); nm[name_len] = 0;
+            e->hash = nh; e->name = nm; e->name_len = name_len;
+            e->inl = 1;
+            e->mtime = e->ctime = now_s();
+            int rr = end ? inline_resize(e, end) : 0;
+            if (rr) {
+                free(e->idata); free(nm); free(e);
+                out = frame_error(f, rr == -2 ? "INLINE_FULL" : "MDT_INTERNAL", rr == -2 ? path : "out of memory", out_len);
+                break;
+            }
+            e->next = *pp;
+            *pp = e;
+            if (++bk->count > bk->nslots * 2) md_grow(bk);
+        }
+        if (n) memcpy(e->idata + off, data, n);
+        e->iver++;
+        e->mtime = now_s();
+        out = entry_frame(f, e, out_len);
+        break;
+    }
     case 14: {  /* spill_set_size: u64 LE size. A new file's first flush past the
                  * inline limit, its stripes already written by the client: an
                  * EMPTY inline file becomes striped and grows to `size` in one
@@ -2472,14 +2530,15 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         out = frame_error(f, "UNSUPPORTED_OP", msg, out_len);
     }
     }
-    if (pd && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10 || op == 14))
+    if (pd && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10 || op == 14 || op == 15))
         atomic_fetch_add_explicit(&pd->ver, 1, memory_order_release);
-    if (bk && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10 || op == 14)) {
+    if (bk && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10 || op == 14 || op == 15)) {
         /* keep the one-sided table in step while the bucket is still ours */
         md_entry *e = op == 4 ? NULL : *md_find(bk, name, name_len, nh);
         if (op == 4 || e) md_slot_sync(m, path, pl, e);
     }
-    if (m->wal && out && out[4] == OP_MDT_OK && (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10 || op == 14)) {
+    if (m->wal && out && out[4] == OP_MDT_OK &&
+        (op == 2 || op == 3 || op == 4 || op == 7 || op == 9 || op == 10 || op == 14 || op == 15)) {
         /* the request as it came, appended while the name's bucket is still
          * held: a name's records are in the order of its changes */
         uint8_t hdr[8];  /* u32 LE key length, u32 LE value length, key, value */

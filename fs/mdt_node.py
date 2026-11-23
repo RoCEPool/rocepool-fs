@@ -165,9 +165,30 @@ class MDTServer:
                 return [dict(_public(v), name=k) for k, v in sorted(self._children.get(d, {}).items())]
             if op == "child_count":
                 return len(self._children.get(normalize(req["path"]), {}))
+            if op == "create_write":
+                return self._create_write(req)
             if op in ("write_inline", "read_inline", "freeze", "spill_commit", "spill_set_size"):
                 return self._inline_op(op, req)
             raise MDTError("UNSUPPORTED_OP", op)
+
+    def _create_write(self, req: dict):
+        """create (non-exclusive) + write_inline, all or nothing (fs/mdt_wire.py).
+        Caller holds the lock."""
+        path = normalize(req["path"])
+        siblings = self._children.setdefault(parent_of(path), {})
+        e = siblings.get(name_of(path))
+        if e is not None:
+            return self._inline_op("write_inline", req)
+        new = _entry(False, req.get("layout"), time.time())
+        lim = inline_limit(new)
+        if not req.get("inline_ok") or lim <= 0:
+            raise MDTError("NOT_INLINE", path)
+        end = req["offset"] + len(req["data"])
+        if end > lim:
+            raise MDTError("INLINE_FULL", path)
+        new["inline"] = True
+        siblings[name_of(path)] = new
+        return self._inline_op("write_inline", req)
 
     def _inline_op(self, op: str, req: dict):
         """Data-on-MDT (protocol in fs/mdt_wire.py). Caller holds the lock."""
@@ -266,6 +287,11 @@ class MDTClient:
                            "inline_ok": inline_ok})
 
     # -- Data-on-MDT (fs/mdt_wire.py) --
+    def create_write(self, path: str, offset: int, data: bytes, *, layout: dict | None = None,
+                     inline_ok: bool = True) -> dict:
+        return self._call(self.shard.mdt_for(path), {"op": "create_write", "path": path, "offset": offset,
+                                                     "data": data, "layout": layout, "inline_ok": inline_ok})
+
     def write_inline(self, path: str, offset: int, data: bytes) -> dict:
         return self._call(self.shard.mdt_for(path), {"op": "write_inline", "path": path, "offset": offset,
                                                      "data": data})

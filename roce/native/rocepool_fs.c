@@ -204,6 +204,69 @@ static void mt_replay(peer_t *p, struct mdt_track *t) {
     pthread_mutex_unlock(&t->lk);
 }
 
+/* ---------------------------------------------------------------- deferred creates
+ * ROCEPOOL_DEFER_CREATE=1 (IO500 runs): open(O_CREAT) without O_EXCL,
+ * O_TRUNC or O_APPEND sends nothing. The file's create goes with its
+ * first write, as one MDT request (create_write, fs/mdt_wire.py) --
+ * mdtest-hard's open, write of 3901 bytes and close took two (a create at
+ * the open, a write_inline at the close). The file becomes visible to
+ * OTHER processes at that write (at the latest at the close, which is
+ * persisted before it returns: IO500 rules 2 and 6). This process sees it
+ * at once: any other MDT request it sends first turns its pending creates
+ * into ordinary ones (dc_flush_all), so its own stat, readdir, unlink or
+ * rename always come after them. */
+typedef struct { char *path; attr_t lay; } dcreate_t;
+static int g_defer_create;
+static pthread_mutex_t g_dc_lk = PTHREAD_MUTEX_INITIALIZER;
+static dcreate_t *g_dc;
+static size_t g_dc_n, g_dc_cap;
+static _Atomic size_t g_dc_count;
+static _Atomic unsigned long long g_dc_combined, g_dc_plain;
+static __thread int tl_dc_busy;
+static int mdt_create(const char *path, int is_dir, int exclusive, const attr_t *lay, attr_t *a);
+void ac_put(const char *path, const attr_t *a);
+static void dc_flush_all(void) {
+    if (tl_dc_busy || !atomic_load(&g_dc_count)) return;
+    tl_dc_busy = 1;
+    for (;;) {
+        pthread_mutex_lock(&g_dc_lk);
+        if (!g_dc_n) { pthread_mutex_unlock(&g_dc_lk); break; }
+        dcreate_t d = g_dc[--g_dc_n];
+        atomic_fetch_sub(&g_dc_count, 1);
+        pthread_mutex_unlock(&g_dc_lk);
+        attr_t a;
+        int rc = mdt_create(d.path, 0, 0, &d.lay, &a);
+        if (rc == 0) ac_put(d.path, &a);
+        /* a failed create here is not lost: the file's write creates it
+         * again (fs_write_segs) and reports the error there */
+        atomic_fetch_add(&g_dc_plain, 1);
+        free(d.path);
+    }
+    tl_dc_busy = 0;
+}
+/* take path's pending create (1, its layout in *lay) or 0 */
+static int dc_take(const char *path, attr_t *lay) {
+    if (!atomic_load(&g_dc_count)) return 0;
+    int found = 0;
+    pthread_mutex_lock(&g_dc_lk);
+    for (size_t i = 0; i < g_dc_n; i++)
+        if (!strcmp(g_dc[i].path, path)) {
+            *lay = g_dc[i].lay;
+            free(g_dc[i].path);
+            g_dc[i] = g_dc[--g_dc_n];
+            atomic_fetch_sub(&g_dc_count, 1);
+            found = 1;
+            break;
+        }
+    pthread_mutex_unlock(&g_dc_lk);
+    return found;
+}
+void rpfs_defer_stats(unsigned long long *combined, unsigned long long *plain, unsigned long long *pending) {
+    *combined = atomic_load(&g_dc_combined);
+    *plain = atomic_load(&g_dc_plain);
+    *pending = atomic_load(&g_dc_count);
+}
+
 /* every MDT request: plain, or (mdt_async) as described above. once: a
  * RECOVERING MDT gets this process's replays and the call returns -EAGAIN
  * instead of waiting the window out (the pinger: every MDT must hear in time) */
@@ -214,6 +277,7 @@ static int mdt_rpc(peer_t *p, const char *key, const void *v1, size_t n1, const 
 }
 static int mdt_rpc_x(peer_t *p, const char *key, const void *v1, size_t n1, const void *v2, size_t n2, resp_t *out,
                      int once) {
+    dc_flush_all();  /* this process's own pending creates come first */
     if (!cfg.mdt_async) return rpc(p, OP_MDT, key, v1, n1, v2, n2, out);
     pthread_once(&g_mt_once, mt_init);
     struct mdt_track *t = &g_mt[p - g_mdts];
@@ -271,6 +335,7 @@ static void *mt_pinger(void *arg) {
 }
 
 int rpfs_commit(void) {
+    dc_flush_all();  /* fsync, rmdir, exit: this process's creates exist */
     if (!cfg.mdt_async) return 0;
     pthread_once(&g_mt_once, mt_init);
     int err = 0;
@@ -293,6 +358,7 @@ int rpfs_commit(void) {
  * unlinks durable within the measured time (IO500 rule 6), not the pinger
  * up to 0.5 s later. */
 int rpfs_commit_all(void) {
+    dc_flush_all();
     if (!cfg.mdt_async) return 0;
     pthread_once(&g_mt_once, mt_init);
     int err = 0;
@@ -510,6 +576,7 @@ static int mdt_lookup_direct(peer_t *p, const char *path, attr_t *a) {
 }
 
 static int mdt_lookup(const char *path, attr_t *a) {
+    dc_flush_all();  /* the one-sided lookup too */
     int rc = mdt_lookup_direct(mdt_for(path), path, a);
     if (rc != -EAGAIN) return rc;
     uint8_t req[1] = {1};
@@ -527,6 +594,30 @@ static int mdt_create(const char *path, int is_dir, int exclusive, const attr_t 
         n = 20;
     }
     return mdt_entry_call(path, req, n, a);
+}
+
+/* create_write (op 15): create (non-exclusive) + first inline write */
+static int mdt_create_write(const char *path, const attr_t *lay, uint64_t off, const uint8_t *data, size_t len,
+                            attr_t *a) {
+    uint8_t hdr[26] = {15, (uint8_t)((lay ? 1 : 0) | (cfg.inline_ok ? 2 : 0))};
+    size_t n = 2;
+    if (lay) {
+        memcpy(hdr + 2, &lay->sc, 4);
+        memcpy(hdr + 6, &lay->ss, 8);
+        memcpy(hdr + 14, &lay->so, 4);
+        n = 18;
+    }
+    memcpy(hdr + n, &off, 8);
+    n += 8;
+    resp_t r;
+    tl_dc_busy++;  /* this file's pending create was taken: the others wait */
+    int rc = mdt_rpc(mdt_for(path), path, hdr, n, data, len, &r);
+    tl_dc_busy--;
+    if (rc) return rc;
+    if (r.op == OP_MDT_OK) rc = decode_entry(r.val, r.vlen, a) ? 0 : -EIO;
+    else rc = r.op == OP_ERROR ? mdt_errno(r.code) : -EIO;
+    resp_free(&r);
+    return rc;
 }
 
 /* Data-on-MDT (fs/mdt_wire.py) */
@@ -1141,6 +1232,54 @@ int fs_create_file_excl(const char *path, int exclusive, attr_t *a) {
 
 int fs_create_file(const char *path, attr_t *a) { return fs_create_file_excl(path, 0, a); }
 
+/* open(O_CREAT) without O_EXCL / O_TRUNC / O_APPEND (deferred creates,
+ * above): 0 and the attributes the file will have when created, sending
+ * nothing -- or, deferral off, the ordinary create */
+int fs_create_deferred(const char *path, attr_t *a) {
+    if (!g_defer_create) return fs_create_file_excl(path, 0, a);
+    int rc = require_parent_dir(path);  /* answered from the cache in a directory already seen */
+    if (rc) return rc;
+    attr_t lay;
+    memset(&lay, 0, sizeof(lay));
+    choose_layout(path, &lay);
+    pthread_mutex_lock(&g_dc_lk);
+    int dup = 0;
+    for (size_t i = 0; i < g_dc_n && !dup; i++) dup = !strcmp(g_dc[i].path, path);
+    if (!dup) {
+        if (g_dc_n == g_dc_cap) {
+            g_dc_cap = g_dc_cap ? 2 * g_dc_cap : 8;
+            g_dc = xrealloc(g_dc, g_dc_cap * sizeof(*g_dc));
+        }
+        g_dc[g_dc_n].path = strdup(path);
+        g_dc[g_dc_n].lay = lay;
+        g_dc_n++;
+        atomic_fetch_add(&g_dc_count, 1);
+    }
+    pthread_mutex_unlock(&g_dc_lk);
+    ac_del(path);  /* a cached "not there" is about to be wrong */
+    memset(a, 0, sizeof(*a));
+    a->has_layout = lay.has_layout;
+    a->sc = lay.sc;
+    a->ss = lay.ss;
+    a->so = lay.so;
+    a->inl = cfg.inline_ok;
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    a->mtime = a->ctime = (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+    return 0;
+}
+
+/* a file's pending create, if it has one, sent now as an ordinary one (a
+ * close of a file never written: it must exist after the close) */
+int fs_create_pending(const char *path) {
+    attr_t lay, a;
+    if (!dc_take(path, &lay)) return 0;
+    int rc = mdt_create(path, 0, 0, &lay, &a);
+    atomic_fetch_add(&g_dc_plain, 1);
+    if (rc == 0) ac_put(path, &a);
+    return rc == -EEXIST ? -EISDIR : rc;
+}
+
 int fs_rmdir(const char *path) {
     /* its children's unlinks (on every MDT) durable before the directory's */
     int rc = rpfs_commit();
@@ -1387,7 +1526,37 @@ static int fs_write_segs(const char *path, uint64_t off, const wseg_t *segs, int
     for (int i = 0; i < nsegs; i++) len += segs[i].len;
     if (!len) return 0;
     attr_t a;
-    int rc = fs_getattr(path, &a);
+    int rc;
+    attr_t lay;
+    if (atomic_load(&g_dc_count) && dc_take(path, &lay)) {  /* a deferred create: with this write if it fits */
+        int device = 0;
+        for (int i = 0; i < nsegs; i++) if (segs[i].mem && roce_mem_is_device(segs[i].mem)) device = 1;
+        if (cfg.inline_ok && !device && off + len <= inline_hint(&lay)) {
+            attr_t na;
+            if (nsegs == 1) {
+                rc = mdt_create_write(path, lay.has_layout ? &lay : NULL, off, segs[0].data, len, &na);
+            } else {
+                uint8_t *tmp = xmalloc(len);
+                size_t o = 0;
+                for (int i = 0; i < nsegs; i++) { memcpy(tmp + o, segs[i].data, segs[i].len); o += segs[i].len; }
+                rc = mdt_create_write(path, lay.has_layout ? &lay : NULL, off, tmp, len, &na);
+                free(tmp);
+            }
+            if (rc == 0) {
+                atomic_fetch_add(&g_dc_combined, 1);
+                ac_put(path, &na);
+                return 0;
+            }
+            /* nothing was created (all or nothing): as before, below */
+            if (rc != E_NOT_INLINE && rc != E_INLINE_FULL && rc != E_FROZEN && rc != E_UNSUPPORTED) return rc;
+        }
+        rc = mdt_create(path, 0, 0, &lay, &a);
+        atomic_fetch_add(&g_dc_plain, 1);
+        if (rc == -EEXIST) return -EISDIR;
+        if (rc) return rc;
+        ac_put(path, &a);
+    }
+    rc = fs_getattr(path, &a);
     if (rc == -ENOENT) rc = fs_create_file(path, &a);
     if (rc) return rc;
     if (a.is_dir) return -EISDIR;
@@ -2578,7 +2747,8 @@ static int wb_start(handle_t *h) {
 int handle_flush(handle_t *h) {
     int rc = wb_wait(h);
     int rc2 = flush_now(h);  /* retries what a failed batch left too */
-    return rc2 ? rc2 : (h->ndirty ? rc : 0);
+    int rc3 = atomic_load(&g_dc_count) ? fs_create_pending(h->path) : 0;  /* never written: created now */
+    return rc2 ? rc2 : (h->ndirty ? rc : rc3);
 }
 
 /* ---------------------------------------------------------------- handle I/O
@@ -2730,6 +2900,8 @@ int rpfs_init(void) {
     if (dl && *dl) g_direct_lookup = strcmp(dl, "0") && strcmp(dl, "off");
     const char *ma = getenv("ROCEPOOL_MDT_ASYNC");
     if (ma && !strcmp(ma, "1")) cfg.mdt_async = 1;
+    const char *dfc = getenv("ROCEPOOL_DEFER_CREATE");
+    if (dfc && !strcmp(dfc, "1")) g_defer_create = 1;
     const char *ss = getenv("ROCEPOOL_SCACHE_SLOTS");
     if (ss && atoi(ss) > 0) cfg.scache_slots = atoi(ss);
     if (cfg.nmdt < 1 || cfg.nost < 1) return -EINVAL;
