@@ -88,6 +88,20 @@ def quota_for(itype: str) -> tuple:
     return None, None
 
 
+# apt on a fresh host: retries per download, and when an install still fails (the
+# region's EC2 mirror answering 503), the sources move to archive.ubuntu.com and it
+# goes once more. One line, so it fits the setup script's list of commands.
+APT_FUNCS = (
+    "APT='-o Acquire::Retries=5 -o Acquire::http::Timeout=30'; "
+    "apt_update() { sudo apt-get $APT update -q >/dev/null || { sleep 15; sudo apt-get $APT update -q >/dev/null; }; }; "
+    "apt_mirror() { for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do "
+    "[ -f \"$f\" ] && sudo sed -i -E 's#https?://[a-z0-9.-]*\\.ec2\\.archive\\.ubuntu\\.com#http://archive.ubuntu.com#g' \"$f\"; "
+    "done; true; }; "
+    "apt_install() { sudo apt-get $APT install -y -q \"$@\" >/dev/null && return 0; "
+    "echo \"apt: install failed, switching to archive.ubuntu.com and trying again\" >&2; apt_mirror; "
+    "sleep 10; apt_update || true; sudo apt-get $APT install -y -q \"$@\" >/dev/null; }")
+
+
 def network_interfaces(mode: str, facts: dict, subnet: str, sg: str) -> list:
     """The instance's interfaces. Card 0: the primary (public IP, SSH; an EFA
     in efa mode). efa mode on a type with several network cards and EFA
@@ -502,13 +516,16 @@ class Run:
             "printf 'Host *\\n  StrictHostKeyChecking no\\n  UserKnownHostsFile /dev/null\\n  LogLevel ERROR\\n' "
             "| sudo tee /root/.ssh/config >/dev/null",
             "sudo chmod 600 /root/.ssh/authorized_keys /root/.ssh/config",
-            "sudo apt-get update -q >/dev/null",
-            "sudo apt-get install -y -q python3 gcc g++ make git cmake curl pkg-config autoconf automake libtool "
-            "fuse3 iproute2 rdma-core ibverbs-utils libibverbs-dev librdmacm-dev nvme-cli >/dev/null",
+            # the region's EC2 Ubuntu mirror can answer 503 for minutes (gt-42): apt retries
+            # each download, and a failed install goes again after switching to archive.ubuntu.com
+            APT_FUNCS,
+            "apt_update",
+            "apt_install python3 gcc g++ make git cmake curl pkg-config autoconf automake libtool "
+            "fuse3 iproute2 rdma-core ibverbs-utils libibverbs-dev librdmacm-dev nvme-cli",
         ]
         if mode == "rxe":
             lines += [
-                "sudo apt-get install -y -q linux-modules-extra-$(uname -r) >/dev/null || true",
+                "apt_install linux-modules-extra-$(uname -r) || true",
                 "sudo modprobe rdma_rxe",
                 "dev=$(ip -4 -o route get 1.1.1.1 | sed -n 's/.* dev \\([^ ]*\\).*/\\1/p')",
                 "sudo ip link set dev $dev mtu 9001",
@@ -551,7 +568,7 @@ class Run:
             # puts the OSTs' tier there (an NVMe-backed file system). Only the
             # instance store, never the EBS system disk (its model differs).
             lines += [
-                "sudo apt-get install -y -q mdadm xfsprogs >/dev/null",
+                "apt_install mdadm xfsprogs",
                 "devs=$(for d in /dev/nvme*n1; do m=$(cat /sys/block/$(basename $d)/device/model 2>/dev/null); "
                 "case \"$m\" in *'Instance Storage'*) findmnt -rn -S $d >/dev/null || echo $d;; esac; done)",
                 "n=$(echo $devs | wc -w)",
