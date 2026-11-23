@@ -6,7 +6,10 @@ $FAKE_AWS_NO_CAPACITY=az[,az...]: run-instances fails there with InsufficientIns
   (an entry type@az: only for that instance type).
 $FAKE_AWS_VCPUS=type=n[,type=n]: vCPUs of those types (default 128).
 $FAKE_AWS_CARDS=n: the type has n network cards (and n EFA interfaces).
-$FAKE_AWS_VCPU_QUOTA / $FAKE_AWS_HPC_QUOTA / $FAKE_AWS_G_QUOTA: the standard / HPC / G-and-VT vCPU quotas."""
+$FAKE_AWS_VCPU_QUOTA / $FAKE_AWS_HPC_QUOTA / $FAKE_AWS_G_QUOTA: the standard / HPC / G-and-VT vCPU quotas.
+$FAKE_AWS_GPU=type=name:mib[,...]: the type has one such GPU.
+$FAKE_AWS_BW=type=baseline:peak[,...]: the type's network rates in Gbit/s.
+$FAKE_AWS_DRYRUN_DENY=1: run-instances --dry-run answers UnauthorizedOperation."""
 import json
 import os
 import sys
@@ -36,6 +39,19 @@ def out(o):
     print(json.dumps(o))
 
 
+def _gpu_bw(t):
+    g = dict(x.split("=", 1) for x in os.environ.get("FAKE_AWS_GPU", "").split(",") if "=" in x)
+    b = dict(x.split("=", 1) for x in os.environ.get("FAKE_AWS_BW", "").split(",") if "=" in x)
+    o = {}
+    if t in g:
+        name, mib = g[t].split(":")
+        o["GpuInfo"] = {"Gpus": [{"Name": name, "Manufacturer": "NVIDIA", "Count": 1, "MemoryInfo": {"SizeInMiB": int(mib)}}]}
+    if t in b:
+        base, peak = b[t].split(":")
+        o["_bw"] = {"BaselineBandwidthInGbps": float(base), "PeakBandwidthInGbps": float(peak)}
+    return o
+
+
 if cmd == ("configure", "get"):
     print("us-east-1")
 elif cmd == ("sts", "get-caller-identity"):
@@ -48,10 +64,17 @@ elif cmd == ("ec2", "describe-instance-types"):
                                                                 _t in os.environ.get("FAKE_AWS_NO_EFA", "").split(",")),
                                             "NetworkPerformance": "200 Gigabit",
                                             "MaximumNetworkCards": int(os.environ.get("FAKE_AWS_CARDS", "1")),
-                                            "EfaInfo": {"MaximumEfaInterfaces": int(os.environ.get("FAKE_AWS_CARDS", "1"))}},
+                                            "EfaInfo": {"MaximumEfaInterfaces": int(os.environ.get("FAKE_AWS_CARDS", "1"))},
+                                            **({"NetworkCards": [_gpu_bw(_t)["_bw"]]} if "_bw" in _gpu_bw(_t) else {})},
                             "VCpuInfo": {"DefaultVCpus": int(_v.get(_t, 128))}, "MemoryInfo": {"SizeInMiB": 262144},
+                            **{k: v for k, v in _gpu_bw(_t).items() if k != "_bw"},
                             **({"InstanceStorageInfo": {"TotalSizeInGB": int(os.environ["FAKE_AWS_NVME_GB"])}}
                                if os.environ.get("FAKE_AWS_NVME_GB") else {})}]})
+elif cmd == ("ec2", "describe-images"):
+    out({"Images": [{"ImageId": argv[argv.index("--image-ids") + 1], "Name": "fake-ami", "CreationDate": "2026-11-01",
+                     "Description": "a fake AMI"}]})
+elif cmd == ("ec2", "describe-security-groups"):
+    out({"SecurityGroups": [{"GroupId": "sg-default"}]})
 elif cmd == ("ssm", "get-parameters"):
     # each requested name answers, except those $FAKE_AWS_SSM_MISSING lists (comma-separated substrings)
     names = []
@@ -74,6 +97,14 @@ elif cmd == ("ec2", "create-key-pair"):
     out({"KeyMaterial": "-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----\n"})
 elif cmd == ("ec2", "create-security-group"):
     out({"GroupId": "sg-1"})
+elif cmd == ("ec2", "run-instances") and "--dry-run" in argv:
+    if os.environ.get("FAKE_AWS_DRYRUN_DENY") == "1":
+        sys.stderr.write("An error occurred (UnauthorizedOperation) when calling the RunInstances operation: "
+                         "You are not authorized to perform this operation.\n")
+    else:
+        sys.stderr.write("An error occurred (DryRunOperation) when calling the RunInstances operation: "
+                         "Request would have succeeded, but DryRun flag is set.\n")
+    sys.exit(254)
 elif cmd == ("ec2", "run-instances"):
     az = json.loads(argv[argv.index("--placement") + 1])["AvailabilityZone"]
     _type = argv[argv.index("--instance-type") + 1]

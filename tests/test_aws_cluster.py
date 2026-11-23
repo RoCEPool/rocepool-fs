@@ -517,6 +517,57 @@ class AwsClusterTests(unittest.TestCase):
         self.assertIn("vCPU quota for on-demand G and VT instances is 32, this run needs 48", r.stdout)
         self.assertEqual(self.aws_calls("ec2", "run-instances"), [])
 
+class SurveyTests(unittest.TestCase):
+    """run --survey: free -- queries and dry runs only, nothing is created"""
+    setUp, tearDown = AwsClusterTests.setUp, AwsClusterTests.tearDown
+    run_tool, calls, aws_calls = AwsClusterTests.run_tool, AwsClusterTests.calls, AwsClusterTests.aws_calls
+    TWO = ("--mode", "rxe", "--nodes", "1", "--type", "r6in.2xlarge", "--gpu-type", "g6e.2xlarge", "--gpu-nodes", "1",
+           "--survey")
+    ENV = {"FAKE_AWS_G_QUOTA": "64", "FAKE_AWS_VCPUS": "g6e.2xlarge=8,r6in.2xlarge=8",
+           "FAKE_AWS_NO_EFA": "g6e.2xlarge,r6in.2xlarge", "FAKE_AWS_GPU": "g6e.2xlarge=L40S:46068",
+           "FAKE_AWS_BW": "g6e.2xlarge=5:20,r6in.2xlarge=12.5:40"}
+    CREATING = ("create-key-pair", "create-security-group", "create-placement-group", "terminate-instances",
+                "allocate-address")
+
+    def created(self):
+        made = [c for c in self.calls(self.aws_log) if any(x in c for x in self.CREATING)]
+        made += [c for c in self.aws_calls("ec2", "run-instances") if "--dry-run" not in c]
+        return made
+
+    def survey_doc(self, run_id):
+        return json.load(open(os.path.join(ROOT, "aws_runs", run_id, "survey.json")))
+
+    def test_the_survey_reports_every_group_and_creates_nothing(self):
+        r = self.run_tool(*self.TWO, env_extra=self.ENV, run_id="rp-survey1")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.created(), [], "a survey creates nothing")
+        d = self.survey_doc("rp-survey1")
+        g, st = d["groups"]["gpu"], d["groups"]["storage"]
+        self.assertEqual(g["gpus"], [{"name": "NVIDIA L40S", "count": 1, "memory_mib": 46068}])
+        self.assertEqual((g["baseline_gbps"], g["peak_gbps"], st["baseline_gbps"]), (5.0, 20.0, 12.5))
+        self.assertEqual(g["setup"]["libfabric_from"], "EFA installer, user space only (--skip-kmod)")
+        self.assertTrue(st["setup"]["rxe"] and st["setup"]["libfabric"])
+        self.assertEqual((g["dry_run"], st["dry_run"]), ("ok", "ok"))
+        self.assertTrue(g["ami"]["name"])
+        self.assertEqual(d["status"], "PASS")
+        self.assertIn("sustained 5.0, burst 20.0 Gbit/s", r.stdout)
+
+    def test_unmet_needs_and_a_refused_dry_run_fail_the_survey(self):
+        r = self.run_tool(*self.TWO, "--need-gpu-mem-gib", "80", "--need-gbps", "10",
+                          env_extra={**self.ENV, "FAKE_AWS_DRYRUN_DENY": "1"}, run_id="rp-survey2")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertEqual(self.created(), [])
+        why = "\n".join(self.survey_doc("rp-survey2")["problems"])
+        self.assertIn("gpu: g6e.2xlarge has 45.0 GPU memory GiB, needs 80.0", why)
+        self.assertIn("gpu: g6e.2xlarge has 5.0 sustained network Gbit/s, needs 10.0", why)
+        self.assertIn("UnauthorizedOperation", why)
+
+    def test_an_rxe_cluster_without_gpu_hosts_installs_no_libfabric(self):
+        r = self.run_tool("--mode", "rxe", "--nodes", "2", "--survey", "--need-libfabric", run_id="rp-survey3")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("would not install libfabric", "\n".join(self.survey_doc("rp-survey3")["problems"]))
+
+
 class AptRetryTests(unittest.TestCase):
     """the setup script's apt helpers (aws_cluster.APT_FUNCS), run by bash against a fake
     apt-get that fails while the sources still name the region's EC2 mirror (gt-42: 503s)"""
