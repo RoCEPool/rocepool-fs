@@ -922,6 +922,9 @@ def mpi_node_check(mpi_bin: str, launch: list[str], ranks: int, ranks_per_node: 
     return res
 
 
+AGENT_DIR = "/run/rocepool-agent"  # --agent on: the node agent's socket and counters
+
+
 def _file_line_until(path: str, p: subprocess.Popen, prefix: str, timeout: float) -> str:
     """the first line starting with `prefix` in the file p writes to (from
     `prefix` on: the server's stdout READY and the C library's stderr share
@@ -1071,6 +1074,9 @@ def main() -> int:
                          "cluster's RAM")
     ap.add_argument("--md-easy-n", type=int, default=None, help="mdtest-easy files per rank (cap)")
     ap.add_argument("--md-hard-n", type=int, default=None, help="mdtest-hard files per rank (cap)")
+    ap.add_argument("--agent", choices=["on", "off"], default="off",
+                    help="interception client: a per-node agent sends the node's small-file writes to the MDTs "
+                         "in batches (roce/native/rocepool_agent.c, MDT op 16)")
     ap.add_argument("--valid", action="store_true", help="official procedure: 300 s stonewall, no pauses")
     ap.add_argument("--profile", default="auto",
                     help="phases to profile with perf on node 0 (comma list, or none). auto: mdtest-hard-write on "
@@ -1458,9 +1464,38 @@ def main() -> int:
         # O_TRUNC or O_APPEND opens (IOR's shared file). =0 turns it off.
         defer_create = os.environ.get("ROCEPOOL_DEFER_CREATE", "1")
         report["defer_create"] = defer_create == "1"
+        # the node agent (--agent on): the ranks' create_writes go to it over
+        # a UNIX socket at AGENT_DIR (a directory of each host's own; on a
+        # simulated cluster a tmpfs in each node's mount namespace -- the
+        # ranks share the host's network namespace there, so the abstract
+        # namespace would be one for all nodes), and it sends what waits for
+        # an MDT as one batch. A rank whose agent cannot answer sends its
+        # request itself.
+        agent_env = {}
+        report["agent"] = args.agent == "on"
+        if args.agent == "on":
+            if cluster.real:
+                agent_bin = os.path.join(os.path.dirname(cluster.intercept_lib), "rocepool-agent")
+            else:
+                from roce.native.build_lib import ensure_agent
+                agent_bin = ensure_agent()
+            agent_env = {"ROCEPOOL_AGENT": AGENT_DIR + "/agent.sock"}
+            for node in cluster.nodes:
+                prep = f"mkdir -p {AGENT_DIR}" + ("" if cluster.real else
+                                                  f" && {{ mountpoint -q {AGENT_DIR} || mount -t tmpfs -o size=1m "
+                                                  f"rocepool-agent {AGENT_DIR}; }}")
+                cluster.run(node.index, ["sh", "-c", prep], env, net=False, check=True, timeout=60)
+                alog = os.path.join(work, f"agent{node.index}.log")
+                p = cluster.popen(node.index, [agent_bin], dict(env, **agent_env,
+                                                                ROCEPOOL_AGENT_STATS=AGENT_DIR + "/stats.json"),
+                                  stdin=subprocess.DEVNULL, stdout=open(alog, "w"), stderr=subprocess.STDOUT)
+                if _file_line_until(alog, p, "listening", 30).find("listening") < 0:
+                    raise RuntimeError(f"agent on node {node.index} did not start: see {alog}")
+            print(f"== node agents up on all {n} nodes ({agent_env['ROCEPOOL_AGENT']}): "
+                  f"small-file writes to the MDTs in batches", flush=True)
         icp_env = {"LD_PRELOAD": cluster.intercept_lib, "ROCEPOOL_PREFIX": MNT, "ROCEPOOL_MDTS": mdts,
                    "ROCEPOOL_OSTS": osts, "ROCEPOOL_ATTR_TTL": str(args.attr_ttl),
-                   "ROCEPOOL_DEFER_CREATE": defer_create,
+                   "ROCEPOOL_DEFER_CREATE": defer_create, **agent_env,
                    "ROCEPOOL_IO_THREADS": str(args.intercept_io_threads),
                    **({"ROCE_OFI_CLIENT_EPS": str(args.client_eps)} if args.client_eps > 0 else {}),
                    **{k: env[k] for k in ("ROCEPOOL_DIRTY_CAP_MIB", "ROCEPOOL_RPC_TIMEOUT_MS", "ROCEPOOL_SCACHE_SLOTS",
@@ -1789,6 +1824,19 @@ def main() -> int:
                               "ost_tier": args.ost_tier, "ost_ram_cache_mib": ram_mib},
                       servers=servers, snapshots=[{"phase": p, **s} for p, s in snaps],
                       profiles=profiler.finish())
+        if args.agent == "on":
+            ags = []
+            for node in cluster.nodes:
+                r = cluster.run(node.index, ["cat", AGENT_DIR + "/stats.json"], env, net=False,
+                                capture_output=True, text=True)
+                try:
+                    ags.append(json.loads(r.stdout))
+                except ValueError:
+                    ags.append(None)
+            report["agent_stats"] = ags
+            print("== agents: " + ", ".join(f"node {i}: {a['requests']} requests in {a['batches']} batches "
+                                            f"(avg {a['avg_batch']}, max {a['max_batch']}, failed {a['failed']})"
+                                            for i, a in enumerate(ags) if a), flush=True)
         from tools import io500_model
         if args.project == "auto":
             prof = auto_profile(facts, n, args) if facts else io500_model.load_profile("10x32c-100g")

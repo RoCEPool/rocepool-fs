@@ -87,6 +87,8 @@ class MDTServer:
     def _handle_request(self, frame: Frame) -> Frame:
         if frame.op != Op.MDT:
             return _err(frame, "UNSUPPORTED_OP", str(frame.op))
+        if frame.value[:1] == bytes([mdt_wire.OP_BATCH]):
+            return self._handle_batch(frame)
         try:
             req = mdt_wire.decode_request(frame.key, frame.value)
             result = self.apply(req)
@@ -103,6 +105,21 @@ class MDTServer:
             return _err(frame, exc.code, str(exc))
         except Exception as exc:  # noqa: BLE001 -- never let one bad request kill the server thread
             return _err(frame, "MDT_INTERNAL", repr(exc))
+
+    def _handle_batch(self, frame: Frame) -> Frame:
+        """batch (op 16, fs/mdt_wire.py): each request handled as if alone"""
+        try:
+            subs = mdt_wire.decode_batch(frame.value)
+        except ValueError as exc:
+            return _err(frame, "BAD_REQUEST", str(exc))
+        res = []
+        for path, val in subs:
+            sf = Frame(op=Op.MDT, request_id=frame.request_id, key=path, value=val)
+            r = (self._handle_request(sf) if val[0] in mdt_wire.BATCH_OPS
+                 else _err(sf, "UNSUPPORTED_OP", f"op {val[0]} in a batch"))
+            res.append((r.op == Op.MDT_OK, r.value))
+        return Frame(op=Op.MDT_OK, request_id=frame.request_id, key=frame.key,
+                     value=mdt_wire.encode_batch_reply(res))
 
     def apply(self, req: dict):
         """The whole metadata state machine, callable directly (tests) or via
@@ -291,6 +308,23 @@ class MDTClient:
                      inline_ok: bool = True) -> dict:
         return self._call(self.shard.mdt_for(path), {"op": "create_write", "path": path, "offset": offset,
                                                      "data": data, "layout": layout, "inline_ok": inline_ok})
+
+    def batch(self, mdt: str, reqs: list[dict]) -> list:
+        """one batch (op 16) to one MDT: an entry or an MDTError per request"""
+        self.rpcs += 1
+        val = mdt_wire.encode_batch([(r["path"], mdt_wire.encode_request(r)) for r in reqs])
+        resp = self.transport.send_request(mdt, Frame(op=Op.MDT, request_id=next(_ids), key="", value=val))
+        if resp.op == Op.ERROR:
+            code, _, msg = resp.value.decode().partition("\x00")
+            raise MDTError(code, msg)
+        out = []
+        for ok, b in mdt_wire.decode_batch_reply(resp.value):
+            if ok:
+                out.append(mdt_wire.decode_entry(b)[0])
+            else:
+                code, _, msg = b.decode().partition("\x00")
+                out.append(MDTError(code, msg))
+        return out
 
     def write_inline(self, path: str, offset: int, data: bytes) -> dict:
         return self._call(self.shard.mdt_for(path), {"op": "write_inline", "path": path, "offset": offset,

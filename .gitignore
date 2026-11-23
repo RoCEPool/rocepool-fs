@@ -7,8 +7,10 @@
 __pycache__/
 *.pyc
 roce/native/rocepool-fuse
+roce/native/rocepool-agent
 roce/native/rocepool-kv-bench
 roce/native/softverbs/rocepool-fuse
+roce/native/softverbs/rocepool-agent
 roce/native/softverbs/rocepool-kv-bench
 roce/native/rocepool-kvcache-bench
 roce/native/softverbs/rocepool-kvcache-bench

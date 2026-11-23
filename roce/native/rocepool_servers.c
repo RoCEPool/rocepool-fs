@@ -1708,7 +1708,7 @@ typedef struct {
      * stripes per directory, hold time per request / MD_BUCKETS bounds the
      * MDT's throughput on one directory */
     atomic_ullong lock_wait_ns, lock_hold_ns;
-    atomic_ullong by_op[16];
+    atomic_ullong by_op[32];
     /* readdir: entries copied out of the buckets (snapshot builds) and
      * snapshots built; a listing of N entries costs ~N, not N x pages */
     atomic_ullong rd_copied, rd_snaps;
@@ -2104,6 +2104,77 @@ static size_t rd_snap_seek(const rd_snap *s, const uint8_t *cur, size_t clen) {
 /* a snapshot older than this is rebuilt rather than served to a later page */
 #define RD_SNAP_MAX_AGE_NS (60ull * 1000000000ull)
 
+static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len);
+
+/* batch (op 16): u32 LE count, then count x (u32 LE key length, u32 LE value
+ * length, key, value) -- create_write (15) and write_inline (7) requests of
+ * several clients, sent together by a node's agent (rocepool_agent.c). Each
+ * is handled, locked and logged as if it came alone (the log holds the
+ * requests, never the batch: a replay sees them one by one); the reply
+ * leaves once the last is durable. Reply: per request u8 status (0 OK, 1
+ * error), u32 LE length, then the entry or "CODE\0message". */
+#define MDT_BATCH_MAX 1024
+#define BATCH_NOREPLY "MDT_INTERNAL\0no reply"
+static uint8_t *mdt_batch(mdt_store *m, const frame_t *f, size_t *out_len) {
+    if (f->val_len < 5) return frame_error(f, "BAD_REQUEST", "batch: short", out_len);
+    uint32_t cnt = rd_u32le(f->val + 1);
+    if (cnt > MDT_BATCH_MAX) return frame_error(f, "BAD_REQUEST", "batch: too many requests", out_len);
+    /* check the whole frame before handling any of it */
+    size_t p = 5;
+    for (uint32_t i = 0; i < cnt; i++) {
+        if (f->val_len - p < 8) return frame_error(f, "BAD_REQUEST", "batch: truncated", out_len);
+        size_t kl = rd_u32le(f->val + p), vl = rd_u32le(f->val + p + 4);
+        if (kl > f->val_len - p - 8 || vl > f->val_len - p - 8 - kl || vl < 1)
+            return frame_error(f, "BAD_REQUEST", "batch: truncated", out_len);
+        p += 8 + kl + vl;
+    }
+    if (p != f->val_len) return frame_error(f, "BAD_REQUEST", "batch: trailing bytes", out_len);
+    atomic_fetch_add(&m->by_op[16], 1);
+    uint8_t **subs = calloc(cnt ? cnt : 1, sizeof(*subs));
+    size_t *lens = calloc(cnt ? cnt : 1, sizeof(*lens));
+    if (!subs || !lens) { free(subs); free(lens); return frame_error(f, "MDT_INTERNAL", "out of memory", out_len); }
+    size_t total = 0;
+    p = 5;
+    for (uint32_t i = 0; i < cnt; i++) {
+        size_t kl = rd_u32le(f->val + p), vl = rd_u32le(f->val + p + 4);
+        frame_t sf = {.op = OP_MDT, .flags = 0, .req_id = f->req_id, .key = (const char *)f->val + p + 8,
+                      .key_len = (uint32_t)kl, .val = f->val + p + 8 + kl, .val_len = (uint32_t)vl};
+        p += 8 + kl + vl;
+        uint8_t sop = sf.val[0];
+        if (sop != 15 && sop != 7) {
+            char msg[32];
+            snprintf(msg, sizeof(msg), "op %u in a batch", sop);
+            subs[i] = frame_error(&sf, "UNSUPPORTED_OP", msg, &lens[i]);
+        } else {
+            subs[i] = mdt_handle(m, &sf, &lens[i]);
+        }
+        total += 5 + (subs[i] ? rd_u32le(subs[i] + 20) : sizeof(BATCH_NOREPLY) - 1);
+    }
+    uint8_t *out = NULL;
+    uint8_t *v = frame_alloc(OP_MDT_OK, f, total, &out, out_len);
+    if (v) {
+        for (uint32_t i = 0; i < cnt; i++) {
+            if (!subs[i]) {  /* no reply could be built: the client hears it failed */
+                v[0] = 1;
+                wr_u32le(v + 1, sizeof(BATCH_NOREPLY) - 1);
+                memcpy(v + 5, BATCH_NOREPLY, sizeof(BATCH_NOREPLY) - 1);
+                v += 5 + sizeof(BATCH_NOREPLY) - 1;
+                continue;
+            }
+            uint32_t kl = rd_u32le(subs[i] + 16), vl = rd_u32le(subs[i] + 20);
+            v[0] = subs[i][4] == OP_MDT_OK ? 0 : 1;
+            wr_u32le(v + 1, vl);
+            memcpy(v + 5, subs[i] + HDR + kl, vl);
+            v += 5 + vl;
+        }
+    }
+    for (uint32_t i = 0; i < cnt; i++) roce_reply_free(subs[i]);
+    free(subs);
+    free(lens);
+    if (!out) return frame_error(f, "MDT_INTERNAL", "out of memory", out_len);
+    return out;
+}
+
 static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
     if (f->op != OP_MDT) {
         char msg[48];
@@ -2111,6 +2182,7 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
         return frame_error(f, "UNSUPPORTED_OP", msg, out_len);
     }
     if (f->val_len < 1) return frame_error(f, "MDT_INTERNAL", "empty request", out_len);
+    if (f->val[0] == 16) return mdt_batch(m, f, out_len);
     atomic_fetch_add(&m->ops, 1);
     char *path = malloc(f->key_len + 1);
     if (!path) return frame_error(f, "MDT_INTERNAL", "out of memory", out_len);
@@ -2124,7 +2196,7 @@ static uint8_t *mdt_handle(mdt_store *m, const frame_t *f, size_t *out_len) {
     uint8_t op = f->val[0];
     uint8_t *out = NULL;
 
-    atomic_fetch_add(&m->by_op[op & 15], 1);
+    atomic_fetch_add(&m->by_op[op & 31], 1);
     /* entry ops lock the name's bucket in the parent directory; readdir /
      * child_count (5, 6) walk the directory's buckets one at a time */
     md_dir *pd = NULL;
@@ -2814,7 +2886,7 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
                         (unsigned long long)atomic_load(&n->mdt->rd_copied),
                         (unsigned long long)atomic_load(&n->mdt->rd_snaps));
         int first = 1;
-        for (int i = 0; i < 16 && !rc; i++) {
+        for (int i = 0; i < 32 && !rc; i++) {
             unsigned long long c = atomic_load(&n->mdt->by_op[i]);
             if (c) { rc = buf_printf(&b, "%s\"%d\": %llu", first ? "" : ", ", i, c); first = 0; }
         }

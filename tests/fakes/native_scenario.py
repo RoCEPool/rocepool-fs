@@ -201,6 +201,34 @@ def mdt_script(cli):
     rec("cw-existing-striped", lambda: cli.create_write("d/s", 0, b"q", layout=lay))
     rec("cw-dir", lambda: cli.create_write("d", 0, b"q", layout=lay))
     rec("cw-in-readdir", lambda: [e["name"] for e in cli.readdir("d") if e["name"].startswith("cw")])
+    # batch (op 16): several requests, each as if alone, one reply each
+    def batch(reqs):
+        res = cli.batch(cli.shard.mdt_for("d/b0"), reqs)
+        return [r.code if isinstance(r, MDTError) else {k: v for k, v in r.items() if k not in ("mtime", "ctime")}
+                for r in res]
+
+    def cw(path, off, data, **kw):
+        return {"op": "create_write", "path": path, "offset": off, "data": data, "layout": kw.get("layout", lay),
+                "inline_ok": kw.get("inline_ok", True)}
+    rec("batch", lambda: batch([cw("d/b0", 0, b"one"), cw("d/b1", 0, b"two"), cw("d/b0", 3, b"+"),
+                                {"op": "write_inline", "path": "d/b1", "offset": 1, "data": b"W"},
+                                cw("d/b2", 0, b"x" * 40000), cw("d", 0, b"q"),
+                                {"op": "write_inline", "path": "d/nope", "offset": 0, "data": b"z"},
+                                {"op": "lookup", "path": "d/b0"}]))
+    rec("batch-read-0", lambda: strip(cli.read_inline("d/b0", 0, 100)))
+    rec("batch-read-1", lambda: strip(cli.read_inline("d/b1", 0, 100)))
+    rec("batch-not-created", lambda: cli.lookup("d/b2"))
+    rec("batch-empty", lambda: batch([]))
+
+    def raw(val):
+        r = cli.transport.send_request(cli.shard.mdt_for("d/b0"),
+                                       Frame(op=Op.MDT, request_id=7, key="", value=val))
+        return [int(r.op), r.value.split(b"\x00")[0].decode() if r.op == Op.ERROR else r.value.hex()]
+    rec("batch-truncated", lambda: raw(bytes([16, 1, 0, 0, 0, 5, 0, 0, 0])))
+    rec("batch-trailing", lambda: raw(bytes([16, 0, 0, 0, 0, 9])))
+    rec("batch-too-many", lambda: raw(bytes([16]) + (5000).to_bytes(4, "little")))
+    rec("batch-short", lambda: raw(bytes([16, 0])))
+    rec("batch-truncated-created-nothing", lambda: cli.lookup("d/b9"))
     return out
 
 
