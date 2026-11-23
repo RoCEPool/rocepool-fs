@@ -210,7 +210,14 @@ class Run:
                 # hpc6id.32xlarge has 2 cards and reaches 200 Gb/s only with
                 # an interface on each (one card: up to 170 Gb/s)
                 "network_cards": t.get("NetworkInfo", {}).get("MaximumNetworkCards", 1),
-                "efa_max": (t.get("NetworkInfo", {}).get("EfaInfo") or {}).get("MaximumEfaInterfaces", 1)}
+                "efa_max": (t.get("NetworkInfo", {}).get("EfaInfo") or {}).get("MaximumEfaInterfaces", 1),
+                # what the survey reports (free: one describe call): the GPUs, and the network's
+                # sustained (baseline) and burst (peak) rate -- an "Up to" type falls to the baseline
+                "gpus": [{"name": f"{g.get('Manufacturer', '')} {g.get('Name', '')}".strip(), "count": g.get("Count"),
+                          "memory_mib": (g.get("MemoryInfo") or {}).get("SizeInMiB")}
+                         for g in (t.get("GpuInfo") or {}).get("Gpus", [])],
+                "baseline_gbps": ((t.get("NetworkInfo", {}).get("NetworkCards") or [{}])[0]).get("BaselineBandwidthInGbps"),
+                "peak_gbps": ((t.get("NetworkInfo", {}).get("NetworkCards") or [{}])[0]).get("PeakBandwidthInGbps")}
 
     def check_quota(self, itype: str, facts: dict, nodes: int) -> None:
         """The account's vCPU quota for the type's family must cover the run
@@ -319,6 +326,109 @@ class Run:
             if not any(k in str(e) for k in ("InsufficientInstanceCapacity", "Unsupported", "InsufficientCapacity")):
                 raise
             return None
+
+    # ---- 0: the free survey (--survey): queries and dry runs only, nothing created -----
+    def survey(self) -> int:
+        """Everything about the machines a run would get that AWS tells for free: per host group
+        the type's vCPUs, memory, GPUs and their memory, local NVMe, sustained and burst network
+        rate, EFA; the AMI it would boot (name, date, description: what is installed); the zones
+        that offer every group; the vCPU quotas; what the setup script would install there
+        (EFA software, libfabric, Soft-RoCE); and a dry run of each group's run-instances
+        (permissions and parameters checked by AWS, no instance). --need-* turn facts into
+        pass/fail. Writes aws_runs/<run-id>/survey.json; exit 1 on any failed need."""
+        a = self.args
+        itype = a.type or DEFAULT_TYPE[a.mode]
+        out = {"mode": a.mode, "region": self.aws.region, "groups": {}, "problems": []}
+        groups = [("storage", itype, a.nodes)] + ([("gpu", a.gpu_type, a.gpu_nodes)] if a.gpu_nodes else [])
+        if a.gpu_nodes and a.mode not in ("efa", "rxe"):
+            out["problems"].append("--gpu-nodes needs --mode efa or --mode rxe")
+        zones = None
+        vpc = (self.aws("ec2", "describe-vpcs", "--filters", "Name=isDefault,Values=true").get("Vpcs") or [{}])[0].get("VpcId")
+        subnets = {x["AvailabilityZone"]: x["SubnetId"] for x in self.aws(
+            "ec2", "describe-subnets", "--filters", f"Name=vpc-id,Values={vpc}", "Name=default-for-az,Values=true"
+        ).get("Subnets", [])} if vpc else {}
+        sg = ((self.aws("ec2", "describe-security-groups", "--filters", f"Name=vpc-id,Values={vpc}",
+                        "Name=group-name,Values=default", check=False).get("SecurityGroups") or [{}])[0].get("GroupId")
+              if vpc else None)
+        gpu_efa = a.mode == "efa"
+        for role, t, count in groups:
+            f = self.instance_facts(t)
+            g = {"type": t, "count": count, **{k: f.get(k) for k in ("vcpus", "arch", "efa", "nvme", "network",
+                                                                    "baseline_gbps", "peak_gbps", "gpus")},
+                 "memory_gib": round((f.get("mem_mib") or 0) / 1024, 1)}
+            # the AMI this group would boot
+            try:
+                if role == "gpu" or a.mode == "gpu":
+                    ami, _ = self.dlami(f)
+                else:
+                    ami = self.aws("ssm", "get-parameters", "--names", UBUNTU_SSM.format(arch=f["arch"]))["Parameters"][0]["Value"]
+                im = (self.aws("ec2", "describe-images", "--image-ids", ami).get("Images") or [{}])[0]
+                g["ami"] = {"id": ami, "name": im.get("Name"), "created": im.get("CreationDate"),
+                            "description": im.get("Description")}
+            except (RuntimeError, KeyError, IndexError) as exc:
+                out["problems"].append(f"{role}: no AMI: {exc}")
+            # what the setup script would put there
+            efa_here = (a.mode == "efa") if role == "storage" else gpu_efa
+            libfabric = efa_here or (a.mode == "rxe" and bool(a.gpu_nodes))
+            g["setup"] = {"efa_software": efa_here, "rxe": role == "storage" and a.mode == "rxe",
+                          "libfabric": libfabric,
+                          "libfabric_from": ("EFA installer" if efa_here else
+                                             "EFA installer, user space only (--skip-kmod)" if libfabric else None)}
+            if efa_here and not f["efa"]:
+                out["problems"].append(f"{role}: {t} has no EFA, --mode efa needs it")
+            # quota (an exception names the shortfall)
+            try:
+                self.check_quota(t, f, count)
+                g["quota"] = "ok"
+            except RuntimeError as exc:
+                g["quota"] = str(exc)
+                out["problems"].append(f"{role}: {exc}")
+            offers = {o["Location"] for o in self.aws("ec2", "describe-instance-type-offerings", "--location-type",
+                                                      "availability-zone", "--filters",
+                                                      f"Name=instance-type,Values={t}").get("InstanceTypeOfferings", [])}
+            g["zones"] = sorted(offers)
+            zones = offers if zones is None else zones & offers
+            for need, have, what in ((a.need_mem_gib if role == "storage" else a.need_gpu_host_mem_gib, g["memory_gib"],
+                                      "memory GiB"),
+                                     (a.need_gpu_mem_gib if role == "gpu" else 0,
+                                      round(max([(x.get("memory_mib") or 0) / 1024 for x in g["gpus"]] or [0]), 1),
+                                      "GPU memory GiB"),
+                                     (a.need_gbps, g["baseline_gbps"] or 0, "sustained network Gbit/s")):
+                if need and have < need:
+                    out["problems"].append(f"{role}: {t} has {have} {what}, needs {need}")
+            if a.need_libfabric and not libfabric:
+                out["problems"].append(f"{role}: the setup would not install libfabric (the pool needs it)")
+            out["groups"][role] = g
+        cand = sorted(z for z in (zones or set()) if z in subnets)
+        out["zones_for_all"] = cand
+        if not cand:
+            out["problems"].append("no zone (with a default subnet) offers every group")
+        # dry runs: AWS checks permissions and parameters, creates nothing
+        for role, t, count in groups:
+            g = out["groups"].get(role) or {}
+            if not cand or not g.get("ami"):
+                continue
+            nics = network_interfaces("efa" if (g["setup"]["efa_software"] and a.mode == "efa") else "plain",
+                                      {"network_cards": 1, "efa_max": 1}, subnets[cand[0]], sg or "")
+            r = self.aws("ec2", "run-instances", "--dry-run", "--image-id", g["ami"]["id"], "--instance-type", t,
+                         "--count", str(count), "--network-interfaces", json.dumps(nics),
+                         "--placement", json.dumps({"AvailabilityZone": cand[0]}), check=False, parse=False)
+            text = (r.stderr or "") + (r.stdout or "")
+            g["dry_run"] = "ok" if "DryRunOperation" in text else text.strip()[-300:]
+            if g["dry_run"] != "ok":
+                out["problems"].append(f"{role}: dry run of run-instances: {g['dry_run']}")
+        out["status"] = "FAIL" if out["problems"] else "PASS"
+        with open(os.path.join(self.dir, "survey.json"), "w") as fh:
+            json.dump(out, fh, indent=1)
+        for role, g in out["groups"].items():
+            gp = ", ".join(f"{x['count']} x {x['name']} {round((x['memory_mib'] or 0) / 1024, 1)} GiB" for x in g["gpus"])
+            log(f"survey {role}: {g['count']} x {g['type']}: {g['vcpus']} vCPU, {g['memory_gib']} GiB, "
+                f"GPU {gp or 'none'}, NVMe {g['nvme']} GB, network {g['network']} (sustained {g['baseline_gbps']}, "
+                f"burst {g['peak_gbps']} Gbit/s), EFA {'yes' if g['efa'] else 'no'}; AMI {(g.get('ami') or {}).get('name')}; "
+                f"setup: {json.dumps(g['setup'])}; quota {g.get('quota')}; dry run {g.get('dry_run')}")
+        log(f"survey zones for every group: {', '.join(cand) or 'none'}")
+        log(f"survey {out['status']}" + "".join(f"\n  - {x}" for x in out["problems"]))
+        return 0 if out["status"] == "PASS" else 1
 
     def create(self) -> None:
         a, st, itype = self.args, self.state, self.args.type or DEFAULT_TYPE[self.args.mode]
@@ -881,6 +991,14 @@ def main() -> int:
     r.add_argument("--disk-mbps", type=int, default=1000, help="gp3 throughput, MB/s (125..1000)")
     r.add_argument("--disk-iops", type=int, default=16000, help="gp3 IOPS (3000..16000)")
     r.add_argument("--az", help="availability zone (default: the first that offers the type)")
+    r.add_argument("--survey", action="store_true",
+                   help="free: report what these hosts would be (types, AMIs, zones, quotas, setup, dry runs); "
+                        "create nothing")
+    r.add_argument("--need-mem-gib", type=float, default=0, help="--survey: memory each storage host needs")
+    r.add_argument("--need-gpu-mem-gib", type=float, default=0, help="--survey: GPU memory each GPU host needs")
+    r.add_argument("--need-gpu-host-mem-gib", type=float, default=0, help="--survey: memory each GPU host needs")
+    r.add_argument("--need-gbps", type=float, default=0, help="--survey: sustained network rate every host needs")
+    r.add_argument("--need-libfabric", action="store_true", help="--survey: the setup must install libfabric")
     r.add_argument("--ssh-cidr", help="allow SSH from this CIDR (default: this machine's public IP /32)")
     d = sub.add_parser("down", help="release everything a run created")
     d.add_argument("--run-id", required=True)
@@ -917,6 +1035,9 @@ def main() -> int:
         return 0
 
     run = Run(args)
+    if args.survey:
+        run.preflight()
+        return run.survey()
     rc = 1
     try:
         run.preflight()
