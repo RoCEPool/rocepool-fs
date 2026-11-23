@@ -339,22 +339,27 @@ class Run:
             st["ami"] = ami["Parameters"][0]["Value"]
         gpu = None
         if a.gpu_nodes:
-            # GPU hosts joined to the EFA cluster (the storage hosts): same AZ,
-            # same placement group, the Deep Learning AMI, an EFA interface
-            if a.mode != "efa":
-                raise RuntimeError("--gpu-nodes joins GPU hosts to an EFA cluster: use --mode efa")
+            # GPU hosts joined to the storage hosts' cluster: same AZ, same
+            # placement group, the Deep Learning AMI. --mode efa: an EFA interface
+            # on each (RDMA to the pool). --mode rxe: no EFA needed anywhere -- the
+            # pool runs over TCP (libfabric's tcp provider), so small, cheap types
+            # without EFA (r6in.2xlarge + g6e.2xlarge) can hold a two-host test
+            if a.mode not in ("efa", "rxe"):
+                raise RuntimeError("--gpu-nodes joins GPU hosts to a storage cluster: use --mode efa "
+                                   "(EFA everywhere) or --mode rxe (TCP, no EFA needed)")
             if not a.gpu_type:
                 raise RuntimeError("--gpu-nodes needs --gpu-type")
             gfacts = self.instance_facts(a.gpu_type)
             log(f"{a.gpu_nodes} x {a.gpu_type} (GPU hosts): {gfacts['vcpus']} vCPU, "
                 f"{gfacts['mem_mib'] // 1024 if gfacts['mem_mib'] else '?'} GiB, {gfacts['network']}, "
                 f"NVMe {gfacts['nvme']} GB, EFA {'yes' if gfacts['efa'] else 'no'}")
-            if not gfacts["efa"]:
+            if a.mode == "efa" and not gfacts["efa"]:
                 raise RuntimeError(f"{a.gpu_type} has no EFA: GPU hosts of an EFA cluster need one "
                                    "(g6e.8xlarge and larger, p4d, p5, ...)")
             self.check_quota(a.gpu_type, gfacts, a.gpu_nodes)
             gami, gname = self.dlami(gfacts)
-            gpu = {"type": a.gpu_type, "nodes": a.gpu_nodes, "facts": gfacts, "ami": gami, "ami_name": gname}
+            gpu = {"type": a.gpu_type, "nodes": a.gpu_nodes, "facts": gfacts, "ami": gami, "ami_name": gname,
+                   "efa": a.mode == "efa"}
             st["gpu"] = gpu
         offers = self.aws("ec2", "describe-instance-type-offerings", "--location-type", "availability-zone",
                           "--filters", f"Name=instance-type,Values={itype}")
@@ -566,8 +571,9 @@ class Run:
         jobs = [(h, script, st["mode"] + (", EFA" if st.get("efa") and st["mode"] == "gpu" else "")) for h in st["hosts"]]
         if st.get("gpu_hosts"):
             g = st["gpu"]
-            gscript = self.setup_script("gpu", g["facts"], efa=True)
-            jobs += [(h, gscript, f"gpu {g['type']}, EFA") for h in st["gpu_hosts"]]
+            g_efa = g.get("efa", True)
+            gscript = self.setup_script("gpu", g["facts"], efa=g_efa)
+            jobs += [(h, gscript, f"gpu {g['type']}" + (", EFA" if g_efa else ", TCP")) for h in st["gpu_hosts"]]
 
         def one(job):
             h, text, what = job
@@ -829,10 +835,11 @@ def main() -> int:
                    help="do not echo the --command's output here (a private bundle's run: it comes back encrypted)")
     r.add_argument("--fetch", action="append", default=[],
                    help="also bring back this file from the tree on the head (relative path; repeatable)")
-    r.add_argument("--gpu-type", help="with --gpu-nodes: GPU hosts joined to the EFA cluster (e.g. g6e.12xlarge)")
+    r.add_argument("--gpu-type", help="with --gpu-nodes: GPU hosts joined to the storage cluster "
+                                      "(e.g. g6e.12xlarge with --mode efa, g6e.2xlarge with --mode rxe)")
     r.add_argument("--gpu-nodes", type=int, default=0,
                    help="that many GPU hosts in the same AZ and placement group as the --nodes storage hosts "
-                        "(--mode efa); the command sees their addresses in GPU_IPS")
+                        "(--mode efa, or --mode rxe without EFA); the command sees their addresses in GPU_IPS")
     r.add_argument("--max-hours", type=float, default=6.0, help="instances power off (terminate) after this")
     r.add_argument("--disk-gib", type=int, default=200)
     # the OSTs' capacity tier lives on the system disk when the type has no

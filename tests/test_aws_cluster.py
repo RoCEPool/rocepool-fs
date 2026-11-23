@@ -474,11 +474,37 @@ class AwsClusterTests(unittest.TestCase):
         launched = {c[c.index("--instance-ids") + 1] for c in self.aws_calls("ec2", "terminate-instances")}
         self.assertTrue({"i-0000", "i-2000"} <= launched, "both GPU hosts it launched are released")
 
-    def test_gpu_hosts_need_efa_mode_and_their_own_quota_before_anything_is_created(self):
-        r = self.run_tool("--mode", "rxe", "--nodes", "2", "--gpu-type", "g6e.12xlarge", "--gpu-nodes", "1",
+    def test_gpu_hosts_beside_tcp_storage_hosts_need_no_efa(self):
+        """--mode rxe: a memory host and a GPU host of small types without EFA (r6in.2xlarge +
+        g6e.2xlarge); the pool runs over TCP, nothing asks for or sets up EFA"""
+        r = self.run_tool("--mode", "rxe", "--nodes", "1", "--type", "r6in.2xlarge", "--gpu-type", "g6e.2xlarge",
+                          "--gpu-nodes", "1", "--command", "true",
+                          env_extra={"FAKE_AWS_G_QUOTA": "64", "FAKE_AWS_VCPUS": "g6e.2xlarge=8,r6in.2xlarge=8",
+                                     "FAKE_AWS_NO_EFA": "g6e.2xlarge,r6in.2xlarge"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        gpu, storage = self.launches()
+        self.assertEqual((gpu["type"], storage["type"]), ("g6e.2xlarge", "r6in.2xlarge"))
+        self.assertEqual(gpu["placement"]["AvailabilityZone"], storage["placement"]["AvailabilityZone"])
+        self.assertTrue(all("InterfaceType" not in n for x in (gpu, storage) for n in x["nics"]), "no EFA interface")
+        setups = [c[-1] for c in self.calls(self.ssh_log) if "ROCEPOOL_SETUP" in c[-1]]
+        g = [x for x in setups if "nvidia-smi -L" in x]
+        self.assertEqual(len(g), 1)
+        self.assertNotIn("fi_info -p efa", g[0], "no EFA on the GPU host")
+        self.assertTrue(any("rdma_rxe" in x for x in setups if "nvidia-smi" not in x), "the storage host as in rxe mode")
+        self.assertIn("(gpu g6e.2xlarge, TCP)", r.stdout)
+        cmd = [c[-1] for c in self.calls(self.ssh_log) if "GPU_IPS=" in c[-1]]
+        self.assertTrue(cmd and "GPU_IPS=172.31.0.1" in cmd[0], cmd)
+
+    def test_gpu_hosts_need_a_storage_mode_efa_where_asked_and_their_own_quota_before_anything_is_created(self):
+        r = self.run_tool("--mode", "gpu", "--nodes", "1", "--type", "c6in.16xlarge", "--gpu-type", "g6e.12xlarge",
+                          "--gpu-nodes", "1",
                           env_extra=self.GPU_ENV)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("use --mode efa", r.stdout)
+        self.assertEqual(self.aws_calls("ec2", "run-instances"), [])
+        r = self.run_tool(*self.GPU, env_extra={**self.GPU_ENV, "FAKE_AWS_NO_EFA": "g6e.12xlarge"}, run_id="rp-test3")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("g6e.12xlarge has no EFA", r.stdout, "--mode efa still needs EFA on the GPU hosts")
         self.assertEqual(self.aws_calls("ec2", "run-instances"), [])
         r = self.run_tool(*self.GPU, env_extra={**self.GPU_ENV, "FAKE_AWS_G_QUOTA": "32"}, run_id="rp-test2")
         self.assertNotEqual(r.returncode, 0)
