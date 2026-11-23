@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A fake `aws` CLI for tests/test_aws_cluster.py: canned JSON per call,
 every call appended to $FAKE_AWS_LOG (one JSON argv per line).
-$FAKE_AWS_NO_EFA=1: the instance type has no EFA.
+$FAKE_AWS_NO_EFA=1: the instance type has no EFA (or a comma-separated list of the types without one).
 $FAKE_AWS_NO_CAPACITY=az[,az...]: run-instances fails there with InsufficientInstanceCapacity
   (an entry type@az: only for that instance type).
 $FAKE_AWS_VCPUS=type=n[,type=n]: vCPUs of those types (default 128).
@@ -44,7 +44,8 @@ elif cmd == ("ec2", "describe-instance-types"):
     _t = argv[argv.index("--instance-types") + 1] if "--instance-types" in argv else ""
     _v = dict(x.split("=") for x in os.environ.get("FAKE_AWS_VCPUS", "").split(",") if "=" in x)
     out({"InstanceTypes": [{"ProcessorInfo": {"SupportedArchitectures": ["x86_64"]},
-                            "NetworkInfo": {"EfaSupported": os.environ.get("FAKE_AWS_NO_EFA") != "1",
+                            "NetworkInfo": {"EfaSupported": not (os.environ.get("FAKE_AWS_NO_EFA") == "1" or
+                                                                _t in os.environ.get("FAKE_AWS_NO_EFA", "").split(",")),
                                             "NetworkPerformance": "200 Gigabit",
                                             "MaximumNetworkCards": int(os.environ.get("FAKE_AWS_CARDS", "1")),
                                             "EfaInfo": {"MaximumEfaInterfaces": int(os.environ.get("FAKE_AWS_CARDS", "1"))}},
