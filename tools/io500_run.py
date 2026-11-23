@@ -967,6 +967,77 @@ def _readline_until(p: subprocess.Popen, prefix: str, timeout: float) -> str:
     return "".join(seen) + ("" if p.poll() is None else f"[exited {p.returncode}]")
 
 
+# ---------------------------------------------------------------- phase profiles
+# Where a phase's CPU goes on real hosts (EFA's provider, the wait loop, the
+# client, the servers), which no local emulator reproduces: perf, system-wide
+# on node 0, for a window inside the phase. On by default for mdtest-hard-write
+# on real hosts outside --valid runs -- roce_onsite's short run, before the
+# scored one, which perf would disturb.
+PERF_INSTALL = ("command -v perf >/dev/null 2>&1 || (apt-get install -y -q linux-tools-$(uname -r) linux-tools-common "
+                "|| dnf -y -q install perf || yum -y -q install perf) >/dev/null 2>&1; command -v perf >/dev/null 2>&1 "
+                "&& echo PERF_OK || echo PERF_MISSING")
+
+
+def profile_phases(arg: str, real: bool, valid: bool) -> list[str]:
+    if arg == "auto":
+        return ["mdtest-hard-write"] if real and not valid else []
+    return [p for p in (x.strip() for x in arg.split(",")) if p and p != "none"]
+
+
+def parse_perf_report(text: str) -> dict:
+    """`perf report --sort comm,dso,sym -g none --stdio` -> the top symbols,
+    and the shares by process and by library"""
+    rows = []
+    for line in text.splitlines():
+        m = re.match(r"\s*([0-9.]+)%\s+(\S+)\s+(\S+)\s+\[[^\]]*\]\s+(.+?)\s*$", line)
+        if m:
+            rows.append({"pct": float(m.group(1)), "comm": m.group(2), "dso": m.group(3), "sym": m.group(4)})
+    by = lambda k: dict(sorted(((v, round(sum(r["pct"] for r in rows if r[k] == v), 2))
+                                for v in {r[k] for r in rows}), key=lambda kv: -kv[1])[:20])
+    return {"top": rows[:60], "by_comm": by("comm"), "by_dso": by("dso")}
+
+
+class PhaseProfiler:
+    def __init__(self, cluster, phases: list[str], work: str, stonewall: int):
+        self.cluster, self.phases, self.work = cluster, phases, work
+        self.delay = max(3, min(30, stonewall // 5))
+        self.dur = max(5, min(20, stonewall // 2))
+        self.threads, self.results = [], {}
+        self.ok = False
+        if phases:
+            r = cluster.run(0, ["bash", "-c", PERF_INSTALL], capture_output=True, text=True, timeout=600)
+            self.ok = "PERF_OK" in (r.stdout or "")
+            if not self.ok:
+                self.results = {p: {"error": "perf not available on node 0"} for p in phases}
+
+    def phase_started(self, ph: str) -> None:
+        if self.ok and ph in self.phases and ph not in self.results:
+            self.results[ph] = {"pending": True}
+            t = threading.Thread(target=self._record, args=(ph,), daemon=True)
+            t.start()
+            self.threads.append(t)
+
+    def _record(self, ph: str) -> None:
+        time.sleep(self.delay)
+        data = f"/tmp/rocepool_profile_{ph}.data"
+        script = (f"perf record -a -F 199 -o {data} -- sleep {self.dur} >/dev/null 2>&1; "
+                  f"perf report -i {data} --stdio --no-children -g none --sort comm,dso,sym --percent-limit 0.2 "
+                  f"2>/dev/null | grep -v '^#' | head -300; rm -f {data}")
+        try:
+            r = self.cluster.run(0, ["bash", "-c", script], capture_output=True, text=True, timeout=self.dur + 600)
+            with open(os.path.join(self.work, f"profile_{ph}.txt"), "w") as f:
+                f.write(r.stdout or "")
+            self.results[ph] = dict(parse_perf_report(r.stdout or ""), node=0, window_s=self.dur,
+                                    starts_s_into_phase=self.delay)
+        except Exception as exc:  # noqa: BLE001 -- a profile never fails the run
+            self.results[ph] = {"error": repr(exc)}
+
+    def finish(self) -> dict:
+        for t in self.threads:
+            t.join(timeout=self.dur + 660)
+        return self.results
+
+
 def main() -> int:
     # SIGTERM (e.g. roce_onsite.py's timeout) -> SystemExit, so the finally
     # below still unmounts and stops everything on every host
@@ -1001,6 +1072,9 @@ def main() -> int:
     ap.add_argument("--md-easy-n", type=int, default=None, help="mdtest-easy files per rank (cap)")
     ap.add_argument("--md-hard-n", type=int, default=None, help="mdtest-hard files per rank (cap)")
     ap.add_argument("--valid", action="store_true", help="official procedure: 300 s stonewall, no pauses")
+    ap.add_argument("--profile", default="auto",
+                    help="phases to profile with perf on node 0 (comma list, or none). auto: mdtest-hard-write on "
+                         "real hosts, not in --valid runs")
     ap.add_argument("--phases", default=None,
                     help="comma-separated IO500 phases to run, the others skipped (run = FALSE): a targeted "
                          "measurement, e.g. ior-easy-write,ior-hard-write; never a valid score")
@@ -1559,6 +1633,7 @@ def main() -> int:
         else:
             print(f"== WARNING MPI node grouping: {nc['why']}", flush=True)
         snap = Snapshotter(cluster, servers)
+        profiler = PhaseProfiler(cluster, profile_phases(args.profile, cluster.real, args.valid), work, stonewall)
         snaps = [("start", snap.take())]
         out_path = os.path.join(work, "io500.out")
         t0 = time.monotonic()
@@ -1627,6 +1702,7 @@ def main() -> int:
                         ph = os.path.basename(m.group(1).strip()) if m else h.group(1)
                         started = True
                         snaps.append((ph, snap.take()))
+                        profiler.phase_started(ph)
                         print(f"   [{time.monotonic() - t0:7.1f}s] phase {ph}", flush=True)
                         if m:
                             try:
@@ -1711,7 +1787,8 @@ def main() -> int:
                               "client": mode, "intercept_io_threads": args.intercept_io_threads,
                               "client_eps": args.client_eps or None,
                               "ost_tier": args.ost_tier, "ost_ram_cache_mib": ram_mib},
-                      servers=servers, snapshots=[{"phase": p, **s} for p, s in snaps])
+                      servers=servers, snapshots=[{"phase": p, **s} for p, s in snaps],
+                      profiles=profiler.finish())
         from tools import io500_model
         if args.project == "auto":
             prof = auto_profile(facts, n, args) if facts else io500_model.load_profile("10x32c-100g")
