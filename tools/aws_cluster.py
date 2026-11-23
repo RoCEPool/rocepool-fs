@@ -504,7 +504,11 @@ class Run:
                 raise RuntimeError(f"{ip}: no SSH after 10 min: {(r.stdout + r.stderr)[-300:]}")
             time.sleep(self.args.poll)
 
-    def setup_script(self, mode: str | None = None, facts: dict | None = None, efa: bool = False) -> str:
+    def setup_script(self, mode: str | None = None, facts: dict | None = None, efa: bool = False,
+                     libfabric: bool = False) -> str:
+        """libfabric: the pool runs over libfabric's tcp provider on hosts without EFA
+        (GPU hosts beside rxe storage hosts): the EFA software's user-space part
+        (libfabric in /opt/amazon/efa, no kernel module) is installed where it is missing"""
         mode = mode or self.state["mode"]
         facts = self.state.get("facts") if facts is None else facts
         lines = [
@@ -578,18 +582,30 @@ class Run:
                 "sudo mkfs.xfs -f -q $dev && sudo mkdir -p /nvmedata && sudo mount -o noatime $dev /nvmedata; fi",
                 "if [ $n -gt 0 ]; then mountpoint -q /nvmedata && echo \"local NVMe: $n device(s) at /nvmedata\"; fi",
             ]
+        if libfabric:
+            lines += [
+                "if [ ! -e /opt/amazon/efa/lib/libfabric.so.1 ]; then "
+                "cd /tmp && curl -sSfO " + EFA_INSTALLER + " && tar xzf aws-efa-installer-latest.tar.gz && "
+                "cd aws-efa-installer && (sudo ./efa_installer.sh -y --skip-kmod >/tmp/efa_install.log 2>&1 || "
+                "(tail -40 /tmp/efa_install.log; exit 1)); fi",
+                "sudo ldconfig",
+                "ldconfig -p | grep -q 'libfabric.so.1 '",
+                "FI_PROVIDER=tcp /opt/amazon/efa/bin/fi_info -p tcp | grep -q 'provider: tcp'",
+            ]
         lines.append("echo SETUP_OK")
         return "\n".join(lines)
 
     def setup_hosts(self) -> None:
         st = self.state
-        script = self.setup_script(efa=bool(st.get("efa")) and st["mode"] == "gpu")
+        # GPU hosts without EFA beside rxe storage hosts: the pool between them is libfabric over tcp
+        tcp_pool = bool(st.get("gpu_hosts")) and not (st.get("gpu") or {}).get("efa", True)
+        script = self.setup_script(efa=bool(st.get("efa")) and st["mode"] == "gpu", libfabric=tcp_pool)
 
         jobs = [(h, script, st["mode"] + (", EFA" if st.get("efa") and st["mode"] == "gpu" else "")) for h in st["hosts"]]
         if st.get("gpu_hosts"):
             g = st["gpu"]
             g_efa = g.get("efa", True)
-            gscript = self.setup_script("gpu", g["facts"], efa=g_efa)
+            gscript = self.setup_script("gpu", g["facts"], efa=g_efa, libfabric=not g_efa)
             jobs += [(h, gscript, f"gpu {g['type']}" + (", EFA" if g_efa else ", TCP")) for h in st["gpu_hosts"]]
 
         def one(job):

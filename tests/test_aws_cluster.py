@@ -438,6 +438,7 @@ class AwsClusterTests(unittest.TestCase):
         self.assertIn("fi_info -p efa", g[0], "EFA checked on the GPU host")
         self.assertEqual(sum("efa_installer.sh -y >/tmp/efa_install.log 2>&1 || (tail" in x and "nvidia-smi" not in x
                              for x in setups), 2, "storage hosts set up as before")
+        self.assertFalse(any("--skip-kmod" in x for x in setups), "an EFA cluster installs EFA as before")
         cmd = [c[-1] for c in self.calls(self.ssh_log) if "GPU_IPS=" in c[-1]]
         self.assertTrue(cmd and "GPU_IPS=172.31.0.1" in cmd[0], cmd)
         self.assertIn("HEAD_IP=172.31.0.2 PEER_IPS=172.31.0.3 ", cmd[0], "head and peers are the storage hosts only")
@@ -492,6 +493,11 @@ class AwsClusterTests(unittest.TestCase):
         self.assertNotIn("fi_info -p efa", g[0], "no EFA on the GPU host")
         self.assertTrue(any("rdma_rxe" in x for x in setups if "nvidia-smi" not in x), "the storage host as in rxe mode")
         self.assertIn("(gpu g6e.2xlarge, TCP)", r.stdout)
+        # the pool between them is libfabric over tcp: its user-space part on both hosts (gt-43)
+        self.assertEqual(len(setups), 2)
+        for x in setups:
+            self.assertIn("efa_installer.sh -y --skip-kmod", x)
+            self.assertIn("fi_info -p tcp", x)
         cmd = [c[-1] for c in self.calls(self.ssh_log) if "GPU_IPS=" in c[-1]]
         self.assertTrue(cmd and "GPU_IPS=172.31.0.1" in cmd[0], cmd)
 
