@@ -511,5 +511,52 @@ class AwsClusterTests(unittest.TestCase):
         self.assertIn("vCPU quota for on-demand G and VT instances is 32, this run needs 48", r.stdout)
         self.assertEqual(self.aws_calls("ec2", "run-instances"), [])
 
+class AptRetryTests(unittest.TestCase):
+    """the setup script's apt helpers (aws_cluster.APT_FUNCS), run by bash against a fake
+    apt-get that fails while the sources still name the region's EC2 mirror (gt-42: 503s)"""
+
+    def run_script(self, fail_until_switch: bool):
+        sys.path.insert(0, os.path.join(ROOT, "tools"))
+        import aws_cluster
+        with tempfile.TemporaryDirectory() as td:
+            src = os.path.join(td, "ubuntu.sources")
+            with open(src, "w") as f:
+                f.write("Types: deb\nURIs: http://us-east-2.ec2.archive.ubuntu.com/ubuntu/\nSuites: noble\n")
+            bindir = os.path.join(td, "bin")
+            os.mkdir(bindir)
+            with open(os.path.join(bindir, "sudo"), "w") as f:
+                f.write('#!/bin/bash\nexec "$@"\n')
+            with open(os.path.join(bindir, "apt-get"), "w") as f:
+                f.write("#!/bin/bash\necho \"$*\" >> %s/calls\n" % td +
+                        ("grep -q ec2.archive %s && [[ \" $* \" == *' install '* ]] && exit 100\n" % src
+                         if fail_until_switch else "") + "exit 0\n")
+            for x in ("sudo", "apt-get"):
+                os.chmod(os.path.join(bindir, x), 0o755)
+            funcs = aws_cluster.APT_FUNCS.replace("/etc/apt/sources.list /etc/apt/sources.list.d/*.sources "
+                                                  "/etc/apt/sources.list.d/*.list", src)
+            script = "set -euo pipefail\n" + funcs + "\napt_update\napt_install gcc make\necho DONE\n"
+            r = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
+                               env=dict(os.environ, PATH=bindir + ":" + os.environ["PATH"]), timeout=120)
+            with open(os.path.join(td, "calls")) as f:
+                calls = f.read().splitlines()
+            with open(src) as f:
+                sources = f.read()
+        return r, calls, sources
+
+    def test_a_clean_install_does_not_touch_the_sources(self):
+        r, calls, sources = self.run_script(False)
+        self.assertIn("DONE", r.stdout, r.stderr)
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all("Acquire::Retries=5" in c for c in calls))
+        self.assertIn("ec2.archive.ubuntu.com", sources)
+
+    def test_a_failing_mirror_is_replaced_and_the_install_goes_again(self):
+        r, calls, sources = self.run_script(True)
+        self.assertIn("DONE", r.stdout, r.stderr)
+        self.assertIn("switching to archive.ubuntu.com", r.stderr)
+        self.assertIn("URIs: http://archive.ubuntu.com/ubuntu/", sources)
+        self.assertEqual(sum(" install " in f" {c} " for c in calls), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
