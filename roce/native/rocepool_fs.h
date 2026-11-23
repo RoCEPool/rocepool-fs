@@ -166,6 +166,9 @@ int fs_open_read(const char *path, attr_t *a, uint8_t **data, size_t *dlen);
 int fs_mkdir(const char *path, attr_t *a);
 int fs_create_file(const char *path, attr_t *a);
 int fs_create_file_excl(const char *path, int exclusive, attr_t *a);  /* -EEXIST when exclusive and present */
+int fs_create_deferred(const char *path, attr_t *a);  /* O_CREAT without O_EXCL/O_TRUNC/O_APPEND (ROCEPOOL_DEFER_CREATE) */
+int fs_create_pending(const char *path);              /* a pending create sent now (a close of an unwritten file) */
+void rpfs_defer_stats(unsigned long long *combined, unsigned long long *plain, unsigned long long *pending);
 int fs_rmdir(const char *path);
 int fs_remove_file(const char *path);
 int fs_truncate(const char *path, uint64_t size);

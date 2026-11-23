@@ -10,6 +10,7 @@ tests/test_native_servers.py runs one test suite against both.
 Request value:
   u8 op   1 lookup | 2 create | 3 set_size | 4 unlink | 5 readdir | 6 child_count
           7 write_inline | 8 read_inline | 9 freeze | 10 spill_commit | 14 spill_set_size
+          15 create_write
   create:       u8 is_dir, u8 exclusive, u8 flags (bit0 has_layout, bit1 inline_ok),
                 [u32 stripe_count, u64 stripe_size, u32 stripe_offset]
   set_size:     u8 mode (0 = max, 1 = exact), u64 size
@@ -17,6 +18,8 @@ Request value:
   write_inline: u64 offset, data
   read_inline:  u64 offset, u32 length
   spill_set_size: u64 size
+  create_write: u8 flags (bit0 has_layout, bit1 inline_ok),
+                [u32 stripe_count, u64 stripe_size, u32 stripe_offset], u64 offset, data
 
 Response value:
   entry:        u8 is_dir, u8 flags (bit0 has_layout, bit1 inline, bit2 frozen),
@@ -49,6 +52,13 @@ stripes first, then this makes the entry striped and grows it to `size` in
 one round trip. NOT_EMPTY if it holds inline bytes, FROZEN mid-spill (the
 client then spills as above and writes again); on a striped entry it is
 set_size(max).
+create_write(flags, layout, offset, data): a file's create (non-exclusive)
+and its first inline write in one round trip -- mdtest-hard's open, 3901-byte
+write and close. On an existing inline file it is write_inline. All or
+nothing: a new file that could not keep the data inline is NOT created
+(NOT_INLINE when inline is off or the MDT's inline budget is spent,
+INLINE_FULL past the limit); the client then creates and writes as before.
+Like every write into an entry, the reply waits for durability.
   readdir:      u32 count, then count x (u16 name_len, name bytes, entry)
   child_count:  u64
 Errors: Frame op=ERROR, value "CODE\\0message" (NOT_FOUND, EXISTS, IS_DIR,
@@ -62,10 +72,11 @@ import struct
 OP_LOOKUP, OP_CREATE, OP_SET_SIZE, OP_UNLINK, OP_READDIR, OP_CHILD_COUNT = 1, 2, 3, 4, 5, 6
 OP_WRITE_INLINE, OP_READ_INLINE, OP_FREEZE, OP_SPILL_COMMIT = 7, 8, 9, 10
 OP_SPILL_SET_SIZE = 14
+OP_CREATE_WRITE = 15
 _OP_NAMES = {OP_LOOKUP: "lookup", OP_CREATE: "create", OP_SET_SIZE: "set_size", OP_UNLINK: "unlink",
              OP_READDIR: "readdir", OP_CHILD_COUNT: "child_count", OP_WRITE_INLINE: "write_inline",
              OP_READ_INLINE: "read_inline", OP_FREEZE: "freeze", OP_SPILL_COMMIT: "spill_commit",
-             OP_SPILL_SET_SIZE: "spill_set_size"}
+             OP_SPILL_SET_SIZE: "spill_set_size", OP_CREATE_WRITE: "create_write"}
 _OP_CODES = {v: k for k, v in _OP_NAMES.items()}
 
 _ENTRY_HEAD = struct.Struct("<BBQdd")
@@ -98,6 +109,9 @@ def encode_request(req: dict) -> bytes:
         return bytes([op]) + _U64.pack(req["offset"]) + _U32.pack(req["length"])
     if op == OP_SPILL_SET_SIZE:
         return bytes([op]) + _U64.pack(req["size"])
+    if op == OP_CREATE_WRITE:
+        return bytes([op]) + _layout_bytes(req.get("layout"), req.get("inline_ok", True)) \
+            + _U64.pack(req["offset"]) + req["data"]
     return bytes([op])
 
 
@@ -127,6 +141,17 @@ def decode_request(path: str, value: bytes) -> dict:
         req["length"] = _U32.unpack_from(value, 9)[0]
     elif op == OP_SPILL_SET_SIZE:
         req["size"] = _U64.unpack_from(value, 1)[0]
+    elif op == OP_CREATE_WRITE:
+        req["inline_ok"] = bool(value[1] & 2)
+        p = 2
+        if value[1] & 1:
+            sc, ss, so = _LAYOUT.unpack_from(value, 2)
+            req["layout"] = {"stripe_count": sc, "stripe_size": ss, "stripe_offset": so}
+            p += _LAYOUT.size
+        else:
+            req["layout"] = None
+        req["offset"] = _U64.unpack_from(value, p)[0]
+        req["data"] = bytes(value[p + 8:])
     return req
 
 

@@ -183,6 +183,24 @@ def mdt_script(cli):
     rec("sss-dir", lambda: cli.spill_set_size("d", 1))
     rec("sss-create-no-layout", lambda: cli.create("d/y", is_dir=False, layout=None, inline_ok=True))
     rec("sss-no-layout", lambda: cli.spill_set_size("d/y", 320000))
+    # create_write: create + first inline write in one request, all or nothing
+    rec("cw-new", lambda: cli.create_write("d/cw", 0, b"hello", layout=lay))
+    rec("cw-new-read", lambda: strip(cli.read_inline("d/cw", 0, 100)))
+    rec("cw-existing-inline", lambda: cli.create_write("d/cw", 3, b"PQRS", layout=lay))
+    rec("cw-existing-read", lambda: strip(cli.read_inline("d/cw", 0, 100)))
+    rec("cw-at-offset", lambda: cli.create_write("d/cw2", 10, b"z", layout=lay))
+    rec("cw-at-offset-read", lambda: strip(cli.read_inline("d/cw2", 0, 100)))
+    rec("cw-empty", lambda: cli.create_write("d/cw3", 0, b"", layout=None))
+    rec("cw-too-big", lambda: cli.create_write("d/cw4", 0, b"x" * 40000, layout=lay))
+    rec("cw-too-big-not-created", lambda: cli.lookup("d/cw4"))
+    rec("cw-past-stripe", lambda: cli.create_write("d/cw5", 0, b"x" * 9000,
+                                                   layout={"stripe_count": 1, "stripe_size": 8192, "stripe_offset": 0}))
+    rec("cw-past-stripe-not-created", lambda: cli.lookup("d/cw5"))
+    rec("cw-inline-off", lambda: cli.create_write("d/cw6", 0, b"x", layout=lay, inline_ok=False))
+    rec("cw-inline-off-not-created", lambda: cli.lookup("d/cw6"))
+    rec("cw-existing-striped", lambda: cli.create_write("d/s", 0, b"q", layout=lay))
+    rec("cw-dir", lambda: cli.create_write("d", 0, b"q", layout=lay))
+    rec("cw-in-readdir", lambda: [e["name"] for e in cli.readdir("d") if e["name"].startswith("cw")])
     return out
 
 
