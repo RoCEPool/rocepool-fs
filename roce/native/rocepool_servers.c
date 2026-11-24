@@ -51,6 +51,10 @@ enum {
     OP_READ_AT = 15, OP_READ_AT_OK = 16, OP_TRUNCATE = 17, OP_TRUNCATE_OK = 18,
     OP_BATCH = 40, OP_BATCH_OK = 41, OP_VTOKEN = 42, OP_VTOKEN_OK = 43,
     OP_LEASE = 44, OP_LEASE_OK = 45,
+    /* an OST's commit barrier (ROCEPOOL_OST_ASYNC, see ost_async below):
+     * replied to once everything its log has so far is durable; value u64 LE
+     * epoch, u64 LE the log position the barrier covers */
+    OP_OST_COMMIT = 46, OP_OST_COMMIT_OK = 47,
     OP_STATS = 50, OP_STATS_OK = 51,
     OP_MDT = 30, OP_MDT_OK = 31, OP_ERROR = 255,
     /* an MDT reply to a request flagged RQF_ASYNC: u64 LE epoch, u64 LE
@@ -468,6 +472,8 @@ typedef struct {
     wal_t *wal;
     int durable;
     atomic_ullong log_fail;
+    uint64_t epoch;                 /* this process's life: a client's writes replied to early are lost if it changes */
+    atomic_ullong async_writes, commit_barriers;
     /* durable: slabs freed by a change, given back to the tier only once the
      * log record of that change is durable -- before, a crash replays the
      * old object onto its old slab, which may meanwhile hold another's */
@@ -985,6 +991,11 @@ static int ost_open_log(ost_store *s, const char *spec, int n) {
     s->wal = measured ? wal_open(path, err, sizeof(err)) : wal_open_as(path, 0, 1, err, sizeof(err));
     if (!s->wal) { fprintf(stderr, "rocepool OST: %s\n", err); return -1; }
     wal_add_sync(s->wal, ost_tier_sync_fd(s->tier));
+    uint64_t ep = 0;
+    int ufd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+    if (ufd < 0 || read(ufd, &ep, sizeof(ep)) != sizeof(ep)) ep = mono_ns() ^ ((uint64_t)getpid() << 32);
+    if (ufd >= 0) close(ufd);
+    s->epoch = ep ? ep : 1;
     s->durable = 1;  /* every write goes through to the tier before its reply */
     fprintf(stderr, "rocepool OST: durable: log %s, writes synced to the tier before the reply\n", path);
     return 0;
@@ -2947,6 +2958,10 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
                             (unsigned long long)atomic_load(&n->log_waited));
         }
     }
+    if (!rc && n->ost && n->ost->wal)
+        rc = buf_printf(&b, ", \"async_writes\": %llu, \"commit_barriers\": %llu",
+                        (unsigned long long)atomic_load(&n->ost->async_writes),
+                        (unsigned long long)atomic_load(&n->ost->commit_barriers));
     if (!rc && n->mdt)  /* asynchronous commit (mdt_store) */
         rc = buf_printf(&b, ", \"mdt_async\": {\"early_replies\": %llu, \"replays_applied\": %llu, "
                         "\"replays_skipped\": %llu, \"replays_late\": %llu, \"recovering\": %s}",
@@ -3002,6 +3017,35 @@ static uint8_t *mdt_tx_wrap(uint8_t *out, size_t *resp_len, uint64_t epoch, uint
     return b;
 }
 
+/* ost_async: a PUT / WRITE_AT flagged RQF_ASYNC on a durable OST is replied
+ * to once its bytes are on the tier (page cache) and its log record is
+ * appended -- not once both are synced. The reply carries reply flag
+ * RPF_TX and, after its value, u64 LE epoch + u64 LE the record's log
+ * position; the client keeps those and, at fsync and close, sends
+ * OP_OST_COMMIT to every OST it has such writes on: replied to once the log
+ * is durable through what it had, with the epoch. A different epoch means
+ * the OST restarted in between and may have lost them: the fsync / close
+ * fails (EIO) -- never a close that says durable when it is not (IO500
+ * rule 6). IOR's ior-hard-write runs with -e: its 47008-byte writes need
+ * to be durable at its fsync, not one by one. */
+#define RPF_TX 1
+static uint8_t *ost_tx_append(uint8_t *out, size_t *resp_len, uint64_t epoch, uint64_t lsn) {
+    uint32_t vl = rd_u32le(out + 20);
+    size_t total = *resp_len + 16;
+    uint8_t *b = roce_reply_alloc(total);
+    if (!b) return NULL;
+    memcpy(b, out, *resp_len);
+    b[5] = RPF_TX;
+    wr_u32le(b + 20, vl + 16);
+    for (int i = 0; i < 8; i++) {
+        b[*resp_len + i] = (uint8_t)(epoch >> (8 * i));
+        b[*resp_len + 8 + i] = (uint8_t)(lsn >> (8 * i));
+    }
+    roce_reply_free(out);
+    *resp_len = total;
+    return b;
+}
+
 static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_len, void *user) {
     struct rocepool_native *n = user;
     frame_t f;
@@ -3040,10 +3084,32 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
             tl_wal = md->wal;
             tl_wal_lsn = wal_last(md->wal);
         }
+    } else if (n->kind == ROCEPOOL_NATIVE_OST && f.op == OP_OST_COMMIT) {
+        ost_store *s = n->ost;
+        uint8_t v[16];
+        uint64_t last = s->wal ? wal_last(s->wal) : 0, ep = s->wal ? s->epoch : 0;
+        for (int i = 0; i < 8; i++) { v[i] = (uint8_t)(ep >> (8 * i)); v[8 + i] = (uint8_t)(last >> (8 * i)); }
+        out = frame_simple(OP_OST_COMMIT_OK, &f, v, 16, resp_len);
+        atomic_fetch_add(&s->commit_barriers, 1);
+        if (s->wal && out && last) {
+            tl_wal = s->wal;
+            tl_wal_lsn = last;
+        }
     } else if (n->kind == ROCEPOOL_NATIVE_OST) {
         slab_reap(n->ost);
         out = ost_handle(n->ost, &f, resp_len);
         slab_release_queue(tl_wal_lsn);
+        ost_store *s = n->ost;
+        if (s->wal && (f.flags & RQF_ASYNC) && out && tl_wal_lsn && tl_wal_lsn != UINT64_MAX &&
+            (out[4] == OP_WRITE_AT_OK || out[4] == OP_PUT_OK)) {
+            uint8_t *tx = ost_tx_append(out, resp_len, s->epoch, tl_wal_lsn);
+            if (tx) {  /* else: a plain reply, once durable, as before */
+                out = tx;
+                wal_kick(s->wal);
+                tl_wal_lsn = 0;
+                atomic_fetch_add(&s->async_writes, 1);
+            }
+        }
     } else {
         out = mdt_handle(n->mdt, &f, resp_len);
     }

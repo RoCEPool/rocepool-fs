@@ -1356,6 +1356,15 @@ def main() -> int:
             report["durable"]["mdt_async"] = True
             print("== MDT commit: Lustre-style (creates/unlinks replied first, kept by the clients until committed, "
                   "replayed after a restart; data synced before its reply)", flush=True)
+        # stripe writes durable at fsync / close, not one by one: an OST
+        # replies once the bytes are on its tier and the log record appended;
+        # fsync, close and exit wait for a commit barrier on every OST written
+        # (an OST restart in between fails them with EIO). ior-hard-write runs
+        # IOR with -e (fsync at close). ROCEPOOL_OST_ASYNC=0: every write synced.
+        if report["durable"]["on"] and os.environ.get("ROCEPOOL_OST_ASYNC", "1") != "0":
+            env["ROCEPOOL_OST_ASYNC"] = "1"
+            report["durable"]["ost_async"] = True
+            print("== OST commit: stripe writes durable at fsync/close (a commit barrier per OST written)", flush=True)
         # the MDTs' inline file bytes (mdtest-hard's 3901-byte files live in
         # the MDT): bounded, or millions of them outgrow the host -- 15% of
         # the smallest host's RAM over its MDTs; beyond it files go striped
@@ -1499,7 +1508,8 @@ def main() -> int:
                    "ROCEPOOL_IO_THREADS": str(args.intercept_io_threads),
                    **({"ROCE_OFI_CLIENT_EPS": str(args.client_eps)} if args.client_eps > 0 else {}),
                    **{k: env[k] for k in ("ROCEPOOL_DIRTY_CAP_MIB", "ROCEPOOL_RPC_TIMEOUT_MS", "ROCEPOOL_SCACHE_SLOTS",
-                                           "ROCE_BUFPOOL_MAX", "ROCE_TRANSPORT_LIB", "ROCEPOOL_MDT_ASYNC") if k in env}}
+                                           "ROCE_BUFPOOL_MAX", "ROCE_TRANSPORT_LIB", "ROCEPOOL_MDT_ASYNC",
+                                           "ROCEPOOL_OST_ASYNC") if k in env}}
         icp_genv = [a for k, v in icp_env.items() for a in ("-genv", k, v)]
 
         bind_args = []

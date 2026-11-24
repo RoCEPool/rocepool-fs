@@ -19,7 +19,7 @@ enum {
     RP_WRITE_AT = 11, RP_WRITE_AT_OK = 12, RP_GET_V = 13, RP_GET_V_OK = 14,
     RP_READ_AT = 15, RP_READ_AT_OK = 16, RP_TRUNCATE = 17, RP_TRUNCATE_OK = 18,
     RP_MDT = 30, RP_MDT_OK = 31, RP_MDT_OK_TX = 32, RP_BATCH = 40, RP_BATCH_OK = 41, RP_VTOKEN = 42, RP_VTOKEN_OK = 43,
-    RP_LEASE = 44, RP_LEASE_OK = 45, RP_STATS = 50, RP_STATS_OK = 51,
+    RP_LEASE = 44, RP_LEASE_OK = 45, RP_OST_COMMIT = 46, RP_OST_COMMIT_OK = 47, RP_STATS = 50, RP_STATS_OK = 51,
     RP_ERROR = 255,
 };
 
@@ -73,6 +73,11 @@ void rp_peer_close_idle(rp_peer_t *p);
 #define RP_RQF_ASYNC 1
 #define RP_RQF_REPLAY 2
 extern __thread uint8_t rp_next_flags;
+/* this thread's last reply that carried RPF_TX (an OST write replied to
+ * before it was durable, rocepool_servers.c ost_async): the OST's epoch and
+ * the write's log position; rp_last_tx_lsn 0 when the last reply had none.
+ * The 16 bytes are taken off the reply's value. */
+extern __thread uint64_t rp_last_tx_epoch, rp_last_tx_lsn;
 
 /* value = v1 ++ v2. 0 = reply in *out (maybe RP_ERROR), -EIO/-EFBIG otherwise. */
 int rp_rpc(rp_peer_t *p, uint8_t op, const char *key, const void *v1, size_t n1, const void *v2, size_t n2,

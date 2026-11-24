@@ -112,19 +112,24 @@ whether ranks that no longer spin on EFA completions free enough CPU, is for
 the next run on real hosts (an A/B pair, `--agent off` / `--agent on`). Off
 by default until then.
 
-## 4. ior-hard-write: what bounds it, and what is allowed
+## 4. ior-hard-write: stripe writes durable at fsync / close (`ROCEPOOL_OST_ASYNC`)
 
 IO500 runs ior-hard with `-e` (fsync at close, inside the phase's time). A
-rank's 47008-byte writes need to be durable only by its close; today every
-one waits for the OST's commit (tier fdatasync + log), ~13 writes per
-commit at 1754 us on i3en: 3.56 GiB/s durable against 9.4 not durable.
+rank's 47008-byte writes need to be durable only by its fsync; until now
+every one waited for its OST's commit (tier fdatasync + log), ~13 writes
+per commit at 1754 us on i3en: 3.56 GiB/s durable against 9.4 not durable.
 
-The legal shape is the one the MDT already has (`ROCEPOOL_MDT_ASYNC`): an
-OST replies to a WRITE_AT once the bytes are in its RAM and its log record
-is appended, with the commit position in the reply; the client keeps each
-write until a reply says it is committed (replayed after an OST restart),
-and fsync/close waits for a commit barrier on every OST it wrote. What it
-keeps is bounded by one commit's worth of writes (~9 GiB/s x a few ms,
-tens of MiB across the cluster). If ior-hard-write then reaches the
-not-durable 9.4 GiB/s: the bandwidth score x (9.4 / 3.56)^(1/4) = x1.27,
-the total x1.13. Not built yet.
+Now (on by default in `io500_run.py` when the servers are durable;
+`ROCEPOOL_OST_ASYNC=0` turns it off): a PUT / WRITE_AT flagged RQF_ASYNC is
+replied to once its bytes are on the OST's tier and its log record
+appended, with the OST's epoch and the record's log position (reply flag
+RPF_TX). The client keeps, per OST, the highest such position; fsync, close
+and exit send OP_OST_COMMIT to every OST with one, replied to once that
+OST's log is durable through it. If the epoch changed -- the OST restarted
+and may have lost what it acknowledged -- that fsync / close fails with EIO:
+never a close that says durable when it is not (rule 6). sync() barriers
+every OST.
+
+`tools/hard_write_bench.py` (2 nodes x 4 writers, ext4 on this project's
+2-vCPU VM, 20 s): 151 -> 216 MiB/s (+43%), 9.4 -> 26.1 writes per commit,
+every piece read back right.

@@ -107,19 +107,20 @@ __attribute__((destructor)) static void intercept_dtor(void) {
     unsigned long long pend, repl, lost, dcc, dcp, dcn;
     rpfs_commit_stats(&pend, &repl, &lost);
     rpfs_defer_stats(&dcc, &dcp, &dcn);
-    unsigned long long ago, agf;
+    unsigned long long ago, agf, oaw, oab, oal;
     rpfs_agent_stats(&ago, &agf);
+    rpfs_ost_commit_stats(&oaw, &oab, &oal);
     uint64_t rai, rah, raw;
     rp_stride_ra_stats(&rai, &rah, &raw);
     fprintf(stderr, "rocepool_intercept[%d]: stats mdt_rpcs=%llu ost_rpcs=%llu direct_reads=%llu direct_bytes=%llu "
                     "leases=%llu stale_leases=%llu direct_lookups=%llu direct_lookup_misses=%llu "
                     "mdt_uncommitted=%llu mdt_replayed=%llu mdt_lost=%llu "
                     "stride_ra_issued=%llu stride_ra_hits=%llu stride_ra_wasted=%llu "
-                    "creates_with_data=%llu creates_plain=%llu creates_pending=%llu agent_answered=%llu agent_fallback=%llu\n",
+                    "creates_with_data=%llu creates_plain=%llu creates_pending=%llu agent_answered=%llu agent_fallback=%llu ost_async_writes=%llu ost_barriers=%llu ost_lost=%llu\n",
             (int)getpid(), mr, orr,
             (unsigned long long)dr, (unsigned long long)db, (unsigned long long)dl, (unsigned long long)ds,
             (unsigned long long)lk, (unsigned long long)lm, pend, repl, lost,
-            (unsigned long long)rai, (unsigned long long)rah, (unsigned long long)raw, dcc, dcp, dcn, ago, agf);
+            (unsigned long long)rai, (unsigned long long)rah, (unsigned long long)raw, dcc, dcp, dcn, ago, agf, oaw, oab, oal);
 }
 static void load_libc(void) {
 #define LOAD(name) real_##name = sym(#name)
@@ -499,6 +500,9 @@ int close(int fd) {
     int rc = 0;
     if (last) {
         rc = flush_file(f);  /* the error of a failed flush is reported here, like FUSE's FLUSH */
+        /* durable at close (IO500 rule 6): stripe writes acknowledged early
+         * (ROCEPOOL_OST_ASYNC) wait for their OSTs' commits here */
+        if (!rc && !f->is_dir) rc = rpfs_ost_commit(0);
         /* close-to-open for the attributes too: a stat after close asks the
          * MDT, so a shared file another rank extended is seen at its full
          * size (IOR's aggregate-size check after the write phase) */

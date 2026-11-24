@@ -169,6 +169,10 @@ int fs_create_file_excl(const char *path, int exclusive, attr_t *a);  /* -EEXIST
 int fs_create_deferred(const char *path, attr_t *a);  /* O_CREAT without O_EXCL/O_TRUNC/O_APPEND (ROCEPOOL_DEFER_CREATE) */
 int fs_create_pending(const char *path);              /* a pending create sent now (a close of an unwritten file) */
 void rpfs_defer_stats(unsigned long long *combined, unsigned long long *plain, unsigned long long *pending);
+/* ROCEPOOL_OST_ASYNC: make this process's early-acknowledged stripe writes
+ * durable (fsync, close, exit); all: a barrier on every OST (sync()). 0 or -EIO */
+int rpfs_ost_commit(int all);
+void rpfs_ost_commit_stats(unsigned long long *writes, unsigned long long *barriers, unsigned long long *lost);
 /* create_writes the node's agent answered / sent directly after the agent could not (ROCEPOOL_AGENT) */
 void rpfs_agent_stats(unsigned long long *ok, unsigned long long *fallback);
 int fs_rmdir(const char *path);

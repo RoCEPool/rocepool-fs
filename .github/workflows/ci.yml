@@ -47,8 +47,9 @@ jobs:
 
   tier-commit:
     # what a durable OST's commit costs under ior-hard-write's shape, on XFS
-    # (the tier's file system on the AWS hosts) and ext4, with a fresh slab's
-    # gaps written (the default) and skipped: tools/hard_write_bench.py
+    # (the tier's file system on the AWS hosts) and ext4, each write synced
+    # before its reply and (ROCEPOOL_OST_ASYNC=1) durable at the fsync:
+    # tools/hard_write_bench.py
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -73,7 +74,8 @@ jobs:
             sudo mkdir -p /mnt/t_$fs
             sudo mount -o loop /dev/shm/$fs.img /mnt/t_$fs
             sudo -E env "PATH=$PATH" python3 tools/hard_write_bench.py --dir /mnt/t_$fs/bench --seconds 30 \
-              --writers 16 --tier-gib 3 --ram-cache-mib 64 2>&1 | tee -a bench.log
+              --writers 16 --tier-gib 3 --ram-cache-mib 64 --sets "synced:;ost-async:ROCEPOOL_OST_ASYNC=1" \
+              2>&1 | tee -a bench.log
             sudo umount /mnt/t_$fs
             sudo rm -f /dev/shm/$fs.img
           done

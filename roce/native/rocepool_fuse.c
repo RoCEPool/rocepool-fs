@@ -690,6 +690,7 @@ static void op_flush(uint64_t u, const struct fuse_flush_in *fi) {
     pthread_mutex_lock(&h->lk);
     int rc = handle_flush(h);
     pthread_mutex_unlock(&h->lk);
+    if (!rc && !h->is_dir) rc = rpfs_ost_commit(0);  /* durable at close (ROCEPOOL_OST_ASYNC) */
     reply(u, -rc, NULL, 0, NULL, 0);
 }
 
@@ -700,6 +701,7 @@ static void op_release(uint64_t u, const struct fuse_release_in *ri) {
         pthread_mutex_lock(&h->lk);
         rc = handle_flush(h);
         pthread_mutex_unlock(&h->lk);
+        if (!rc) rc = rpfs_ost_commit(0);
     }
     handle_free(h);
     reply(u, -rc, NULL, 0, NULL, 0);
