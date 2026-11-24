@@ -16,11 +16,14 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <stdatomic.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
 #define CAS_MAX_ATTEMPTS 1000
@@ -596,6 +599,89 @@ static int mdt_create(const char *path, int is_dir, int exclusive, const attr_t 
     return mdt_entry_call(path, req, n, a);
 }
 
+/* ---------------------------------------------------------------- the agent
+ * ROCEPOOL_AGENT=<socket>: create_write goes to the node's agent
+ * (rocepool_agent.c), which sends what the node's processes have waiting for
+ * an MDT as one batch (MDT op 16). Its reply comes once the batch is durable,
+ * as a direct create_write's does. If the agent cannot answer (not running,
+ * gone, the batch failed) the request goes to the MDT directly: create_write
+ * is idempotent. One connection per thread (and per process: a forked child
+ * dials its own). */
+static char g_agent_path[108];
+static atomic_ullong g_agent_ok, g_agent_fallback;
+static __thread int tl_agent_fd = -1;
+static __thread pid_t tl_agent_pid;
+static __thread double tl_agent_retry_at;
+
+void rpfs_agent_stats(unsigned long long *ok, unsigned long long *fallback) {
+    *ok = atomic_load(&g_agent_ok);
+    *fallback = atomic_load(&g_agent_fallback);
+}
+
+static int agent_fd(void) {
+    if (!g_agent_path[0]) return -1;
+    pid_t me = getpid();
+    if (tl_agent_fd >= 0 && tl_agent_pid == me) return tl_agent_fd;
+    tl_agent_fd = -1;  /* the parent's, in a forked child: left to the parent */
+    if (rp_mono_s() < tl_agent_retry_at) return -1;
+    int fd = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+    struct sockaddr_un sa = {.sun_family = AF_UNIX};
+    socklen_t sl = sizeof(sa);
+    size_t pl = strlen(g_agent_path);
+    memcpy(sa.sun_path, g_agent_path, pl);
+    if (g_agent_path[0] == '@') {  /* the abstract namespace (rocepool_agent.c) */
+        sa.sun_path[0] = 0;
+        sl = (socklen_t)(offsetof(struct sockaddr_un, sun_path) + pl);
+    }
+    if (fd < 0 || connect(fd, (struct sockaddr *)&sa, sl)) {
+        if (fd >= 0) close(fd);
+        tl_agent_retry_at = rp_mono_s() + 1.0;  /* no agent: direct, and look again in a second */
+        return -1;
+    }
+    tl_agent_fd = fd;
+    tl_agent_pid = me;
+    return fd;
+}
+
+static void agent_drop(void) {
+    if (tl_agent_fd >= 0 && tl_agent_pid == getpid()) close(tl_agent_fd);
+    tl_agent_fd = -1;
+    tl_agent_retry_at = rp_mono_s() + 1.0;
+}
+
+/* 0 or -errno: the MDT's answer; 1: no answer, send it directly */
+static int agent_call(peer_t *p, const char *path, const uint8_t *hdr, size_t n, const uint8_t *data, size_t len,
+                      attr_t *a) {
+    size_t al = strlen(p->addr), kl = strlen(path);
+    if (al > 128 || 1 + al + 4 + kl + n + len > (60u << 10)) return 1;  /* the agent takes up to 64 KiB */
+    int fd = agent_fd();
+    if (fd < 0) return 1;
+    uint8_t pre[1 + 128 + 4];
+    pre[0] = (uint8_t)al;
+    memcpy(pre + 1, p->addr, al);
+    for (int i = 0; i < 4; i++) pre[1 + al + i] = (uint8_t)(kl >> (8 * i));
+    struct iovec iov[4] = {{pre, 1 + al + 4}, {(void *)path, kl}, {(void *)hdr, n}, {(void *)data, len}};
+    struct msghdr mh = {.msg_iov = iov, .msg_iovlen = len ? 4 : 3};
+    if (sendmsg(fd, &mh, MSG_NOSIGNAL) < 0) { agent_drop(); return 1; }
+    uint8_t rep[1024];
+    ssize_t r;
+    do r = recv(fd, rep, sizeof(rep), 0); while (r < 0 && errno == EINTR);
+    if (r <= 0) { agent_drop(); return 1; }
+    if (rep[0] == 0) {
+        atomic_fetch_add(&g_agent_ok, 1);
+        return decode_entry(rep + 1, (size_t)r - 1, a) ? 0 : -EIO;
+    }
+    if (rep[0] == 1) {
+        atomic_fetch_add(&g_agent_ok, 1);
+        char code[32] = {0};
+        size_t cl = strnlen((const char *)rep + 1, (size_t)r - 1);
+        memcpy(code, rep + 1, cl < sizeof(code) - 1 ? cl : sizeof(code) - 1);
+        return mdt_errno(code);
+    }
+    atomic_fetch_add(&g_agent_fallback, 1);
+    return 1;
+}
+
 /* create_write (op 15): create (non-exclusive) + first inline write */
 static int mdt_create_write(const char *path, const attr_t *lay, uint64_t off, const uint8_t *data, size_t len,
                             attr_t *a) {
@@ -611,7 +697,12 @@ static int mdt_create_write(const char *path, const attr_t *lay, uint64_t off, c
     n += 8;
     resp_t r;
     tl_dc_busy++;  /* this file's pending create was taken: the others wait */
-    int rc = mdt_rpc(mdt_for(path), path, hdr, n, data, len, &r);
+    int rc = agent_call(mdt_for(path), path, hdr, n, data, len, a);
+    if (rc != 1) {
+        tl_dc_busy--;
+        return rc;
+    }
+    rc = mdt_rpc(mdt_for(path), path, hdr, n, data, len, &r);
     tl_dc_busy--;
     if (rc) return rc;
     if (r.op == OP_MDT_OK) rc = decode_entry(r.val, r.vlen, a) ? 0 : -EIO;
@@ -2902,6 +2993,8 @@ int rpfs_init(void) {
     if (ma && !strcmp(ma, "1")) cfg.mdt_async = 1;
     const char *dfc = getenv("ROCEPOOL_DEFER_CREATE");
     if (dfc && !strcmp(dfc, "1")) g_defer_create = 1;
+    const char *ag = getenv("ROCEPOOL_AGENT");
+    if (ag && *ag && strlen(ag) < sizeof(g_agent_path)) strcpy(g_agent_path, ag);
     const char *ss = getenv("ROCEPOOL_SCACHE_SLOTS");
     if (ss && atoi(ss) > 0) cfg.scache_slots = atoi(ss);
     if (cfg.nmdt < 1 || cfg.nost < 1) return -EINVAL;

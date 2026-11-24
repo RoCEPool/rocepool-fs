@@ -107,16 +107,19 @@ __attribute__((destructor)) static void intercept_dtor(void) {
     unsigned long long pend, repl, lost, dcc, dcp, dcn;
     rpfs_commit_stats(&pend, &repl, &lost);
     rpfs_defer_stats(&dcc, &dcp, &dcn);
+    unsigned long long ago, agf;
+    rpfs_agent_stats(&ago, &agf);
     uint64_t rai, rah, raw;
     rp_stride_ra_stats(&rai, &rah, &raw);
     fprintf(stderr, "rocepool_intercept[%d]: stats mdt_rpcs=%llu ost_rpcs=%llu direct_reads=%llu direct_bytes=%llu "
                     "leases=%llu stale_leases=%llu direct_lookups=%llu direct_lookup_misses=%llu "
                     "mdt_uncommitted=%llu mdt_replayed=%llu mdt_lost=%llu "
                     "stride_ra_issued=%llu stride_ra_hits=%llu stride_ra_wasted=%llu "
-                    "creates_with_data=%llu creates_plain=%llu creates_pending=%llu\n", (int)getpid(), mr, orr,
+                    "creates_with_data=%llu creates_plain=%llu creates_pending=%llu agent_answered=%llu agent_fallback=%llu\n",
+            (int)getpid(), mr, orr,
             (unsigned long long)dr, (unsigned long long)db, (unsigned long long)dl, (unsigned long long)ds,
             (unsigned long long)lk, (unsigned long long)lm, pend, repl, lost,
-            (unsigned long long)rai, (unsigned long long)rah, (unsigned long long)raw, dcc, dcp, dcn);
+            (unsigned long long)rai, (unsigned long long)rah, (unsigned long long)raw, dcc, dcp, dcn, ago, agf);
 }
 static void load_libc(void) {
 #define LOAD(name) real_##name = sym(#name)

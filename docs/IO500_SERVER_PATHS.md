@@ -81,3 +81,50 @@ Tests: `tests/test_ofi_concurrency.py` `OfiPipelineTests` (several pulls and
 large replies in flight on one thread, every byte right; both turned off;
 a capped buffer pool). The FUSE client, interception library and durability
 suites also pass over the libfabric transport with the change.
+
+## 3. mdtest-hard-write: the node agent (opt-in, `io500_run.py --agent on`)
+
+SC26 (gh-41438027754) took mdtest-hard-write at ~0.72 ms per file per rank,
+one file after another; per file the MDT spent 151 us in the transport and
+31 us in the handler. With create_write (#104) a file is one MDT request.
+The agent (`roce/native/rocepool_agent.c`) takes those requests from a
+node's ranks over a UNIX socket and sends what waits for one MDT as one
+batch (MDT op 16): whichever rank's thread finds no batch out for that MDT
+sends its own request and those queued behind it (flat combining, no timer).
+Per file nothing changes at the MDT -- each request is handled, locked and
+logged alone, a replay sees the requests, never the batch -- and a rank
+hears back only once the batch is durable (rule 6). A rank whose agent
+cannot answer sends the request itself (create_write is idempotent).
+
+Measured on the 3-node simulation (2 vCPUs shared by every node, 8 ranks
+per node, 20 s stonewall, one run each unless noted):
+
+| transport | agent off | agent on | requests per batch |
+|---|---|---|---|
+| softverbs (cheap per request) | 11.33 kIOPS, 174 us host CPU / file | 7.27 kIOPS, 254 us | 1.24-1.48 |
+| libfabric tcp, no CQ wait object (EFA's wait loop) | 4.21 / 3.68 kIOPS, 499 / 558 us | 4.90 / 3.76 kIOPS, 422 / 542 us | 1.01-1.12 |
+
+Where a request costs little, the extra local hop costs more than batching
+saves. With EFA's wait loop the two are within the runs' noise. Two CPUs
+cannot make requests queue behind one another the way 32 ranks per node on
+real hosts might, so batches stay near 1 here; whether they grow there, and
+whether ranks that no longer spin on EFA completions free enough CPU, is for
+the next run on real hosts (an A/B pair, `--agent off` / `--agent on`). Off
+by default until then.
+
+## 4. ior-hard-write: what bounds it, and what is allowed
+
+IO500 runs ior-hard with `-e` (fsync at close, inside the phase's time). A
+rank's 47008-byte writes need to be durable only by its close; today every
+one waits for the OST's commit (tier fdatasync + log), ~13 writes per
+commit at 1754 us on i3en: 3.56 GiB/s durable against 9.4 not durable.
+
+The legal shape is the one the MDT already has (`ROCEPOOL_MDT_ASYNC`): an
+OST replies to a WRITE_AT once the bytes are in its RAM and its log record
+is appended, with the commit position in the reply; the client keeps each
+write until a reply says it is committed (replayed after an OST restart),
+and fsync/close waits for a commit barrier on every OST it wrote. What it
+keeps is bounded by one commit's worth of writes (~9 GiB/s x a few ms,
+tens of MiB across the cluster). If ior-hard-write then reaches the
+not-durable 9.4 GiB/s: the bandwidth score x (9.4 / 3.56)^(1/4) = x1.27,
+the total x1.13. Not built yet.

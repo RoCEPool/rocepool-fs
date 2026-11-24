@@ -10,7 +10,7 @@ tests/test_native_servers.py runs one test suite against both.
 Request value:
   u8 op   1 lookup | 2 create | 3 set_size | 4 unlink | 5 readdir | 6 child_count
           7 write_inline | 8 read_inline | 9 freeze | 10 spill_commit | 14 spill_set_size
-          15 create_write
+          15 create_write | 16 batch
   create:       u8 is_dir, u8 exclusive, u8 flags (bit0 has_layout, bit1 inline_ok),
                 [u32 stripe_count, u64 stripe_size, u32 stripe_offset]
   set_size:     u8 mode (0 = max, 1 = exact), u64 size
@@ -20,6 +20,8 @@ Request value:
   spill_set_size: u64 size
   create_write: u8 flags (bit0 has_layout, bit1 inline_ok),
                 [u32 stripe_count, u64 stripe_size, u32 stripe_offset], u64 offset, data
+  batch:        u32 count, then count x (u32 key_len, u32 value_len, path, request value);
+                only create_write and write_inline requests (Frame.key is empty)
 
 Response value:
   entry:        u8 is_dir, u8 flags (bit0 has_layout, bit1 inline, bit2 frozen),
@@ -61,6 +63,13 @@ INLINE_FULL past the limit); the client then creates and writes as before.
 Like every write into an entry, the reply waits for durability.
   readdir:      u32 count, then count x (u16 name_len, name bytes, entry)
   child_count:  u64
+  batch:        per request u8 status (0 OK, 1 error), u32 length, then the
+                entry or "CODE\\0message"
+batch: several clients' create_write / write_inline requests in one round
+trip, sent by a node's agent (roce/native/rocepool_agent.c, ROCEPOOL_AGENT).
+Each request is handled, locked and logged as if it came alone -- a replay
+sees the requests, never the batch -- and the reply leaves once the last is
+durable (IO500 rule 6 holds per file: its close waits for this reply).
 Errors: Frame op=ERROR, value "CODE\\0message" (NOT_FOUND, EXISTS, IS_DIR,
 NOT_DIR, UNSUPPORTED_OP, MDT_INTERNAL, and for Data-on-MDT INLINE, INLINE_FULL,
 NOT_INLINE, NOT_FROZEN, FROZEN, NOT_EMPTY).
@@ -73,6 +82,9 @@ OP_LOOKUP, OP_CREATE, OP_SET_SIZE, OP_UNLINK, OP_READDIR, OP_CHILD_COUNT = 1, 2,
 OP_WRITE_INLINE, OP_READ_INLINE, OP_FREEZE, OP_SPILL_COMMIT = 7, 8, 9, 10
 OP_SPILL_SET_SIZE = 14
 OP_CREATE_WRITE = 15
+OP_BATCH = 16
+BATCH_OPS = (OP_CREATE_WRITE, OP_WRITE_INLINE)
+BATCH_MAX = 1024
 _OP_NAMES = {OP_LOOKUP: "lookup", OP_CREATE: "create", OP_SET_SIZE: "set_size", OP_UNLINK: "unlink",
              OP_READDIR: "readdir", OP_CHILD_COUNT: "child_count", OP_WRITE_INLINE: "write_inline",
              OP_READ_INLINE: "read_inline", OP_FREEZE: "freeze", OP_SPILL_COMMIT: "spill_commit",
@@ -212,3 +224,46 @@ def encode_count(n: int) -> bytes:
 
 def decode_count(buf: bytes) -> int:
     return _U64.unpack_from(buf, 0)[0]
+
+
+def encode_batch(subs: list[tuple[str, bytes]]) -> bytes:
+    """subs: (path, encoded request value) pairs"""
+    out = [bytes([OP_BATCH]), _U32.pack(len(subs))]
+    for path, val in subs:
+        k = path.encode()
+        out += [_U32.pack(len(k)), _U32.pack(len(val)), k, val]
+    return b"".join(out)
+
+
+def decode_batch(value: bytes) -> list[tuple[str, bytes]]:
+    """raises ValueError on a malformed batch (nothing in it is handled)"""
+    if len(value) < 5:
+        raise ValueError("batch: short")
+    n = _U32.unpack_from(value, 1)[0]
+    if n > BATCH_MAX:
+        raise ValueError("batch: too many requests")
+    p, subs = 5, []
+    for _ in range(n):
+        if len(value) - p < 8:
+            raise ValueError("batch: truncated")
+        kl, vl = _U32.unpack_from(value, p)[0], _U32.unpack_from(value, p + 4)[0]
+        if kl + vl > len(value) - p - 8 or vl < 1:
+            raise ValueError("batch: truncated")
+        subs.append((value[p + 8:p + 8 + kl].decode(), bytes(value[p + 8 + kl:p + 8 + kl + vl])))
+        p += 8 + kl + vl
+    if p != len(value):
+        raise ValueError("batch: trailing bytes")
+    return subs
+
+
+def encode_batch_reply(results: list[tuple[bool, bytes]]) -> bytes:
+    return b"".join(bytes([0 if ok else 1]) + _U32.pack(len(b)) + b for ok, b in results)
+
+
+def decode_batch_reply(value: bytes) -> list[tuple[bool, bytes]]:
+    p, out = 0, []
+    while p < len(value):
+        st, n = value[p], _U32.unpack_from(value, p + 1)[0]
+        out.append((st == 0, bytes(value[p + 5:p + 5 + n])))
+        p += 5 + n
+    return out

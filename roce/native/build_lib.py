@@ -193,6 +193,21 @@ def ensure_fuse_client() -> str:
     return out
 
 
+# ---- the per-node MDT agent (rocepool_agent.c) ------------------------------
+AGENT_MAIN = os.path.join(NATIVE, "rocepool_agent.c")
+
+
+def ensure_agent() -> str:
+    """rocepool-agent: a node's small-file writes to the MDTs in batches (MDT op 16)"""
+    out = os.path.join(_outdir(), "rocepool-agent")
+    client = os.path.join(NATIVE, "rocepool_client.c")
+    if _stale(out, [AGENT_MAIN, client] + ALL_TRANSPORTS):
+        srcs, cflags, ldflags = _transport()
+        subprocess.run([*CC, *cflags, AGENT_MAIN, client, *srcs, "-o", out, *ldflags], check=True)
+        _mark(out)
+    return out
+
+
 # ---- the native KV client library + its benchmark ----------------------------
 KV_MAIN = os.path.join(NATIVE, "rocepool_kv.c")
 DEVMEM = os.path.join(NATIVE, "rocepool_devmem.c")

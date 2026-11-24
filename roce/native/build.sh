@@ -209,6 +209,9 @@ FUSE_OUT="${FUSE_OUT:-$SCRIPT_DIR/rocepool-fuse}"
 "$CC" -O2 -g -Wall -Wextra -pthread "${CFLAGS_EXTRA[@]}" \
   rocepool_fuse.c rocepool_fs.c rocepool_client.c "$TSRC" -o "$FUSE_OUT" "${LDFLAGS_EXTRA[@]}" "${TLIBS[@]}" -lpthread
 echo "[build] built $FUSE_OUT (native FUSE client)"
+"$CC" -O2 -g -Wall -Wextra -pthread "${CFLAGS_EXTRA[@]}" \
+  rocepool_agent.c rocepool_client.c "$TSRC" -o "$SCRIPT_DIR/rocepool-agent" "${LDFLAGS_EXTRA[@]}" "${TLIBS[@]}" -lpthread
+echo "[build] built $SCRIPT_DIR/rocepool-agent (per-node MDT agent)"
 KV_OUT="${KV_OUT:-$SCRIPT_DIR/librocepool_kv.so}"
 "$CC" -O2 -g -Wall -Wextra -pthread -fPIC -shared "${CFLAGS_EXTRA[@]}" \
   rocepool_kv.c rocepool_lmc.c rocepool_client.c rocepool_devmem.c "$TSRC" -o "$KV_OUT" "${LDFLAGS_EXTRA[@]}" "${TLIBS[@]}" -ldl -lpthread
