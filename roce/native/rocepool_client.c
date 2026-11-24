@@ -232,6 +232,7 @@ void rp_resp_free(rp_resp_t *r) {
  * copied once into a registered buffer by the transport. The reply lands
  * in a registered buffer the caller keeps until rp_resp_free. */
 __thread uint8_t rp_next_flags;
+__thread uint64_t rp_last_tx_epoch, rp_last_tx_lsn;
 
 int rp_rpc_v(rp_peer_t *p, uint8_t op, const char *key, const void *v1, size_t n1, const rp_seg_t *segs, int nsegs,
              rp_resp_t *out) {
@@ -292,6 +293,12 @@ int rp_rpc_v(rp_peer_t *p, uint8_t op, const char *key, const void *v1, size_t n
         out->val = r + 24 + rkl;
         out->vlen = rvl;
         out->code[0] = 0;
+        rp_last_tx_lsn = 0;
+        if ((r[5] & 1) && rvl >= 16) {  /* RPF_TX: epoch, log position after the value */
+            memcpy(&rp_last_tx_epoch, out->val + rvl - 16, 8);
+            memcpy(&rp_last_tx_lsn, out->val + rvl - 8, 8);
+            out->vlen -= 16;
+        }
         if (out->op == RP_ERROR) {
             size_t n = 0;
             while (n < rvl && n < sizeof(out->code) - 1 && out->val[n]) { out->code[n] = (char)out->val[n]; n++; }

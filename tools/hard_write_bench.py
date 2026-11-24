@@ -7,7 +7,9 @@ write is fdatasynced to the tier before its reply -- as in a valid IO500 run.
 
     sudo python3 tools/hard_write_bench.py --dir /mnt/xfs/bench [--sets "gaps-written:;gaps-skipped:ROCEPOOL_OST_SKIP_ZERO_GAPS=1"]
 
-Every set (name:VAR=v,VAR=v -- the OSTs' environment) runs on fresh servers
+Every set (name:VAR=v,VAR=v -- the OSTs' environment; the clients' for
+CLIENT_VARS, e.g. ROCEPOOL_OST_ASYNC=1: writes durable at the fsync, not one
+by one) runs on fresh servers
 and a fresh tier file. Reported per set, from the OSTs' own counters: MiB/s,
 writes/s, commits/s, the time of a commit (the tier's fdatasync and the log
 record), writes per commit, tier bytes written per byte of data, and the
@@ -29,6 +31,7 @@ from tools.cluster import Cluster  # noqa: E402
 from tools.rocepool_mount import RocepoolMount  # noqa: E402
 
 MNT = "/mnt/rocepool_hardwrite"
+CLIENT_VARS = ("ROCEPOOL_OST_ASYNC", "ROCEPOOL_DIRTY_CAP_MIB")  # a set's variables for the client, not the OSTs
 PIECE = 47008
 
 WRITER = r"""
@@ -67,8 +70,8 @@ def one_set(cluster, base_env: dict, name: str, extra: dict, args) -> dict:
     d = os.path.join(args.dir, name)
     shutil.rmtree(d, ignore_errors=True)
     os.makedirs(d)
-    env = dict(base_env)
-    ost_env = dict(extra, ROCEPOOL_OST_LOG=f"{d}/ostlog{{node}}", ROCEPOOL_OST_RAM_CACHE_MIB=str(args.ram_cache_mib))
+    env = dict(base_env, **{k: v for k, v in extra.items() if k in CLIENT_VARS})
+    ost_env = dict({k: v for k, v in extra.items() if k not in CLIENT_VARS}, ROCEPOOL_OST_LOG=f"{d}/ostlog{{node}}", ROCEPOOL_OST_RAM_CACHE_MIB=str(args.ram_cache_mib))
     rp = RocepoolMount(cluster, env, os.path.join(args.workdir, name), MNT, ost_tier=f"file:{d}/tier{{node}}:{args.tier_gib}",
                        ost_env=ost_env)
     n = len(cluster.nodes)
@@ -118,7 +121,8 @@ def one_set(cluster, base_env: dict, name: str, extra: dict, args) -> dict:
     one = next(iter(after.values()))
     return {"set": name, "env": extra, "pieces": pieces, "seconds": round(wall, 1),
             "mib_per_s": round(data / 2**20 / wall, 1), "writes_per_s": round(pieces / wall),
-            "commits_per_s": round(commits / wall), "commit_us": round(delta("log", "sync_ns") / max(1, commits) / 1e3),
+            "commits_per_s": round(commits / wall), "async_writes": delta("async_writes"),
+            "commit_barriers": delta("commit_barriers"), "commit_us": round(delta("log", "sync_ns") / max(1, commits) / 1e3),
             "writes_per_commit": round(recs / max(1, commits), 1),
             "handler_cpu_us_per_write": round(delta("handler_cpu_ns") / max(1, delta("reqs")) / 1e3),
             "tier_bytes_per_data_byte": round(delta("tier_bytes_written") / max(1, data), 2),

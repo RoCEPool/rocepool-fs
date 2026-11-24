@@ -339,6 +339,8 @@ static void *mt_pinger(void *arg) {
 
 int rpfs_commit(void) {
     dc_flush_all();  /* fsync, rmdir, exit: this process's creates exist */
+    int orc = rpfs_ost_commit(0);  /* and its stripe writes are durable (ROCEPOOL_OST_ASYNC) */
+    if (orc) return orc;
     if (!cfg.mdt_async) return 0;
     pthread_once(&g_mt_once, mt_init);
     int err = 0;
@@ -362,6 +364,8 @@ int rpfs_commit(void) {
  * up to 0.5 s later. */
 int rpfs_commit_all(void) {
     dc_flush_all();
+    int orc = rpfs_ost_commit(1);
+    if (orc) return orc;
     if (!cfg.mdt_async) return 0;
     pthread_once(&g_mt_once, mt_init);
     int err = 0;
@@ -1388,6 +1392,99 @@ int fs_rmdir(const char *path) {
     return rc;
 }
 
+/* ---------------------------------------------------------------- OST commits
+ * ROCEPOOL_OST_ASYNC=1: stripe writes go flagged RQF_ASYNC, and a durable
+ * OST replies once the bytes are on its tier and the log record appended,
+ * with its epoch and the record's log position (rocepool_servers.c
+ * ost_async). Per OST this process keeps the highest such position and the
+ * epoch; fsync, close and exit send OP_OST_COMMIT to each OST with one
+ * (rpfs_ost_commit), replied to once its log is durable through it. A changed
+ * epoch -- the OST restarted with this process's writes maybe not on disk --
+ * fails that fsync / close with EIO. */
+typedef struct {
+    pthread_mutex_t lk;
+    uint64_t epoch, pending;  /* pending: highest log position not known durable; 0 none */
+    int lost;
+} ost_track_t;
+static ost_track_t g_ot[MAX_PEERS];
+static int g_ost_async;
+static atomic_ullong g_ost_async_writes, g_ost_barriers, g_ost_lost;
+
+static void ot_note(int i, uint64_t epoch, uint64_t lsn) {
+    ost_track_t *t = &g_ot[i];
+    pthread_mutex_lock(&t->lk);
+    if (t->pending && t->epoch != epoch) t->lost = 1;  /* restarted since an earlier write */
+    t->epoch = epoch;
+    if (lsn > t->pending) t->pending = lsn;
+    pthread_mutex_unlock(&t->lk);
+    atomic_fetch_add(&g_ost_async_writes, 1);
+}
+
+static int ot_barrier(int i) {
+    ost_track_t *t = &g_ot[i];
+    pthread_mutex_lock(&t->lk);
+    uint64_t want = t->pending, ep = t->epoch;
+    int lost = t->lost;
+    t->lost = 0;
+    pthread_mutex_unlock(&t->lk);
+    if (lost) {
+        atomic_fetch_add(&g_ost_lost, 1);
+        return -EIO;
+    }
+    if (!want) return 0;
+    rp_resp_t r;
+    int rc = rp_rpc(&g_osts[i], RP_OST_COMMIT, "", NULL, 0, NULL, 0, &r);
+    atomic_fetch_add(&g_ost_barriers, 1);
+    if (rc) return -EIO;
+    uint64_t rep = 0, upto = 0;
+    if (r.op == RP_OST_COMMIT_OK && r.vlen >= 16) {
+        memcpy(&rep, r.val, 8);
+        memcpy(&upto, r.val + 8, 8);
+    } else {
+        rc = -EIO;
+    }
+    rp_resp_free(&r);
+    if (rc) return rc;
+    pthread_mutex_lock(&t->lk);
+    if (rep != ep || t->epoch != ep) {  /* this OST restarted: what it acknowledged early may be gone */
+        t->pending = 0;
+        t->lost = 0;
+        rc = -EIO;
+    } else if (t->pending <= upto) {
+        t->pending = 0;  /* else a write noted meanwhile: the next barrier */
+    }
+    pthread_mutex_unlock(&t->lk);
+    if (rc) atomic_fetch_add(&g_ost_lost, 1);
+    return rc;
+}
+
+/* every OST this process has early-acknowledged writes on (all: every OST) */
+int rpfs_ost_commit(int all) {
+    if (!g_ost_async) return 0;
+    int err = 0;
+    for (int i = 0; i < cfg.nost; i++) {
+        pthread_mutex_lock(&g_ot[i].lk);
+        int any = g_ot[i].pending || g_ot[i].lost;
+        pthread_mutex_unlock(&g_ot[i].lk);
+        if (!any && !all) continue;
+        if (!any) {  /* sync(): a barrier there all the same (other processes' writes) */
+            rp_resp_t r;
+            if (rp_rpc(&g_osts[i], RP_OST_COMMIT, "", NULL, 0, NULL, 0, &r) == 0) rp_resp_free(&r);
+            else if (!err) err = -EIO;
+            continue;
+        }
+        int rc = ot_barrier(i);
+        if (rc && !err) err = rc;
+    }
+    return err;
+}
+
+void rpfs_ost_commit_stats(unsigned long long *writes, unsigned long long *barriers, unsigned long long *lost) {
+    *writes = atomic_load(&g_ost_async_writes);
+    *barriers = atomic_load(&g_ost_barriers);
+    *lost = atomic_load(&g_ost_lost);
+}
+
 /* ---------------------------------------------------------------- striped data
  * A write is a list of segments, contiguous in file order: the kernel's
  * WRITE requests as they sit in their arena buffers (rocepool_client.h
@@ -1413,12 +1510,16 @@ static void stripe_write_task(void *arg) {
     stripe_io_t *t = arg;
     char key[4200];
     stripe_key(key, sizeof(key), t->path, t->idx);
-    peer_t *p = &g_osts[ost_for_stripe(t->a, t->idx)];
+    int oi = ost_for_stripe(t->a, t->idx);
+    peer_t *p = &g_osts[oi];
     int rc;
+    if (g_ost_async) rp_next_flags = RP_RQF_ASYNC;  /* durable at fsync / close (rpfs_ost_commit) */
     if (t->lo == 0 && t->hi == t->a->ss)
         rc = rp_ost_put_v(p, key, t->seg, t->nseg, -1, NULL);  /* whole stripe: blind PUT */
     else  /* one atomic WRITE_AT (was: stat/get/stat + CAS put, retried) */
         rc = rp_ost_write_at_v(p, key, t->lo, t->seg, t->nseg, NULL, NULL);
+    rp_next_flags = 0;
+    if (!rc && rp_last_tx_lsn) ot_note(oi, rp_last_tx_epoch, rp_last_tx_lsn);
     rp_bulk_free(t->gathered);
     group_done(t->g, rc);
 }
@@ -2991,6 +3092,9 @@ int rpfs_init(void) {
     if (dl && *dl) g_direct_lookup = strcmp(dl, "0") && strcmp(dl, "off");
     const char *ma = getenv("ROCEPOOL_MDT_ASYNC");
     if (ma && !strcmp(ma, "1")) cfg.mdt_async = 1;
+    const char *oa = getenv("ROCEPOOL_OST_ASYNC");
+    if (oa && !strcmp(oa, "1")) g_ost_async = 1;
+    for (int i = 0; i < MAX_PEERS; i++) pthread_mutex_init(&g_ot[i].lk, NULL);
     const char *dfc = getenv("ROCEPOOL_DEFER_CREATE");
     if (dfc && !strcmp(dfc, "1")) g_defer_create = 1;
     const char *ag = getenv("ROCEPOOL_AGENT");
