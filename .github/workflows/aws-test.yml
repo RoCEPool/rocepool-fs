@@ -203,6 +203,20 @@ jobs:
           epending=$(aws service-quotas list-requested-service-quota-change-history-by-quota --service-code ec2 --quota-code L-0263D0A3 \
                     --query 'RequestedQuotas[].[DesiredValue,Status,Created]' --output text 2>/dev/null | tr '\t\n' ' ;' | cut -c1-300)
           echo "::notice title=Elastic IPs::quota $eq, $eused allocated in $AWS_DEFAULT_REGION; requests: ${epending:-none}"
+          # spending so far (free APIs only: AWS Budgets and resource listings; Cost
+          # Explorer charges per request and is not called). The account ID is masked.
+          acct=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "")
+          [ -n "$acct" ] && echo "::add-mask::$acct"
+          if [ -n "$acct" ]; then
+            b=$(aws budgets describe-budgets --account-id "$acct" --query 'Budgets[].[BudgetName,BudgetLimit.Amount,CalculatedSpend.ActualSpend.Amount,CalculatedSpend.ForecastedSpend.Amount,TimeUnit]' \
+                --output text 2>&1 | tr '\t\n' ' ;' | sed "s/$acct/***/g" | cut -c1-600)
+            echo "::notice title=AWS Budgets (limit, actual, forecast)::${b:-no budgets defined}"
+          fi
+          vols=$(aws ec2 describe-volumes --filters Name=status,Values=available --query 'Volumes[].[VolumeId,Size,VolumeType]' \
+                 --output text 2>/dev/null | tr '\t\n' ' ;' | cut -c1-400)
+          idle=$(aws ec2 describe-addresses --query 'Addresses[?AssociationId==null].PublicIp' --output text 2>/dev/null | cut -c1-200)
+          snaps=$(aws ec2 describe-snapshots --owner-ids self --query 'length(Snapshots)' --output text 2>/dev/null || echo "?")
+          echo "::notice title=resources that bill while idle::unattached volumes: ${vols:-none}; idle Elastic IPs: ${idle:-none}; snapshots: $snaps"
       - name: terminate the given instances
         if: ${{ inputs.terminate_ids != '' }}
         run: |
