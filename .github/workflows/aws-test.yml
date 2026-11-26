@@ -216,6 +216,10 @@ jobs:
                  --output text 2>/dev/null | tr '\t\n' ' ;' | cut -c1-400)
           idle=$(aws ec2 describe-addresses --query 'Addresses[?AssociationId==null].PublicIp' --output text 2>/dev/null | cut -c1-200)
           snaps=$(aws ec2 describe-snapshots --owner-ids self --query 'length(Snapshots)' --output text 2>/dev/null || echo "?")
+          for ct in i3en.6xlarge i3en.12xlarge i4i.8xlarge i4i.16xlarge i7i.8xlarge i7i.12xlarge i7i.16xlarge im4gn.8xlarge c6id.16xlarge m6id.16xlarge r6id.16xlarge; do
+            f=$(aws ec2 describe-instance-types --instance-types "$ct" --query 'InstanceTypes[0].[VCpuInfo.DefaultVCpus,MemoryInfo.SizeInMiB,NetworkInfo.NetworkPerformance,NetworkInfo.EfaSupported,InstanceStorageInfo.TotalSizeInGB,InstanceStorageInfo.Disks[0].Count]' --output text 2>/dev/null | tr '\t' ' ')
+            echo "::notice title=type $ct (vCPU, MiB, network, EFA, NVMe GB, disks)::${f:-unknown here}"
+          done
           echo "::notice title=resources that bill while idle::unattached volumes: ${vols:-none}; idle Elastic IPs: ${idle:-none}; snapshots: $snaps"
       - name: terminate the given instances
         if: ${{ inputs.terminate_ids != '' }}
