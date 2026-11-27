@@ -677,20 +677,53 @@ class Run:
                 "/opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM | grep -q 'provider: efa'",
             ]
         if (facts or {}).get("nvme"):
-            # instance-store NVMe (i3en, i4i, ...) comes blank: one RAID 0 of
-            # all of them, XFS, at /nvmedata -- tools/nvme_preflight.py then
-            # puts the OSTs' tier there (an NVMe-backed file system). Only the
+            # instance-store NVMe (i3en, i4i, hpc6id, ...) comes blank. Two layouts
+            # (ROCEPOOL_NVME_LAYOUT on the runner):
+            #  raw: every device split in two -- a small first
+            #    partition (RAID 0 of them, XFS at /nvmedata: the servers' logs,
+            #    a commit there is the log's own write) and the rest, raw, for the
+            #    OSTs' tiers: one RAID 0 per NUMA node (/dev/rocepool-tier-<j>),
+            #    so a tier's commit is a device flush, never a file system's
+            #    journal (on XFS 0.9-1.5 ms per commit on its own,
+            #    docs/IO500_SERVER_PATHS.md section 1);
+            #  xfs (default): one RAID 0 of all of them, XFS at /nvmedata, the
+            #    tiers files on it. On RAM-backed devices (CI tier-commit) the raw
+            #    tiers committed no faster (694 us vs 662-671 on XFS): the default
+            #    stays until real NVMe says otherwise.
+            # Any step of the raw layout failing: the xfs one. Only the
             # instance store, never the EBS system disk (its model differs).
+            layout = os.environ.get("ROCEPOOL_NVME_LAYOUT", "xfs")
+            log_gib = int(os.environ.get("ROCEPOOL_NVME_LOG_GIB", "64"))
             lines += [
                 "apt_install mdadm xfsprogs",
                 "devs=$(for d in /dev/nvme*n1; do m=$(cat /sys/block/$(basename $d)/device/model 2>/dev/null); "
                 "case \"$m\" in *'Instance Storage'*) findmnt -rn -S $d >/dev/null || echo $d;; esac; done)",
                 "n=$(echo $devs | wc -w)",
+                "raid0() { local md=$1; shift; if [ $# -gt 1 ]; then sudo mdadm --create $md --run --level=0 "
+                "--raid-devices=$# \"$@\" >/dev/null && echo $md; else echo $1; fi; }",
+                "xfs_layout() { dev=$(raid0 /dev/md0 $devs) && sudo mkfs.xfs -f -q $dev && sudo mkdir -p /nvmedata "
+                "&& sudo mount -o noatime $dev /nvmedata && echo \"local NVMe: $n device(s), XFS at /nvmedata\"; }",
+                "raw_layout() {",
+                "  local k g j d t p1s='' p2s=() part",
+                "  k=$(ls -d /sys/devices/system/node/node[0-9]* 2>/dev/null | wc -l); [ $k -ge 1 ] || k=1",
+                "  [ $((n % k)) -eq 0 ] || k=1; g=$((n / k))",
+                f"  for d in $devs; do sudo wipefs -aq $d && printf 'label: gpt\\n,{log_gib}G\\n,\\n' | sudo sfdisk -q $d "
+                "|| return 1; done",
+                "  sudo udevadm settle || true",
+                "  for d in $devs; do part=$d; case $d in *[0-9]) part=${d}p;; esac; p1s=\"$p1s ${part}1\"; "
+                "p2s+=(${part}2); [ -b ${part}1 ] && [ -b ${part}2 ] || return 1; done",
+                "  dev=$(raid0 /dev/md0 $p1s) && sudo mkfs.xfs -f -q $dev && sudo mkdir -p /nvmedata "
+                "&& sudo mount -o noatime $dev /nvmedata || return 1",
+                "  for j in $(seq 0 $((k - 1))); do t=$(raid0 /dev/md$((10 + j)) ${p2s[@]:$((j * g)):$g}) "
+                "&& [ -b \"$t\" ] && sudo ln -sfn $t /dev/rocepool-tier-$j || return 1; done",
+                "  echo \"local NVMe: $n device(s): logs on XFS at /nvmedata, $k raw tier(s) /dev/rocepool-tier-*\"",
+                "}",
                 "if [ $n -gt 0 ] && ! mountpoint -q /nvmedata; then "
-                "if [ $n -gt 1 ]; then sudo mdadm --create /dev/md0 --run --level=0 --raid-devices=$n $devs >/dev/null "
-                "&& dev=/dev/md0; else dev=$devs; fi; "
-                "sudo mkfs.xfs -f -q $dev && sudo mkdir -p /nvmedata && sudo mount -o noatime $dev /nvmedata; fi",
-                "if [ $n -gt 0 ]; then mountpoint -q /nvmedata && echo \"local NVMe: $n device(s) at /nvmedata\"; fi",
+                + ("if ! (raw_layout); then echo 'raw NVMe layout failed: XFS instead'; "
+                   "sudo umount /nvmedata 2>/dev/null || true; sudo rm -f /dev/rocepool-tier-*; "
+                   "sudo mdadm --stop --scan 2>/dev/null || true; for d in $devs; do sudo wipefs -aq $d || true; done; "
+                   "xfs_layout; fi; " if layout == "raw" else "xfs_layout; ")
+                + "fi",
             ]
         if libfabric:
             lines += [

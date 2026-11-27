@@ -142,3 +142,35 @@ every OST.
 `tools/hard_write_bench.py` (2 nodes x 4 writers, ext4 on this project's
 2-vCPU VM, 20 s): 151 -> 216 MiB/s (+43%), 9.4 -> 26.1 writes per commit,
 every piece read back right.
+
+## 5. The tier on raw NVMe (`ROCEPOOL_NVME_LAYOUT=raw`, opt-in)
+
+Section 1 measured the commit on a RAM-backed device -- where a flush costs
+nothing -- at 0.9-1.5 ms on XFS and ~1 ms on ext4: the file system's own work
+(journal, extent conversions) for every commit of a file tier. The OST tier
+already took block devices (`ost_tier.c`), so the hosts now give it some:
+
+- `tools/aws_cluster.py` (`ROCEPOOL_NVME_LAYOUT=raw`; `xfs`, the old layout, stays the default): every
+  instance-store device is split -- a 64 GiB partition (`ROCEPOOL_NVME_LOG_GIB`)
+  into a RAID 0 with XFS at `/nvmedata` for the servers' logs, the rest raw:
+  one RAID 0 per NUMA node, `/dev/rocepool-tier-<j>` (hpc6id.32xlarge: 4
+  devices, 2 NUMA nodes -> a RAID 0 of 2 per OST; i3en.12xlarge: 4 devices,
+  1 node -> one RAID 0 of 4). Any step failing: the old layout (one XFS over all of them).
+  `ROCEPOOL_NVME_LAYOUT=xfs` keeps the old one.
+- `tools/nvme_preflight.py`: with as many raw tiers as OSTs per node and
+  `/nvmedata` mounted, recommends `file:/dev/rocepool-tier-{l}` ({l}: the OST's
+  number on its node) and the logs in `/nvmedata`; it measures the write
+  speed on the raw device itself.
+- A tier commit is then the log's write plus a device flush.
+
+Tests: `tests/test_nvme_layout.py` (the setup script against fake devices:
+i3en and hpc6id shapes, the fallback), `tests/test_raw_tier.py` (OSTs on loop
+devices: ior-hard's shape survives SIGKILL, synced and async),
+`tests/test_nvme_preflight.py`, `tests/test_io500_cluster.py`. CI
+`tier-commit` adds raw RAM-backed devices beside XFS and ext4. Locally, on
+loop devices backed by files, raw was slower (each flush is a file's fsync
+underneath): only real NVMe tells. CI's RAM-backed devices (a flush free):
+raw 437 MiB/s, commit 694 us; XFS files 449-454 MiB/s, 662-671 us; ext4 433
+MiB/s, 784 us -- no gain where the device costs nothing, so XFS stays the
+default until the hpc6id run compares them on real NVMe (the raw layout
+keeps an XFS partition, so both can be measured on the same hosts).

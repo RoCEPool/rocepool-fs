@@ -199,6 +199,8 @@ def tier_dir(spec: str | None) -> str | None:
     head, sep, tail = path.rpartition(":")
     if sep and tail.isdigit():
         path = head
+    if path.startswith("/dev/"):   # a raw device: no directory of its own
+        return None
     return os.path.dirname(path) or None
 
 
@@ -216,7 +218,9 @@ def durable_logs(servers: list[dict], tier_env: dict, cluster, env: dict) -> dic
         print("== durability OFF (ROCEPOOL_DURABLE=0): acknowledged data lives in RAM -- not valid under IO500 rule 6",
               flush=True)
         return {"on": False, "reason": "ROCEPOOL_DURABLE=0"}
-    dirs = {node: tier_dir(e.get("ROCEPOOL_OST_TIER")) for node, e in tier_env.items()}
+    dirs = {node: e.get("ROCEPOOL_LOG_DIR") or tier_dir(e.get("ROCEPOOL_OST_TIER"))
+            or ("/dev" if (e.get("ROCEPOOL_OST_TIER") or "").startswith("file:/dev/") else None)
+            for node, e in tier_env.items()}
     # the log must be on a file system that survives a power cut: a raw
     # namespace's "directory" is /dev (devtmpfs, RAM). Such a node's logs go
     # to /var/lib/rocepool on its root file system instead, if that one is.
@@ -1258,6 +1262,8 @@ def main() -> int:
                     if rec.get("tier_dir"):
                         cluster.run(node.index, ["mkdir", "-p", rec["tier_dir"]], env, net=False, timeout=60)
                     tier_env[node.index] = {"ROCEPOOL_OST_TIER": rec["tier"]}
+                    if rec.get("log_dir"):   # raw tiers: the logs on the NVMe file system beside them
+                        tier_env[node.index]["ROCEPOOL_LOG_DIR"] = rec["log_dir"]
                     if rec.get("p2pmem"):
                         tier_env[node.index]["ROCEPOOL_P2PMEM"] = rec["p2pmem"]
             # data is striped evenly over every OST: a host whose storage is
@@ -1293,11 +1299,15 @@ def main() -> int:
             # MDTs' pinned lookup tables, page cache in use) split over its OSTs
             ram_mib = 64 if not cluster.real else int(min(min(f["mem_gib"] * 0.2, f.get("mem_avail_gib", f["mem_gib"]) * 0.25)
                                                           for f in facts) * 1024 / args.osts_per_node)
+        local_k: dict = {}
         for k, s in enumerate(x for x in servers if x["kind"] == "ost"):
             # {n}: every OST its own file, numbered across the cluster (the
-            # simulated nodes share one file system)
+            # simulated nodes share one file system); {l}: numbered on its
+            # node (a node's raw tiers, /dev/rocepool-tier-<l>)
+            lk = local_k[s["node"]] = local_k.get(s["node"], -1) + 1
             if s["node"] in tier_env:
-                s["env"] = {k2: v.replace("{n}", str(k)) for k2, v in tier_env[s["node"]].items()}
+                s["env"] = {k2: v.replace("{n}", str(k)).replace("{l}", str(lk))
+                            for k2, v in tier_env[s["node"]].items() if k2 != "ROCEPOOL_LOG_DIR"}
                 s["env"]["ROCEPOOL_OST_RAM_CACHE_MIB"] = str(ram_mib)
                 s["tier"] = s["env"]["ROCEPOOL_OST_TIER"]
                 if cluster.real:

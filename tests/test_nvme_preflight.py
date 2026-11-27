@@ -148,6 +148,37 @@ class NvmePreflightTests(unittest.TestCase):
         self.assertEqual(p["recommendation"]["tier"], "file:/rocepool_tier/rocepool_ost_{n}.tier:175")
         self.assertFalse(any("not NVMe" in n for n in p["recommendation"]["notes"]))
 
+    def raw_host(self, ntiers):
+        """the raw NVMe layout (tools/aws_cluster.py): md0 (partitions) XFS on
+        /nvmedata for the logs, /dev/rocepool-tier-<j> -> md1<j> raw"""
+        root = fake_host(os.path.join(self.tmp, "r"), mount_free_gib=0)
+        w(os.path.join(root, "proc", "mounts"), "/dev/sda1 / ext4 rw 0 0\n/dev/md0 /nvmedata xfs rw 0 0\n")
+        os.makedirs(os.path.join(root, "sys", "class", "block", "md0", "slaves", "nvme0n1p1"))
+        os.makedirs(os.path.join(root, "nvmedata"))
+        nvme_preflight._FAKE_FREE[os.path.join(root, "nvmedata")] = 60 << 30
+        for j in range(ntiers):
+            w(os.path.join(root, "dev", f"md1{j}"), "")
+            os.symlink(f"md1{j}", os.path.join(root, "dev", f"rocepool-tier-{j}"))
+            w(os.path.join(root, "sys", "class", "block", f"md1{j}", "size"), str((7000 << 30) // 512))
+        return root
+
+    def test_raw_tiers_with_the_logs_beside_them(self):
+        p = nvme_preflight.probe(self.raw_host(2), osts_per_node=2)
+        rec = p["recommendation"]
+        self.assertEqual(rec["tier"], "file:/dev/rocepool-tier-{l}")
+        self.assertEqual(rec["log_dir"], "/nvmedata")
+        self.assertIsNone(rec["tier_dir"])
+        self.assertEqual([(t["path"], t["size_bytes"] >> 30) for t in rec["raw_tiers"]],
+                         [("/dev/rocepool-tier-0", 7000), ("/dev/rocepool-tier-1", 7000)])
+        self.assertIn("raw NVMe tiers", rec["notes"][0])
+
+    def test_fewer_raw_tiers_than_osts_a_file_tier(self):
+        p = nvme_preflight.probe(self.raw_host(1), osts_per_node=2)
+        rec = p["recommendation"]
+        self.assertEqual(rec["tier"], "file:/nvmedata/rocepool_ost_{n}.tier:24")    # 60 GiB * 0.8 / 2
+        self.assertNotIn("log_dir", rec)
+        self.assertIn("1 raw tier(s) for 2 OSTs", rec["notes"][0])
+
     def test_measure_write(self):
         r = nvme_preflight.measure_write(os.path.join(self.tmp, "tier"), mib=8)
         # a number, or why not (tmpfs refuses O_DIRECT); never a leftover file
