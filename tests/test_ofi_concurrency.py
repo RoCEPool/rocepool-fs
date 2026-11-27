@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -280,3 +281,89 @@ class OfiPipelineTests(unittest.TestCase):
         d = self.run_once(23580, {"ROCE_BUFPOOL_MAX": "12"})  # (2 + pipe + big) * 1 + 8 <= 12
         self.assertEqual(d["bad"], [])
         self.assertEqual((d["pull_pipeline"], d["big_replies"]), (2, 0))
+
+
+BIGREAD_CLIENT = r'''
+import hashlib, json, sys, threading, time
+sys.path.insert(0, sys.argv[1])
+from roce.roce_transport import RoCETransport
+from roce.remote_engine import RemoteEngine
+from roce.protocol import Frame, Op
+ost, nobj, nthreads = sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
+def data(i):
+    return (hashlib.sha256(b"%d" % i).digest() * ((1 << 20) // 32))[:(1 << 20) - 3 * i]
+e = RemoteEngine(ost, RoCETransport())
+for i in range(nobj):
+    e.put(f"o{i}", data(i))
+bad = []
+def work(t):
+    ee = RemoteEngine(ost, RoCETransport())
+    for i in range(t, nobj, nthreads):
+        _, b = ee.read_at(f"o{i}", 0, 1 << 20)          # a whole stripe: a large reply
+        if b != data(i):
+            bad.append(i)
+        _, b = ee.read_at(f"o{i}", 1000, 47008)          # a piece
+        if b != data(i)[1000:1000 + 47008]:
+            bad.append(-i - 1)
+t0 = time.time()
+ts = [threading.Thread(target=work, args=(t,)) for t in range(nthreads)]
+[x.start() for x in ts]; [x.join() for x in ts]
+dt = time.time() - t0
+st = json.loads(RoCETransport().send_request(ost, Frame(op=Op.STATS, request_id=1, key="", value=b"")).value)
+print("RESULT " + json.dumps({"bad": bad, "seconds": round(dt, 2), "async_tier_reads": st.get("async_tier_reads"),
+                              "tier_reads": st.get("tier_reads"), "deferred": st["transport"].get("deferred")}))
+'''
+
+
+@unittest.skipUnless(shutil.which("gcc"), "needs gcc")
+class OfiLargeTierReadTests(unittest.TestCase):
+    """A READ_AT of a megabyte only on the tier is read by the OST's tier
+    readers while the endpoint's thread goes on; its large reply is held in
+    its own buffer (ROCE_OFI_DEFER_BIG per thread) until the read is in.
+    6 x i3en, ior-easy-read: 1.2 ms per request reading the tier in the
+    endpoint's thread, threads 92% busy. Here every tier read waits 40 ms
+    (ROCEPOOL_TEST_OST_TIER_READ_DELAY_US: a device's latency without its CPU),
+    one endpoint thread, 12 clients: held, the reads overlap; with
+    ROCE_OFI_DEFER_BIG=0 the megabytes are read one after another."""
+
+    def run_once(self, port, extra):
+        sys.path.insert(0, ROOT)
+        from roce.native.build_lib import ensure_softverbs_lib
+        was = os.environ.get("ROCEPOOL_BACKEND")
+        os.environ["ROCEPOOL_BACKEND"] = "ofi"
+        try:
+            lib = ensure_softverbs_lib()
+        finally:
+            if was is None:
+                os.environ.pop("ROCEPOOL_BACKEND")
+            else:
+                os.environ["ROCEPOOL_BACKEND"] = was
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        env = dict(os.environ, ROCE_TRANSPORT_LIB=lib, PYTHONPATH=ROOT, ROCE_OFI_PROVIDER="tcp",
+                   ROCE_OFI_SERVER_EPS="1", ROCEPOOL_OST_TIER=f"file:{d}/t{{n}}:1", ROCEPOOL_OST_RAM_CACHE_MIB="1",
+                   ROCEPOOL_TEST_OST_TIER_READ_DELAY_US="40000", **extra)
+        srv = subprocess.Popen([sys.executable, "-u", os.path.join(ROOT, "tests", "fakes", "native_cluster.py"), ROOT,
+                                str(port), "1", "1"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
+        try:
+            _, _, ost = srv.stdout.readline().split()
+            r = subprocess.run([sys.executable, "-c", BIGREAD_CLIENT, ROOT, ost, "36", "12"],
+                               env=dict(env, ROCE_OFI_CLIENT_EPS="12"), capture_output=True, text=True, timeout=600)
+        finally:
+            srv.stdin.close()
+            srv.wait(timeout=30)
+        line = next((ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")), None)
+        self.assertIsNotNone(line, r.stdout + r.stderr)
+        return json.loads(line[7:])
+
+    def test_large_tier_reads_overlap(self):
+        held = self.run_once(23600, {})
+        waited = self.run_once(23610, {"ROCE_OFI_DEFER_BIG": "0"})
+        print(f"\n    held: {held}\n    waited: {waited}", file=sys.stderr)
+        self.assertEqual(held["bad"], [])
+        self.assertEqual(waited["bad"], [])
+        self.assertGreaterEqual(held["async_tier_reads"], 60)       # the megabytes too, not only the pieces
+        self.assertLessEqual(waited["async_tier_reads"], 40)        # the pieces alone
+        # 36 megabytes read 40 ms each: one after another >= 1.4 s on the one thread
+        self.assertGreater(waited["seconds"], 1.4)
+        self.assertLess(held["seconds"], waited["seconds"] / 2)

@@ -485,9 +485,10 @@ typedef struct {
     atomic_ullong leases, lease_misses;
     pthread_mutex_t lru_lock;
     kv_entry *lru_head, *lru_tail;   /* head = most recently used */
-    /* async tier reads (ROCEPOOL_OST_READ_THREADS): a READ_AT of an object
-     * only on the tier is read by these threads into its reply, which the
-     * transport holds meanwhile -- the transport thread goes on instead of
+    /* async tier reads (ROCEPOOL_OST_READ_THREADS): a READ_AT or GET_V of an
+     * object only on the tier is read by these threads into its reply, which
+     * the transport holds meanwhile (a large one in its own buffer, the OFI
+     * transport's ROCE_OFI_DEFER_BIG per thread) -- the transport thread goes on instead of
      * waiting out the device (and no stripe lock is held across a pread) */
     struct tier_rd *rq_head, *rq_tail;
     pthread_mutex_t rq_lk;
@@ -1056,7 +1057,11 @@ typedef struct tier_rd {
  * in whichever thread reads -- the handler, or a tier reader */
 static int tier_read_at(ost_store *s, const tier_ext_t *ext, uint64_t off, void *buf, size_t len) {
     static long us = -1;
-    if (us < 0) { const char *d = getenv("ROCEPOOL_TEST_OST_READ_DELAY_US"); us = d ? atol(d) : 0; }
+    if (us < 0) {  /* ROCEPOOL_TEST_OST_TIER_READ_DELAY_US: the tier read alone, not the handler */
+        const char *d = getenv("ROCEPOOL_TEST_OST_TIER_READ_DELAY_US");
+        if (!d) d = getenv("ROCEPOOL_TEST_OST_READ_DELAY_US");
+        us = d ? atol(d) : 0;
+    }
     if (us > 0) usleep((useconds_t)us);
     return ost_tier_read(s->tier, ext, off, buf, len);
 }
@@ -1475,7 +1480,7 @@ static uint8_t *ost_handle(ost_store *s, const frame_t *f, size_t *out_len) {
         if (v) {
             wr_u64be(v, e->version);
             if (n && e->data) { memcpy(v + 8, e->data + from, n); if (s->tier) lru_touch(s, e); }
-            else if (n && f->op == OP_READ_AT && tier_rd_submit(s, st, h, f, e, from, n, out, v, *out_len) == 0) { /* async */ }
+            else if (n && tier_rd_submit(s, st, h, f, e, from, n, out, v, *out_len) == 0) { /* async */ }
             else if (n) { rc = tier_read_at(s, &e->ext, from, v + 8, n); atomic_fetch_add(&s->tier_reads, 1); }
         }
         pthread_mutex_unlock(&st->lock);

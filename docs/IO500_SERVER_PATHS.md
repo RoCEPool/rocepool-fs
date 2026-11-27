@@ -74,8 +74,17 @@ Reads did not change there (1.6-1.7 GiB/s either way): that setup's threads
 are busy with the reads themselves, not waiting for sends. What this gives
 on EFA -- where the wait is the client-driven pull (i3en) or nearly nothing
 (families with RDMA read in hardware, e.g. hpc6id) -- is for the next run on
-real hosts; the tier write (0.36 ms) and the tier read of a large GET are
-still done in the thread.
+real hosts; the tier write (0.36 ms) is still done in the thread.
+
+A large tier read no longer is: a READ_AT or GET_V of an object only on the
+tier goes to the OST's tier readers (`ROCEPOOL_OST_READ_THREADS`, 32) for
+any size, and the transport holds its large reply in the handler's own pool
+buffer until the read is in (`ROCE_OFI_DEFER_BIG`, 8 per thread; 0 = wait as
+before) -- ior-easy-read's 1.2 ms per megabyte in the endpoint's thread on
+i3en. Before, only replies under 64 KiB could be held. Test
+(`OfiLargeTierReadTests`: one endpoint thread, 12 clients, every tier read
+40 ms): 36 megabytes and 36 pieces in 0.54 s held against 1.72 s waited,
+every byte right.
 
 Tests: `tests/test_ofi_concurrency.py` `OfiPipelineTests` (several pulls and
 large replies in flight on one thread, every byte right; both turned off;
