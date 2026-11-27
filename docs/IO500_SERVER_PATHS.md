@@ -144,9 +144,9 @@ already took block devices (`ost_tier.c`), so the hosts now give it some:
 - `tools/aws_cluster.py` (`ROCEPOOL_NVME_LAYOUT=raw`, the default): every
   instance-store device is split -- a 64 GiB partition (`ROCEPOOL_NVME_LOG_GIB`)
   into a RAID 0 with XFS at `/nvmedata` for the servers' logs, the rest raw:
-  one RAID 0 per NUMA node, `/dev/rocepool-tier-<j>` (hpc6id: 2 devices, 2
-  NUMA nodes -> one device per OST; i3en.12xlarge: 4 devices, 1 node -> one
-  RAID 0). Any step failing: the old layout (one XFS over all of them).
+  one RAID 0 per NUMA node, `/dev/rocepool-tier-<j>` (hpc6id.32xlarge: 4
+  devices, 2 NUMA nodes -> a RAID 0 of 2 per OST; i3en.12xlarge: 4 devices,
+  1 node -> one RAID 0 of 4). Any step failing: the old layout (one XFS over all of them).
   `ROCEPOOL_NVME_LAYOUT=xfs` keeps the old one.
 - `tools/nvme_preflight.py`: with as many raw tiers as OSTs per node and
   `/nvmedata` mounted, recommends `file:/dev/rocepool-tier-{l}` ({l}: the OST's

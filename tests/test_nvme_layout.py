@@ -98,7 +98,13 @@ class NvmeLayoutTests(unittest.TestCase):
         self.assertNotIn("nvme0n1", calls)                      # never the system disk
         self.assertEqual(calls.count("sfdisk"), 4)
 
-    def test_hpc6id_two_devices_two_numa_nodes(self):
+    def test_hpc6id_four_devices_two_numa_nodes(self):
+        out, calls, links = self.run_layout(4, 2)
+        self.assertEqual(links, {"rocepool-tier-0": "/dev/md10", "rocepool-tier-1": "/dev/md11"})
+        self.assertIn("mdadm --create /dev/md10 --run --level=0 --raid-devices=2 /dev/nvme1n1p2 /dev/nvme2n1p2", calls)
+        self.assertIn("mdadm --create /dev/md11 --run --level=0 --raid-devices=2 /dev/nvme3n1p2 /dev/nvme4n1p2", calls)
+
+    def test_two_devices_two_numa_nodes_one_device_each(self):
         out, calls, links = self.run_layout(2, 2)
         self.assertEqual(links, {"rocepool-tier-0": "/dev/nvme1n1p2", "rocepool-tier-1": "/dev/nvme2n1p2"})
         self.assertIn("--raid-devices=2 /dev/nvme1n1p1 /dev/nvme2n1p1", calls)
