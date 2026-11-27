@@ -214,6 +214,15 @@ class ValidityTests(unittest.TestCase):
         self.assertTrue(rep["on"])
         self.assertEqual(srv[0]["env"]["ROCEPOOL_MDT_LOG"], "/var/lib/rocepool/rocepool_mdt_0.log")
         self.assertIn("devtmpfs", rep["moved"][0])
+        # raw tiers from the host's setup: the logs where preflight says (/nvmedata)
+        fs["/nvmedata"] = "xfs"
+        srv = [{"kind": "mdt", "node": 0}, {"kind": "ost", "node": 0}]
+        rep = durable_logs(srv, {0: {"ROCEPOOL_OST_TIER": "file:/dev/rocepool-tier-{l}", "ROCEPOOL_LOG_DIR": "/nvmedata"}},
+                           C(), {})
+        self.assertTrue(rep["on"])
+        self.assertNotIn("moved", rep)
+        self.assertEqual(srv[1]["env"]["ROCEPOOL_OST_LOG"], "/nvmedata/rocepool_ost_0.log")
+        self.assertIsNone(tier_dir("file:/dev/rocepool-tier-{l}"))
         fs["/var/lib/rocepool"] = "tmpfs"
         rep = durable_logs([{"kind": "mdt", "node": 0}], raw, C(), {})
         self.assertEqual((rep["on"], rep["nodes_without_tier"]), (False, [0]))

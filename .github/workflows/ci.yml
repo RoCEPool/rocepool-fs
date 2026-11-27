@@ -79,6 +79,22 @@ jobs:
             sudo umount /mnt/t_$fs
             sudo rm -f /dev/shm/$fs.img
           done
+      - name: ior-hard-write shape, durable OSTs -- raw block devices (the AWS hosts' raw NVMe layout)
+        # the tiers on RAM-backed loop devices with no file system, the logs on
+        # XFS beside them: what is left of a commit without a tier file system
+        run: |
+          set -o pipefail
+          sudo truncate -s 2G /dev/shm/logs.img
+          sudo mkfs.xfs -q /dev/shm/logs.img
+          sudo mkdir -p /mnt/t_logs
+          sudo mount -o loop /dev/shm/logs.img /mnt/t_logs
+          for i in 0 1; do
+            sudo truncate -s 3G /dev/shm/raw$i.img
+            sudo ln -sfn $(sudo losetup -f --show /dev/shm/raw$i.img) /dev/rocepool-bench-$i
+          done
+          sudo -E env "PATH=$PATH" python3 tools/hard_write_bench.py --dir /mnt/t_logs/bench --seconds 30 \
+            --writers 16 --tier-gib 3 --ram-cache-mib 64 --tier "file:/dev/rocepool-bench-{node}" \
+            --sets "raw-synced:;raw-ost-async:ROCEPOOL_OST_ASYNC=1" 2>&1 | tee -a bench.log
       - name: summary
         if: always()
         run: grep -E '^== ' bench.log | cut -c1-900 | sed 's/^== /::notice title=tier commit::/' || true

@@ -159,13 +159,29 @@ def probe(root: str = "/", osts_per_node: int = 1) -> dict:
     mnts = mounts(root)
     pairs = [{"nic": n["name"], "nvme": v["name"], **relation(n, v)} for n in nics for v in nvmes]
     rec: dict = {"tier": None, "p2pmem": None, "notes": []}
+    raw = raw_tiers(root)
+    # raw tiers the host's setup made (tools/aws_cluster.py, the "raw" NVMe
+    # layout): one per OST when there are enough, and an NVMe-backed file
+    # system beside them for the servers' logs. A tier's commit is then a
+    # device flush, not a file system's journal.
+    logfs = next((m for m in mnts if m["mountpoint"] == "/nvmedata"), None)
+    if raw and len(raw) >= osts_per_node and logfs:
+        rec.update(tier=f"file:{os.path.join(RAW_TIER_DIR, RAW_TIER_PREFIX)}{{l}}", tier_dir=None,
+                   log_dir=logfs["mountpoint"], raw_tiers=raw)
+        rec["notes"].append(f"raw NVMe tiers: {', '.join(t['path'] + ' ' + str(t['size_bytes'] >> 30) + ' GiB' for t in raw)}; "
+                            f"logs on {logfs['mountpoint']} ({logfs['fstype']})")
+    elif raw:
+        rec["notes"].append(f"{len(raw)} raw tier(s) for {osts_per_node} OSTs per node, or no /nvmedata: "
+                            "the tier goes on a file system instead")
     # the tier: a file on the NVMe-backed file system with the most room;
     # none: the local file system with the most room (slower than NVMe, but
     # a RAM-only OST cannot hold a 300 s write phase and the run would be
     # INVALID); a raw namespace is never written without being asked
-    best = max(mnts, key=lambda m: m["free_bytes"], default=None)
+    best = None if rec["tier"] else max(mnts, key=lambda m: m["free_bytes"], default=None)
     min_free = (16 << 30) * osts_per_node
-    if not (best and best["free_bytes"] > min_free):
+    if rec["tier"]:
+        pass
+    elif not (best and best["free_bytes"] > min_free):
         other = max(mounts(root, nvme_only=False), key=lambda m: m["free_bytes"], default=None)
         if other and other["free_bytes"] > min_free:
             best = other
@@ -183,10 +199,10 @@ def probe(root: str = "/", osts_per_node: int = 1) -> dict:
         rec["tier"] = f"file:{os.path.join(d, 'rocepool_ost_{n}.tier')}:{per_ost_gib}"
         rec["tier_dir"] = d
         rec["tier_mount"] = best
-    elif nvmes:
+    elif nvmes and not rec["tier"]:
         rec["notes"].append("NVMe present but no file system with room on it (and no other local one): mount one, "
                             "or pass ROCEPOOL_OST_TIER=file:/dev/nvmeXnY explicitly to use a raw namespace")
-    else:
+    elif not rec["tier"]:
         rec["notes"].append("no NVMe controller and no local file system with room: the OST keeps everything in RAM")
     # P2P: a published CMB on an NVMe under the same upstream port as a NIC
     # whose driver can register P2P pages
@@ -237,6 +253,40 @@ def render(p: dict) -> str:
     return "\n".join(lines)
 
 
+RAW_TIER_DIR, RAW_TIER_PREFIX = "/dev", "rocepool-tier-"
+
+
+def raw_tiers(root: str) -> list[dict]:
+    """/dev/rocepool-tier-<j>: block devices set aside for the OSTs' tiers"""
+    d = os.path.join(root, RAW_TIER_DIR.lstrip("/"))
+    out = []
+    for name in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        m = re.fullmatch(re.escape(RAW_TIER_PREFIX) + r"(\d+)", name)
+        if not m:
+            continue
+        real = os.path.realpath(os.path.join(d, name))
+        size = int(_read(os.path.join(root, "sys", "class", "block", os.path.basename(real), "size"), "0") or 0) * 512
+        out.append({"index": int(m.group(1)), "path": os.path.join(RAW_TIER_DIR, name),
+                    "device": os.path.basename(real), "size_bytes": size})
+    out.sort(key=lambda t: t["index"])
+    return [t for i, t in enumerate(out) if t["index"] == i]   # 0, 1, ... without holes
+
+
+def measure_write_dev(dev: str, mib: int = 1024) -> dict:
+    """O_DIRECT 1 MiB writes at the start of a raw tier (its contents are not
+    kept: a run starts on an empty file system)"""
+    try:
+        t0 = time.monotonic()
+        r = subprocess.run(["dd", "if=/dev/zero", f"of={dev}", "bs=1M", f"count={mib}", "oflag=direct",
+                            "conv=fdatasync"], capture_output=True, text=True, timeout=300)
+        dt = time.monotonic() - t0
+        if r.returncode:
+            return {"error": r.stderr.strip()[-200:]}
+        return {"mib_s": round(mib / dt, 1), "mib": mib, "path": dev}
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"error": str(exc)}
+
+
 def measure_write(d: str, mib: int = 1024) -> dict:
     """O_DIRECT 1 MiB writes into the tier's directory (dd, then removed):
     what the OST's direct writes will get from this file system. A slow
@@ -270,7 +320,9 @@ def main() -> int:
     args = ap.parse_args()
     p = probe(args.sysfs_root, args.osts_per_node)
     rec = p["recommendation"]
-    if args.measure and rec.get("tier"):
+    if args.measure and rec.get("raw_tiers"):
+        rec["tier_write"] = measure_write_dev(rec["raw_tiers"][0]["path"])
+    elif args.measure and rec.get("tier"):
         d = rec.get("tier_dir") or os.path.dirname(rec["tier"][5:].rsplit(":", 1)[0])
         rec["tier_write"] = measure_write(d)
     print(json.dumps(p) if args.json else render(p))

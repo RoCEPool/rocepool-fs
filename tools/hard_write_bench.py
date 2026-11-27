@@ -72,7 +72,8 @@ def one_set(cluster, base_env: dict, name: str, extra: dict, args) -> dict:
     os.makedirs(d)
     env = dict(base_env, **{k: v for k, v in extra.items() if k in CLIENT_VARS})
     ost_env = dict({k: v for k, v in extra.items() if k not in CLIENT_VARS}, ROCEPOOL_OST_LOG=f"{d}/ostlog{{node}}", ROCEPOOL_OST_RAM_CACHE_MIB=str(args.ram_cache_mib))
-    rp = RocepoolMount(cluster, env, os.path.join(args.workdir, name), MNT, ost_tier=f"file:{d}/tier{{node}}:{args.tier_gib}",
+    tier = args.tier or f"file:{d}/tier{{node}}:{args.tier_gib}"
+    rp = RocepoolMount(cluster, env, os.path.join(args.workdir, name), MNT, ost_tier=tier,
                        ost_env=ost_env)
     n = len(cluster.nodes)
     total = n * args.writers
@@ -133,6 +134,9 @@ def one_set(cluster, base_env: dict, name: str, extra: dict, args) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dir", required=True, help="where the tiers and logs go: a directory on the file system to measure")
+    ap.add_argument("--tier", default="",
+                    help="the OSTs' tier spec instead of files in --dir, e.g. file:/dev/rocepool-bench-{node} "
+                         "(raw block devices, as the AWS hosts' raw NVMe layout); the logs stay in --dir")
     ap.add_argument("--nodes", type=int, default=2)
     ap.add_argument("--writers", type=int, default=8, help="per node")
     ap.add_argument("--seconds", type=float, default=30)
@@ -150,7 +154,7 @@ def main() -> int:
         env["ROCEPOOL_RPC_TIMEOUT_MS"] = "60000"
     r = subprocess.run(["stat", "-f", "-c", "%T", args.dir if os.path.isdir(args.dir) else os.path.dirname(args.dir)],
                        capture_output=True, text=True)
-    report = {"dir": args.dir, "fstype": r.stdout.strip(), "nodes": len(cluster.nodes), "writers_per_node": args.writers,
+    report = {"dir": args.dir, "fstype": r.stdout.strip(), "tier": args.tier or "files in --dir", "nodes": len(cluster.nodes), "writers_per_node": args.writers,
               "seconds": args.seconds, "sets": []}
     try:
         for spec in [x for x in args.sets.split(";") if x.strip()]:
