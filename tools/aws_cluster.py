@@ -679,17 +679,20 @@ class Run:
         if (facts or {}).get("nvme"):
             # instance-store NVMe (i3en, i4i, hpc6id, ...) comes blank. Two layouts
             # (ROCEPOOL_NVME_LAYOUT on the runner):
-            #  raw (default): every device split in two -- a small first
+            #  raw: every device split in two -- a small first
             #    partition (RAID 0 of them, XFS at /nvmedata: the servers' logs,
             #    a commit there is the log's own write) and the rest, raw, for the
             #    OSTs' tiers: one RAID 0 per NUMA node (/dev/rocepool-tier-<j>),
             #    so a tier's commit is a device flush, never a file system's
             #    journal (on XFS 0.9-1.5 ms per commit on its own,
             #    docs/IO500_SERVER_PATHS.md section 1);
-            #  xfs: one RAID 0 of all of them, XFS at /nvmedata, the tiers files on it.
+            #  xfs (default): one RAID 0 of all of them, XFS at /nvmedata, the
+            #    tiers files on it. On RAM-backed devices (CI tier-commit) the raw
+            #    tiers committed no faster (694 us vs 662-671 on XFS): the default
+            #    stays until real NVMe says otherwise.
             # Any step of the raw layout failing: the xfs one. Only the
             # instance store, never the EBS system disk (its model differs).
-            layout = os.environ.get("ROCEPOOL_NVME_LAYOUT", "raw")
+            layout = os.environ.get("ROCEPOOL_NVME_LAYOUT", "xfs")
             log_gib = int(os.environ.get("ROCEPOOL_NVME_LOG_GIB", "64"))
             lines += [
                 "apt_install mdadm xfsprogs",

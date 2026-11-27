@@ -268,8 +268,7 @@ class AwsClusterTests(unittest.TestCase):
         self.assertIn("raid0 /dev/md0", setup)
         self.assertIn("Instance Storage", setup)       # the instance store only, never the EBS disk
         self.assertIn("mount -o noatime $dev /nvmedata", setup)
-        self.assertIn("raw_layout", setup)              # the default: raw tiers (tests/test_nvme_layout.py runs it)
-        self.assertIn("/dev/rocepool-tier-$j", setup)
+        self.assertIn("xfs_layout", setup)              # the default; raw on request (tests/test_nvme_layout.py)
         # and without local NVMe, none of it
         r = self.run_tool("--mode", "efa", "--nodes", "2", "--quick", run_id="rp-test2")
         setup = [c for c in self.calls(self.ssh_log) if "ROCEPOOL_SETUP" in c[-1]][-1][-1]

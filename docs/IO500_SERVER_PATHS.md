@@ -134,14 +134,14 @@ every OST.
 2-vCPU VM, 20 s): 151 -> 216 MiB/s (+43%), 9.4 -> 26.1 writes per commit,
 every piece read back right.
 
-## 5. The tier on raw NVMe (the AWS hosts' default layout)
+## 5. The tier on raw NVMe (`ROCEPOOL_NVME_LAYOUT=raw`, opt-in)
 
 Section 1 measured the commit on a RAM-backed device -- where a flush costs
 nothing -- at 0.9-1.5 ms on XFS and ~1 ms on ext4: the file system's own work
 (journal, extent conversions) for every commit of a file tier. The OST tier
 already took block devices (`ost_tier.c`), so the hosts now give it some:
 
-- `tools/aws_cluster.py` (`ROCEPOOL_NVME_LAYOUT=raw`, the default): every
+- `tools/aws_cluster.py` (`ROCEPOOL_NVME_LAYOUT=raw`; `xfs`, the old layout, stays the default): every
   instance-store device is split -- a 64 GiB partition (`ROCEPOOL_NVME_LOG_GIB`)
   into a RAID 0 with XFS at `/nvmedata` for the servers' logs, the rest raw:
   one RAID 0 per NUMA node, `/dev/rocepool-tier-<j>` (hpc6id.32xlarge: 4
@@ -160,4 +160,8 @@ devices: ior-hard's shape survives SIGKILL, synced and async),
 `tests/test_nvme_preflight.py`, `tests/test_io500_cluster.py`. CI
 `tier-commit` adds raw RAM-backed devices beside XFS and ext4. Locally, on
 loop devices backed by files, raw was slower (each flush is a file's fsync
-underneath): only real NVMe tells.
+underneath): only real NVMe tells. CI's RAM-backed devices (a flush free):
+raw 437 MiB/s, commit 694 us; XFS files 449-454 MiB/s, 662-671 us; ext4 433
+MiB/s, 784 us -- no gain where the device costs nothing, so XFS stays the
+default until the hpc6id run compares them on real NVMe (the raw layout
+keeps an XFS partition, so both can be measured on the same hosts).

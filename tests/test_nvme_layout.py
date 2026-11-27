@@ -1,5 +1,5 @@
 """The AWS hosts' instance-store NVMe layout (tools/aws_cluster.py
-setup_script): by default every device split -- a small partition per
+setup_script): with ROCEPOOL_NVME_LAYOUT=raw every device split -- a small partition per
 device, RAID 0, XFS at /nvmedata for the servers' logs; the rest raw, one
 RAID 0 per NUMA node, /dev/rocepool-tier-<j> for the OSTs' tiers, so a tier's
 commit is a device flush, not a file system's journal. A failing step falls
@@ -39,9 +39,11 @@ SHIMS = {
 
 @unittest.skipUnless(os.geteuid() == 0, "needs mknod (root)")
 class NvmeLayoutTests(unittest.TestCase):
-    def script(self, layout="raw"):
+    def script(self, layout="raw"):  # raw: asked for (ROCEPOOL_NVME_LAYOUT=raw)
         old = os.environ.get("ROCEPOOL_NVME_LAYOUT")
-        os.environ["ROCEPOOL_NVME_LAYOUT"] = layout
+        os.environ.pop("ROCEPOOL_NVME_LAYOUT", None)
+        if layout:
+            os.environ["ROCEPOOL_NVME_LAYOUT"] = layout
         try:
             r = aws_cluster.Run.__new__(aws_cluster.Run)
             r.state = {"mode": "efa", "facts": {"nvme": 7500}}
@@ -121,8 +123,8 @@ class NvmeLayoutTests(unittest.TestCase):
         self.assertIn("XFS at /nvmedata", out)
         self.assertEqual(links, {})
 
-    def test_xfs_layout_when_asked(self):
-        out, calls, links = self.run_layout(2, 1, layout="xfs")
+    def test_xfs_layout_by_default(self):
+        out, calls, links = self.run_layout(2, 1, layout="")
         self.assertNotIn("sfdisk", calls)
         self.assertEqual(links, {})
         self.assertIn("local NVMe: 2 device(s), XFS at /nvmedata", out)
