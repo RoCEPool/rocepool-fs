@@ -1682,6 +1682,7 @@ struct deferred {
     roce_reply_fill_fn fill;
     void *obj;
     size_t len;
+    uint8_t *big;    /* a large reply: the handler's own buffer (a pool frame), kept as it is */
     uint8_t buf[];
 };
 /* This thread's payload pulls in flight. A request with bulk sources (a
@@ -1717,6 +1718,7 @@ static __thread int tl_npulls;
 #define BIG_TX_MAX 16
 struct bigtx {
     struct op op;
+    int end_busy;           /* the client's request this answers is the one marked busy */
     struct rbuf *own;       /* a pool frame this reply was copied into, or NULL */
     uint8_t *resp;          /* the handler's reply buffer, kept until sent, or NULL */
     fi_addr_t to;
@@ -1726,6 +1728,11 @@ static __thread int tl_nbig;
 
 static __thread struct deferred *tl_dq[DEFER_MAX];
 static __thread int tl_dq_n;
+/* of those, large replies (an async tier read of a megabyte, ior-easy-read's
+ * 1.2 ms per request in the thread on i3en): each keeps its pool frame, at
+ * most ROCE_OFI_DEFER_BIG per thread (default 8; 0: large replies wait) */
+static __thread int tl_dq_big;
+static __thread int tl_in_defer;  /* sending a held reply: not the thread's current request */
 /* set by the handler (roce_server_defer_reply) for the reply it returns */
 static __thread roce_reply_ready_fn tl_defer_fn;
 static __thread roce_reply_fill_fn tl_defer_fill;
@@ -1749,6 +1756,7 @@ struct roce_server {
     int nw;
     int pull_pipe;   /* payload pulls in flight per thread (1: the thread waits) */
     int big_tx;      /* large replies in flight per thread (0: the thread waits) */
+    int defer_big;   /* large replies held for an async read per thread (0: none) */
     int lsock;
     pthread_t boot;
     atomic_int stopping;
@@ -1855,7 +1863,7 @@ static void big_reap(struct worker *w) {
         if (b->own) pool_put(w->pool, b->own);
         if (b->resp) roce_reply_free(b->resp);
         peer_release(w->s, b->to);
-        busy_end(w, b->to);  /* its client's next request may go */
+        if (b->end_busy) busy_end(w, b->to);  /* its client's next request may go */
         free(b);
     }
     tl_nbig = k;
@@ -1915,8 +1923,9 @@ static int send_reply(struct worker *w, fi_addr_t to, uint64_t tag, uint32_t sta
             b->own = own;
             b->resp = pooled ? resp : NULL;
             b->to = to;
+            b->end_busy = !tl_in_defer;
             tl_big[tl_nbig++] = b;
-            tl_kept = 1;
+            if (!tl_in_defer) tl_kept = 1;
             __atomic_add_fetch(&w->st_big_async, 1, __ATOMIC_RELAXED);
             return pooled ? 2 : 0;  /* 2: the reply buffer is ours until the send completes */
         }
@@ -1970,7 +1979,9 @@ static void handle_slot_admitted(struct worker *w, int i, const struct req_hdr *
 static void serve(struct worker *w, const struct req_hdr *hp, fi_addr_t to, const uint8_t *frame, struct rbuf *fb);
 
 int roce_server_defer_reply(roce_reply_ready_fn ready, void *obj, uint64_t token, size_t reply_len) {
-    if (!tl_defer_ok || !tl_tx || reply_len + REP_HDR > SMALL_FRAME) return -1;
+    if (!tl_defer_ok || !tl_tx) return -1;
+    if (reply_len + REP_HDR > SMALL_FRAME &&
+        (reply_len > tl_defer_ok->s->max_frame || tl_dq_big >= tl_defer_ok->s->defer_big)) return -1;
     if (tl_dq_n >= DEFER_MAX) { __atomic_add_fetch(&tl_defer_ok->st_defer_full, 1, __ATOMIC_RELAXED); return -1; }
     tl_defer_fn = ready;
     tl_defer_fill = NULL;
@@ -1993,6 +2004,16 @@ static void defer_reap(struct worker *w, int all) {
             int r = d->ready(d->obj, d->token, all);
             if (!r && all && now_ms() > end) r = -1;
             if (!r) { tl_dq[k++] = d; continue; }
+            if (d->big) {
+                if (d->fill) d->fill(d->obj, r > 0 ? d->big : NULL, d->len);
+                tl_in_defer = 1;
+                int sr = send_reply(w, d->to, d->tag, r > 0 ? 0 : 1, r > 0 ? d->big : NULL, r > 0 ? d->len : 0);
+                tl_in_defer = 0;
+                if (sr != 2) roce_reply_free(d->big);
+                tl_dq_big--;
+                free(d);
+                continue;
+            }
             if (d->fill) d->fill(d->obj, r > 0 ? d->buf : NULL, d->len);
             send_reply(w, d->to, d->tag, r > 0 ? 0 : 1, d->buf, d->len);
             free(d);
@@ -2116,6 +2137,18 @@ static void serve(struct worker *w, const struct req_hdr *hp, fi_addr_t to, cons
         if (hold && fill) { hold(tl_defer_obj, tl_defer_token, 1); fill(tl_defer_obj, NULL, 0); }
         send_reply(w, to, h.tag, 1, NULL, 0);
         return;
+    }
+    if (hold && rlen + REP_HDR > SMALL_FRAME && rlen <= w->s->max_frame && tl_dq_n < DEFER_MAX &&
+        tl_dq_big < w->s->defer_big) {
+        struct deferred *d = malloc(sizeof(*d));
+        if (d) {  /* the reply stays in the handler's buffer until it is sent */
+            *d = (struct deferred){.to = to, .tag = h.tag, .token = tl_defer_token, .ready = hold, .fill = fill,
+                                   .obj = tl_defer_obj, .len = rlen, .big = resp};
+            tl_dq[tl_dq_n++] = d;
+            tl_dq_big++;
+            __atomic_add_fetch(&w->st_deferred, 1, __ATOMIC_RELAXED);
+            return;
+        }
     }
     if (hold && rlen + REP_HDR <= SMALL_FRAME && tl_dq_n < DEFER_MAX) {
         struct deferred *d = malloc(sizeof(*d) + rlen);
@@ -2617,20 +2650,25 @@ roce_server_t *roce_server_start(const char *bind_address, roce_request_handler 
      * for each), large replies in flight (ROCE_OFI_BIG_REPLIES, 0 = wait).
      * Each holds a frame of the pool, next to the 2 a thread used before --
      * a pool capped below that (ROCE_BUFPOOL_MAX) gets fewer in flight. */
-    uint32_t pipe = env_u32("ROCE_OFI_PULL_PIPELINE", 4), big = 4;
+    uint32_t pipe = env_u32("ROCE_OFI_PULL_PIPELINE", 4), big = 4, dbig = 8;
     const char *bg = getenv("ROCE_OFI_BIG_REPLIES");
     if (bg && *bg) big = (uint32_t)(atoi(bg) < 0 ? 0 : atoi(bg));
+    const char *db = getenv("ROCE_OFI_DEFER_BIG");
+    if (db && *db) dbig = (uint32_t)(atoi(db) < 0 ? 0 : atoi(db));
+    if (dbig > 64) dbig = 64;
     if (pipe < 1) pipe = 1;
     if (pipe > PULL_PIPE_MAX) pipe = PULL_PIPE_MAX;
     if (big > BIG_TX_MAX) big = BIG_TX_MAX;
-    struct bufpool *pool = pool_for(s->d, max_frame_bytes + 4096, POOL_SERVER, (2 + pipe + big) * k * per + 8);
+    struct bufpool *pool = pool_for(s->d, max_frame_bytes + 4096, POOL_SERVER, (2 + pipe + big + dbig) * k * per + 8);
     if (!pool) goto fail;
-    while ((2 + pipe + big) * k * per + 8 > pool->max && (pipe > 1 || big > 0)) {
-        if (big > 0) big--;
+    while ((2 + pipe + big + dbig) * k * per + 8 > pool->max && (pipe > 1 || big > 0 || dbig > 0)) {
+        if (dbig > 0) dbig--;
+        else if (big > 0) big--;
         else pipe--;
     }
     s->pull_pipe = (int)pipe;
     s->big_tx = (int)big;
+    s->defer_big = (int)dbig;
     for (uint32_t i = 0; i < k; i++) {
         struct worker *w = &s->w[i];
         w->s = s;
