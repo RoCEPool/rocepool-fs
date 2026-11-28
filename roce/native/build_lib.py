@@ -239,6 +239,20 @@ def ensure_kvcache_bench() -> str:
     return out
 
 
+ADDR_BENCH_MAIN = os.path.join(NATIVE, "rocepool_addr_bench.c")
+
+
+def ensure_addr_bench() -> str:
+    """rocepool-addr-bench: a block read by key (RPC, lease) vs by address (one RDMA READ)"""
+    out = os.path.join(_outdir(), "rocepool-addr-bench")
+    srcs, cflags, ldflags = _transport()
+    core = [ADDR_BENCH_MAIN, os.path.join(NATIVE, "rocepool_client.c")]
+    if _stale(out, core + ALL_TRANSPORTS + [os.path.join(NATIVE, "rocepool_client.h")]):
+        subprocess.run([*CC, *cflags, "-I", NATIVE, *core, *srcs, "-o", out, *ldflags, "-ldl"], check=True)
+        _mark(out)
+    return out
+
+
 KV_LIB = os.path.join(NATIVE, "softverbs", "librocepool_kv.so")
 KV_BENCH = os.path.join(NATIVE, "softverbs", "rocepool-kv-bench")
 

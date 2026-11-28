@@ -15,7 +15,8 @@ tar czf "$OUT" \
   --exclude='*.buildinfo' --exclude="$N/roce/native/rocepool-fuse" --exclude="$N/roce/native/rocepool-kv-bench" \
   --exclude="$N/roce/native/softverbs/rocepool-fuse" --exclude="$N/roce/native/softverbs/rocepool-kv-bench" \
   --exclude="$N/roce/native/rocepool-kvcache-bench" --exclude="$N/roce/native/softverbs/rocepool-kvcache-bench" \
-  --exclude="$N/kvcache_report.json" \
+  --exclude="$N/roce/native/rocepool-addr-bench" --exclude="$N/roce/native/softverbs/rocepool-addr-bench" \
+  --exclude="$N/kvcache_report.json" --exclude="$N/addr_bench_report.json" \
   --exclude='rocepool-results-*' --exclude='onsite_*.json' --exclude='run.log' --exclude='selftest.log' \
   --exclude='roce_env.sh' --exclude="$N/cluster.conf" --exclude="$N/roce/native/cufile" \
   --exclude="$N/roce/native/softverbs/cufile" --exclude="$N/gds_report.json" "$N"

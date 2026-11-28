@@ -14,6 +14,8 @@ roce/native/softverbs/rocepool-agent
 roce/native/softverbs/rocepool-kv-bench
 roce/native/rocepool-kvcache-bench
 roce/native/softverbs/rocepool-kvcache-bench
+roce/native/rocepool-addr-bench
+roce/native/softverbs/rocepool-addr-bench
 roce/native/ofi/
 roce/native/.backend
 roce/native/cufile/
@@ -24,6 +26,7 @@ mnt/
 aws_runs/
 onsite_*.json
 io500_report.json
+addr_bench_report.json
 rapidsse_tpch_report.json
 rapidsse_tpch_work/
 rocepond_tpch_report.json
