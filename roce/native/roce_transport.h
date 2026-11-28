@@ -175,6 +175,33 @@ int roce_server_mem_rkey(struct roce_server *server, roce_mem_t *mem, uint32_t *
  * offset into the region on those that do not (libfabric tcp) */
 uint64_t roce_server_mem_addr(struct roce_server *server, roce_mem_t *mem, const void *va);
 
+/* -------------------- queue pairs connected by hand --------------------
+ * For a responder that has no connection manager -- the exiom FPGA memory
+ * server: the RC queue pair is created here, its attributes (QPN, first
+ * PSN, IPv4 address, MAC, UDP source port) go to the peer out of band, and
+ * it is connected with the peer's. The initiator reads and writes the
+ * peer's memory one-sided; the other side (a responder: tests, emulators)
+ * only serves them. Verbs backend only (RoCE NICs, Soft-RoCE, softverbs);
+ * the ofi backend returns NULL / -1.
+ *
+ * local_ip: the IPv4 address of the NIC to use. The GID used is the one of
+ * the port's GID table that carries that address (the last one: RoCEv2
+ * after RoCEv1), or ROCEPOOL_GID_INDEX. RTS settings: ACK timeout
+ * ROCEPOOL_RAW_TIMEOUT (verbs exponent, default 17: about 0.5 s -- a
+ * memory server may page in from NVMe before it answers), 7 retries,
+ * infinite RNR retries; path MTU: the smaller of `mtu` (bytes, 0: 4096)
+ * and the port's. */
+typedef struct roce_raw_qp roce_raw_qp_t;
+typedef struct { uint32_t qpn, psn; uint32_t ip; uint8_t mac[6]; uint16_t sport; } roce_raw_attr_t;  /* ip: host order */
+roce_raw_qp_t *roce_raw_qp_create(const char *local_ip, roce_raw_attr_t *local);
+int roce_raw_qp_connect(roce_raw_qp_t *qp, const roce_raw_attr_t *remote, int initiator, uint32_t mtu);
+/* up to 16 RDMA READs (write = 0) or WRITEs (write = 1), executed in order;
+ * 0, or -1 with the error set (the queue pair is then in error: destroy it) */
+int roce_raw_qp_rdma(roce_raw_qp_t *qp, int write, const roce_read_t *ops, int n, int timeout_ms);
+/* responder side: the key and remote address a peer uses for `va` inside `mem` */
+int roce_raw_qp_mem_rkey(roce_raw_qp_t *qp, roce_mem_t *mem, uint32_t *rkey);
+void roce_raw_qp_destroy(roce_raw_qp_t *qp);
+
 /* For server handlers: a reply buffer that, when larger than a SEND, is a
  * registered buffer the connection thread can RDMA WRITE to the client as
  * is. Every reply the handler returns must come from roce_reply_alloc or

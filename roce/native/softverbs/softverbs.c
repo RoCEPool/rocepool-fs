@@ -511,6 +511,11 @@ struct sv_id {
      * the way real RC hardware fails it. */
     uint8_t my_rd_atomic, my_init_depth, peer_rd_atomic;
     struct sv_qp *qp;
+    /* a queue pair connected without the CM (ibv_create_qp/ibv_modify_qp) */
+    int raw;
+    uint32_t dest_qpn;
+    uint32_t dest_ip;             /* network order: the IPv4 address of the destination GID */
+    struct sv_id *raw_next;       /* registry of raw queue pairs, by QPN */
 };
 
 static struct sv_id *ID(struct rdma_cm_id *pub) { return (struct sv_id *)pub; }
@@ -1137,5 +1142,201 @@ int rdma_destroy_id(struct rdma_cm_id *pub) {
     pthread_mutex_destroy(&id->lock);
     pthread_cond_destroy(&id->rq_cond);
     free(id);
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* queue pairs without the CM (ibv_create_qp / ibv_modify_qp)          */
+/* ------------------------------------------------------------------ */
+/* A responder without a connection manager -- the exiom FPGA memory
+ * server -- is reached by a queue pair created and connected by hand: the
+ * two sides exchange their QPN, PSN and address out of band, then move
+ * their queue pairs to RTR and RTS with the peer's. Over TCP here:
+ *
+ *   - the side that reads and writes (max_rd_atomic > 0 at RTS) dials the
+ *     peer when its queue pair goes to RTS, at the IPv4 address of the
+ *     destination GID (::ffff:a.b.c.d) and port SOFTVERBS_RAW_PORT (default
+ *     4791, the RoCEv2 port), naming the destination QPN and its own;
+ *   - a process that serves such queue pairs listens on
+ *     SOFTVERBS_RAW_LISTEN ("ip:port[,ip:port...]", read when the first of
+ *     its queue pairs goes to RTR) and attaches each connection to the
+ *     queue pair with that number -- in RTR or RTS, expecting the dialing
+ *     QPN -- or refuses it (the dialer's modify to RTS fails, ECONNREFUSED;
+ *     on hardware the first packet would time out instead).
+ *
+ * After that the connection carries the same RC model as a CM one. */
+static pthread_mutex_t g_raw_lock = PTHREAD_MUTEX_INITIALIZER;
+static struct sv_id *g_raw;
+static uint32_t g_raw_qpn = 0x11;
+static int g_raw_listening;
+
+static uint16_t raw_port(void) {
+    const char *e = getenv("SOFTVERBS_RAW_PORT");
+    return (uint16_t)(e && atoi(e) > 0 ? atoi(e) : 4791);
+}
+
+static void *raw_acceptor(void *arg) {
+    pthread_setname_np(pthread_self(), "sv-raw-accept");
+    int lfd = (int)(intptr_t)arg;
+    for (;;) {
+        int fd = accept(lfd, NULL, NULL);
+        if (fd < 0) { if (errno == EINTR) continue; break; }
+        tune(fd);
+        struct sv_frame f;
+        if (read_all(fd, &f, sizeof(f)) || f.type != F_CONNREQ) { close(fd); continue; }
+        pthread_mutex_lock(&g_raw_lock);
+        struct sv_id *id = g_raw;
+        while (id && !(id->qp && id->qp->pub.qp_num == (uint32_t)f.seq)) id = id->raw_next;
+        int ok = id && id->fd < 0 && id->dest_qpn == f.rkey &&
+                 (id->qp->pub.state == IBV_QPS_RTR || id->qp->pub.state == IBV_QPS_RTS);
+        if (ok) {
+            pthread_mutex_lock(&id->lock);
+            id->fd = fd;
+            id->peer_rnr_retry = f.rnr_retry;
+            id->peer_rd_atomic = f.rd_atomic;
+            ok = send_frame(id, F_CONNREP, 0, 0, NULL, 0) == 0 &&
+                 pthread_create(&id->thread, NULL, reader_thread, id) == 0;
+            if (ok) id->thread_started = 1;
+            else id->fd = -1;
+            pthread_mutex_unlock(&id->lock);
+        }
+        pthread_mutex_unlock(&g_raw_lock);
+        TRACE("raw connection to QPN 0x%x from QPN 0x%x: %s", (unsigned)f.seq, f.rkey, ok ? "attached" : "refused");
+        if (!ok) {
+            struct sv_frame r = { .type = F_CONNREP, .status = 1 };
+            if (write_all(fd, &r, sizeof(r))) { /* the dialer sees the close */ }
+            close(fd);
+        }
+    }
+    return NULL;
+}
+
+static void raw_listen(void) {   /* caller holds g_raw_lock */
+    const char *spec = getenv("SOFTVERBS_RAW_LISTEN");
+    if (g_raw_listening || !spec || !*spec) return;
+    g_raw_listening = 1;
+    char *list = strdup(spec), *save = NULL;
+    for (char *t = strtok_r(list, ",", &save); t; t = strtok_r(NULL, ",", &save)) {
+        char *colon = strrchr(t, ':');
+        struct sockaddr_in a = { .sin_family = AF_INET, .sin_port = htons(colon ? (uint16_t)atoi(colon + 1) : raw_port()) };
+        if (colon) *colon = 0;
+        if (inet_pton(AF_INET, t, &a.sin_addr) != 1) { TRACE("SOFTVERBS_RAW_LISTEN: bad address %s", t); continue; }
+        int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0), one = 1;
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+        pthread_t th;
+        if (fd < 0 || bind(fd, (struct sockaddr *)&a, sizeof(a)) || listen(fd, 128) ||
+            pthread_create(&th, NULL, raw_acceptor, (void *)(intptr_t)fd)) {
+            fprintf(stderr, "[softverbs] cannot listen for raw queue pairs on %s: %s\n", t, strerror(errno));
+            if (fd >= 0) close(fd);
+            continue;
+        }
+        pthread_detach(th);
+    }
+    free(list);
+}
+
+struct ibv_qp *ibv_create_qp(struct ibv_pd *pd, struct ibv_qp_init_attr *attr) {
+    struct rdma_cm_id *pub = NULL;
+    if (!pd || !attr || rdma_create_id(NULL, &pub, NULL, RDMA_PS_TCP)) return NULL;
+    pub->verbs = pd->context;
+    if (rdma_create_qp(pub, pd, attr)) { rdma_destroy_id(pub); return NULL; }
+    struct sv_id *id = ID(pub);
+    id->raw = 1;
+    pthread_mutex_lock(&g_raw_lock);
+    pub->qp->qp_num = g_raw_qpn++ & 0xffffff;
+    pub->qp->state = IBV_QPS_RESET;
+    id->raw_next = g_raw;
+    g_raw = id;
+    pthread_mutex_unlock(&g_raw_lock);
+    return pub->qp;
+}
+
+static int raw_dial(struct sv_id *id) {
+    struct sockaddr_in dst = { .sin_family = AF_INET, .sin_port = htons(raw_port()), .sin_addr.s_addr = id->dest_ip };
+    int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (fd < 0) return errno;
+    tune(fd);
+    struct sv_frame f = { .type = F_CONNREQ, .seq = id->dest_qpn, .rkey = id->qp->pub.qp_num,
+                          .rnr_retry = id->my_rnr_retry, .rd_atomic = id->my_rd_atomic }, rep;
+    if (connect(fd, (struct sockaddr *)&dst, sizeof(dst)) || write_all(fd, &f, sizeof(f)) ||
+        read_all(fd, &rep, sizeof(rep)) || rep.type != F_CONNREP || rep.status) {
+        close(fd);
+        return ECONNREFUSED;
+    }
+    pthread_mutex_lock(&id->lock);
+    id->fd = fd;
+    id->peer_rnr_retry = rep.rnr_retry;
+    id->peer_rd_atomic = rep.rd_atomic;
+    int rc = pthread_create(&id->thread, NULL, reader_thread, id);
+    if (!rc) id->thread_started = 1;
+    pthread_mutex_unlock(&id->lock);
+    return rc;
+}
+
+int ibv_modify_qp(struct ibv_qp *pubqp, struct ibv_qp_attr *attr, int mask) {
+    struct sv_qp *qp = (struct sv_qp *)pubqp;
+    struct sv_id *id = qp ? qp->owner : NULL;
+    if (!id || !id->raw || !attr || !(mask & IBV_QP_STATE)) return EINVAL;
+    switch (attr->qp_state) {
+    case IBV_QPS_INIT:
+        break;
+    case IBV_QPS_RTR:
+        if ((mask & (IBV_QP_AV | IBV_QP_DEST_QPN)) != (IBV_QP_AV | IBV_QP_DEST_QPN) || !attr->ah_attr.is_global)
+            return EINVAL;
+        id->dest_qpn = attr->dest_qp_num;
+        memcpy(&id->dest_ip, attr->ah_attr.grh.dgid.raw + 12, 4);
+        if (mask & IBV_QP_MAX_DEST_RD_ATOMIC) id->my_rd_atomic = attr->max_dest_rd_atomic;
+        pthread_mutex_lock(&g_raw_lock);
+        raw_listen();
+        pthread_mutex_unlock(&g_raw_lock);
+        break;
+    case IBV_QPS_RTS:
+        if (pubqp->state != IBV_QPS_RTR) return EINVAL;
+        if (mask & IBV_QP_MAX_QP_RD_ATOMIC) id->my_init_depth = attr->max_rd_atomic;
+        if (mask & IBV_QP_RNR_RETRY) id->my_rnr_retry = attr->rnr_retry;
+        if (id->my_init_depth && id->fd < 0) {
+            int rc = raw_dial(id);
+            if (rc) return rc;
+        }
+        break;
+    case IBV_QPS_ERR:
+        pthread_mutex_lock(&id->lock);
+        qp_flush(id);
+        pthread_mutex_unlock(&id->lock);
+        break;
+    default:
+        return EINVAL;
+    }
+    pubqp->state = attr->qp_state;
+    return 0;
+}
+
+int ibv_destroy_qp(struct ibv_qp *pubqp) {
+    struct sv_qp *qp = (struct sv_qp *)pubqp;
+    struct sv_id *id = qp ? qp->owner : NULL;
+    if (!id || !id->raw) return EINVAL;
+    pthread_mutex_lock(&g_raw_lock);
+    for (struct sv_id **p = &g_raw; *p; p = &(*p)->raw_next)
+        if (*p == id) { *p = id->raw_next; break; }
+    pthread_mutex_unlock(&g_raw_lock);
+    return rdma_destroy_id(&id->pub);
+}
+
+int ibv_query_port(struct ibv_context *ctx, uint8_t port, struct ibv_port_attr *a) {
+    (void)ctx; (void)port;
+    memset(a, 0, sizeof(*a));
+    a->state = IBV_PORT_ACTIVE;
+    a->max_mtu = a->active_mtu = IBV_MTU_4096;
+    a->gid_tbl_len = 1;
+    a->link_layer = 2;   /* Ethernet */
+    return 0;
+}
+
+/* one GID, all zeros: there is no address table here (the caller falls
+ * back to index 0 when no GID carries its IPv4 address) */
+int ibv_query_gid(struct ibv_context *ctx, uint8_t port, int index, union ibv_gid *gid) {
+    (void)ctx; (void)port;
+    if (index != 0) return EINVAL;
+    memset(gid, 0, sizeof(*gid));
     return 0;
 }
