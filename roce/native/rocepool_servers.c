@@ -55,6 +55,8 @@ enum {
      * replied to once everything its log has so far is durable; value u64 LE
      * epoch, u64 LE the log position the barrier covers */
     OP_OST_COMMIT = 46, OP_OST_COMMIT_OK = 47,
+    /* global address regions (see ga_handle below); value starts with a sub-op */
+    OP_GA = 48, OP_GA_OK = 49,
     OP_STATS = 50, OP_STATS_OK = 51,
     OP_MDT = 30, OP_MDT_OK = 31, OP_ERROR = 255,
     /* an MDT reply to a request flagged RQF_ASYNC: u64 LE epoch, u64 LE
@@ -495,6 +497,7 @@ typedef struct {
     pthread_cond_t rq_cv;
     int rd_threads;
     atomic_ullong async_reads, async_rereads;
+    struct ga_table *ga;            /* global address regions (ga_handle), made on first use */
 } ost_store;
 
 /* The first lease on this OST: from now on chunks are registered as they
@@ -512,6 +515,204 @@ static void arena_go_eager(ost_store *s) {
             }
     pthread_mutex_unlock(&a->lock);
 }
+
+/* ------------------------------------------------- global address regions
+ * Memory of this OST handed out by address, for clients that read and write
+ * it by (OST, region, offset) -- rocepool_ga.h, the global address client
+ * library: a read is one RDMA READ by the client's NIC (into GPU memory,
+ * GPUDirect), with no lookup, no seqlock, no copy on this host; a write is
+ * one request whose data this OST pulls (RDMA READ) and copies in place. A
+ * region never moves and is never evicted or written to the tier: it stays
+ * where it is until freed or this process ends (it is not durable). Freeing
+ * deregisters it before its memory is unmapped, so a client still holding
+ * its address reads an error, never another region's bytes.
+ *
+ * OP_GA value: u8 sub-op, then (all little-endian)
+ *   1 alloc   u64 size, u8 flags (1: fail if the name exists), name -> desc
+ *   2 lookup  u32 id (0xffffffff: by name), name                   -> desc
+ *   3 free    u32 id                                                -> -
+ *   4 write   u32 id, u64 offset, data                              -> -
+ *   5 read    u32 id, u64 offset, u32 length                        -> data
+ * desc: u32 id, u64 size, u64 remote address, u32 rkey, u8 one-sided
+ * (0: this transport cannot publish it, read with sub-op 5).
+ * Errors: NOT_FOUND, EXISTS, RANGE, NO_SPACE, BAD_REQUEST.
+ * Limits: ROCEPOOL_OST_GA_MIB (default 4096) in all, regions of at most
+ * 1 TiB (the client's address has 40 bits of offset), GA_MAX of them. */
+#define GA_MAX 4096
+#define GA_NAME 128
+typedef struct {
+    uint32_t id;                    /* 0: free slot */
+    char name[GA_NAME];
+    uint64_t size;
+    uint8_t *base;
+    size_t maplen;
+    roce_mem_t *mem;
+    uint32_t rkey;
+    int rkey_ok;
+    pthread_rwlock_t rw;            /* writes / RPC reads hold it shared, free exclusive */
+} ga_region_t;
+typedef struct ga_table {
+    pthread_mutex_t lk;
+    ga_region_t r[GA_MAX];
+    uint32_t next_id;
+    uint64_t used, cap;
+    atomic_ullong allocs, frees, writes, write_bytes, reads;
+} ga_table_t;
+
+static ga_table_t *ga_get(ost_store *s) {
+    static pthread_mutex_t mk = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&mk);
+    if (!s->ga) {
+        ga_table_t *t = calloc(1, sizeof(*t));
+        if (t) {
+            pthread_mutex_init(&t->lk, NULL);
+            for (int i = 0; i < GA_MAX; i++) pthread_rwlock_init(&t->r[i].rw, NULL);
+            const char *e = getenv("ROCEPOOL_OST_GA_MIB");
+            t->cap = (uint64_t)(e && atoll(e) >= 0 ? atoll(e) : 4096) << 20;
+            t->next_id = 1;
+        }
+        s->ga = t;
+    }
+    pthread_mutex_unlock(&mk);
+    return s->ga;
+}
+
+static ga_region_t *ga_find_id(ga_table_t *t, uint32_t id) {
+    if (!id) return NULL;
+    ga_region_t *g = &t->r[id % GA_MAX];
+    return g->id == id ? g : NULL;
+}
+
+static ga_region_t *ga_find_name(ga_table_t *t, const char *name, size_t nl) {
+    if (!nl) return NULL;
+    for (int i = 0; i < GA_MAX; i++)
+        if (t->r[i].id && strlen(t->r[i].name) == nl && !memcmp(t->r[i].name, name, nl)) return &t->r[i];
+    return NULL;
+}
+
+static uint8_t *ga_desc(ost_store *s, ga_region_t *g, const frame_t *f, size_t *out_len) {
+    if (!g->rkey_ok && s->server && g->mem && !roce_server_mem_rkey(s->server, g->mem, &g->rkey)) g->rkey_ok = 1;
+    uint8_t d[25];
+    wr_u32le(d, g->id);
+    for (int i = 0; i < 8; i++) d[4 + i] = (uint8_t)(g->size >> (8 * i));
+    uint64_t ra = g->rkey_ok ? roce_server_mem_addr(s->server, g->mem, g->base) : 0;
+    for (int i = 0; i < 8; i++) d[12 + i] = (uint8_t)(ra >> (8 * i));
+    wr_u32le(d + 20, g->rkey_ok ? g->rkey : 0);
+    d[24] = (uint8_t)g->rkey_ok;
+    return frame_simple(OP_GA_OK, f, d, sizeof(d), out_len);
+}
+
+static uint8_t *ga_handle(ost_store *s, const frame_t *f, size_t *out_len) {
+    ga_table_t *t = ga_get(s);
+    if (!t) return frame_error(f, "NO_SPACE", "out of memory", out_len);
+    const uint8_t *v = f->val;
+    size_t vl = f->val_len;
+    if (vl < 1) return frame_error(f, "BAD_REQUEST", "empty", out_len);
+    switch (v[0]) {
+    case 1: {  /* alloc */
+        if (vl < 10) return frame_error(f, "BAD_REQUEST", "short alloc", out_len);
+        uint64_t size = rd_u64le(v + 1);
+        int excl = v[9] & 1;
+        const char *name = (const char *)v + 10;
+        size_t nl = vl - 10;
+        if (!size || size > (1ull << 40)) return frame_error(f, "RANGE", "size 1 B .. 1 TiB", out_len);
+        if (nl >= GA_NAME) return frame_error(f, "BAD_REQUEST", "name too long", out_len);
+        pthread_mutex_lock(&t->lk);
+        ga_region_t *g = ga_find_name(t, name, nl);
+        if (g) {  /* the named region: open it (or refuse) */
+            uint8_t *out = excl ? frame_error(f, "EXISTS", "region exists", out_len)
+                         : g->size < size ? frame_error(f, "RANGE", "the region is smaller", out_len)
+                         : ga_desc(s, g, f, out_len);
+            pthread_mutex_unlock(&t->lk);
+            return out;
+        }
+        size_t maplen = (size + 4095) & ~(size_t)4095;
+        if (t->used + maplen > t->cap) {
+            pthread_mutex_unlock(&t->lk);
+            return frame_error(f, "NO_SPACE", "ROCEPOOL_OST_GA_MIB reached", out_len);
+        }
+        g = NULL;
+        for (uint32_t k = 0; k < GA_MAX && !g; k++) {
+            uint32_t id = t->next_id++;
+            if (t->next_id > 0xffff) t->next_id = 1;   /* the client's address has 16 bits of region */
+            if (id && !t->r[id % GA_MAX].id) { g = &t->r[id % GA_MAX]; g->id = id; }
+        }
+        if (!g) { pthread_mutex_unlock(&t->lk); return frame_error(f, "NO_SPACE", "too many regions", out_len); }
+        void *base = mmap(NULL, maplen, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
+        roce_mem_t *mem = base == MAP_FAILED ? NULL : roce_mem_register(base, maplen);
+        if (!mem) {
+            if (base != MAP_FAILED) munmap(base, maplen);
+            g->id = 0;
+            pthread_mutex_unlock(&t->lk);
+            return frame_error(f, "NO_SPACE", "cannot map or register the region", out_len);
+        }
+#ifdef MADV_HUGEPAGE
+        madvise(base, maplen, MADV_HUGEPAGE);
+#endif
+        memcpy(g->name, name, nl);
+        g->name[nl] = 0;
+        g->size = size; g->base = base; g->maplen = maplen; g->mem = mem; g->rkey_ok = 0;
+        t->used += maplen;
+        atomic_fetch_add(&t->allocs, 1);
+        uint8_t *out = ga_desc(s, g, f, out_len);
+        pthread_mutex_unlock(&t->lk);
+        return out;
+    }
+    case 2: {  /* lookup */
+        if (vl < 5) return frame_error(f, "BAD_REQUEST", "short lookup", out_len);
+        uint32_t id = rd_u32le(v + 1);
+        pthread_mutex_lock(&t->lk);
+        ga_region_t *g = id == 0xffffffffu ? ga_find_name(t, (const char *)v + 5, vl - 5) : ga_find_id(t, id);
+        uint8_t *out = g ? ga_desc(s, g, f, out_len) : frame_error(f, "NOT_FOUND", "no such region", out_len);
+        pthread_mutex_unlock(&t->lk);
+        return out;
+    }
+    case 3: {  /* free */
+        if (vl < 5) return frame_error(f, "BAD_REQUEST", "short free", out_len);
+        pthread_mutex_lock(&t->lk);
+        ga_region_t *g = ga_find_id(t, rd_u32le(v + 1));
+        if (!g) { pthread_mutex_unlock(&t->lk); return frame_error(f, "NOT_FOUND", "no such region", out_len); }
+        pthread_rwlock_wrlock(&g->rw);  /* no write or RPC read in it any more */
+        roce_mem_release(g->mem);       /* one-sided readers now get an error, never new bytes */
+        munmap(g->base, g->maplen);
+        t->used -= g->maplen;
+        g->id = 0; g->name[0] = 0; g->mem = NULL; g->base = NULL;
+        pthread_rwlock_unlock(&g->rw);
+        atomic_fetch_add(&t->frees, 1);
+        pthread_mutex_unlock(&t->lk);
+        return frame_simple(OP_GA_OK, f, NULL, 0, out_len);
+    }
+    case 4:    /* write */
+    case 5: {  /* read (no one-sided path) */
+        if (vl < 13 || (v[0] == 5 && vl < 17)) return frame_error(f, "BAD_REQUEST", "short request", out_len);
+        uint32_t id = rd_u32le(v + 1);
+        uint64_t off = rd_u64le(v + 5);
+        size_t n = v[0] == 4 ? vl - 13 : rd_u32le(v + 13);
+        pthread_mutex_lock(&t->lk);
+        ga_region_t *g = ga_find_id(t, id);
+        if (g) pthread_rwlock_rdlock(&g->rw);
+        pthread_mutex_unlock(&t->lk);
+        if (!g) return frame_error(f, "NOT_FOUND", "no such region", out_len);
+        uint8_t *out;
+        if (off > g->size || n > g->size - off) {
+            out = frame_error(f, "RANGE", "past the region's end", out_len);
+        } else if (v[0] == 4) {
+            memcpy(g->base + off, v + 13, n);
+            atomic_fetch_add(&t->writes, 1);
+            atomic_fetch_add(&t->write_bytes, n);
+            out = frame_simple(OP_GA_OK, f, NULL, 0, out_len);
+        } else {
+            atomic_fetch_add(&t->reads, 1);
+            out = frame_simple(OP_GA_OK, f, g->base + off, n, out_len);
+        }
+        pthread_rwlock_unlock(&g->rw);
+        return out;
+    }
+    default:
+        return frame_error(f, "BAD_REQUEST", "unknown global address sub-op", out_len);
+    }
+}
+
 
 static void arena_tier_notify(void *base, size_t len, void *user) { ost_tier_notify_chunk(user, base, len); }
 
@@ -2963,6 +3164,19 @@ static uint8_t *stats_frame(struct rocepool_native *n, const frame_t *f, size_t 
                             (unsigned long long)atomic_load(&n->log_waited));
         }
     }
+    if (!rc && n->ost && n->ost->ga) {
+        ga_table_t *t = n->ost->ga;
+        pthread_mutex_lock(&t->lk);
+        int nr = 0;
+        for (int i = 0; i < GA_MAX; i++) nr += t->r[i].id != 0;
+        rc = buf_printf(&b, ", \"ga\": {\"regions\": %d, \"bytes\": %llu, \"cap\": %llu, \"allocs\": %llu, "
+                            "\"frees\": %llu, \"writes\": %llu, \"write_bytes\": %llu, \"rpc_reads\": %llu}",
+                        nr, (unsigned long long)t->used, (unsigned long long)t->cap,
+                        (unsigned long long)atomic_load(&t->allocs), (unsigned long long)atomic_load(&t->frees),
+                        (unsigned long long)atomic_load(&t->writes), (unsigned long long)atomic_load(&t->write_bytes),
+                        (unsigned long long)atomic_load(&t->reads));
+        pthread_mutex_unlock(&t->lk);
+    }
     if (!rc && n->ost && n->ost->wal)
         rc = buf_printf(&b, ", \"async_writes\": %llu, \"commit_barriers\": %llu",
                         (unsigned long long)atomic_load(&n->ost->async_writes),
@@ -3089,6 +3303,8 @@ static uint8_t *native_handler(const uint8_t *req, size_t req_len, size_t *resp_
             tl_wal = md->wal;
             tl_wal_lsn = wal_last(md->wal);
         }
+    } else if (n->kind == ROCEPOOL_NATIVE_OST && f.op == OP_GA) {
+        out = ga_handle(n->ost, &f, resp_len);
     } else if (n->kind == ROCEPOOL_NATIVE_OST && f.op == OP_OST_COMMIT) {
         ost_store *s = n->ost;
         uint8_t v[16];

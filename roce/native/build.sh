@@ -214,7 +214,7 @@ echo "[build] built $FUSE_OUT (native FUSE client)"
 echo "[build] built $SCRIPT_DIR/rocepool-agent (per-node MDT agent)"
 KV_OUT="${KV_OUT:-$SCRIPT_DIR/librocepool_kv.so}"
 "$CC" -O2 -g -Wall -Wextra -pthread -fPIC -shared "${CFLAGS_EXTRA[@]}" \
-  rocepool_kv.c rocepool_lmc.c rocepool_client.c rocepool_devmem.c "$TSRC" -o "$KV_OUT" "${LDFLAGS_EXTRA[@]}" "${TLIBS[@]}" -ldl -lpthread
+  rocepool_kv.c rocepool_lmc.c rocepool_ga.c rocepool_client.c rocepool_devmem.c "$TSRC" -o "$KV_OUT" "${LDFLAGS_EXTRA[@]}" "${TLIBS[@]}" -ldl -lpthread
 "$CC" -O2 -g -Wall -Wextra -pthread -DRPKV_BENCH "${CFLAGS_EXTRA[@]}" \
   rocepool_kv.c rocepool_client.c rocepool_devmem.c "$TSRC" -o "$SCRIPT_DIR/rocepool-kv-bench" "${LDFLAGS_EXTRA[@]}" "${TLIBS[@]}" -ldl -lpthread
 # KV-cache reuse (TTFT) benchmark over the KV API's GPU calls (tools/bench_kvcache.py)
