@@ -15,6 +15,18 @@ space, read and written by address straight into and out of GPU memory.
 An address is an int: OST << 56 | region << 40 | offset. Regions are not
 durable (they live while their OST process runs). Library: the KV client
 library (roce.kv), which carries rocepool_ga.c.
+
+An entry of the list can be an exiom memory server pair instead of an OST,
+"exiom://tenant@host:port|host:port" (its paths, primary first): values by
+key, durable and versioned, read and written by one RDMA operation with no
+server CPU, offsets and lengths multiples of 4 bytes:
+
+    ga = GlobalMemory(["exiom://team-a@10.0.1.1:7000|10.0.2.1:7000"])
+    a = ga.stage("kv/blk-17", 65536, ost=0)          # a new value, not visible yet
+    buf.write(a, offset=0, length=65536)
+    ga.commit(a)                                     # now the value of the key
+    b, size = ga.lookup("kv/blk-17", ost=0)          # elsewhere: valid for the lease, checked after it
+    ga.path(0)                                       # (endpoint in use, path moves)
 """
 from __future__ import annotations
 
@@ -60,6 +72,9 @@ def _load():
     lib.rpga_mread.restype, lib.rpga_mread.argtypes = I, [P, S, PU64, P, PS, PS, PI]
     lib.rpga_mwrite.restype, lib.rpga_mwrite.argtypes = I, [P, S, PU64, P, PS, PS, PI]
     lib.rpga_stats.restype, lib.rpga_stats.argtypes = None, [P, PU64, PU64, PU64, PU64, PU64]
+    lib.rpga_stage.restype, lib.rpga_stage.argtypes = I, [P, I, C, U64, PU64]
+    lib.rpga_commit.restype, lib.rpga_commit.argtypes = I, [P, U64]
+    lib.rpga_path.restype, lib.rpga_path.argtypes = I, [P, I, PI, PU64]
     _lib = lib
     return lib
 
@@ -113,6 +128,21 @@ class GlobalMemory:
 
     def free(self, addr: int) -> None:
         _check(self._lib.rpga_free(self._h, addr), "free")
+
+    def stage(self, name: str, size: int, *, ost: int = -1) -> int:
+        """exiom: a new value of `name`, not visible until commit"""
+        a = ctypes.c_uint64()
+        _check(self._lib.rpga_stage(self._h, ost, name.encode(), size, ctypes.byref(a)), f"stage {name}")
+        return a.value
+
+    def commit(self, addr: int) -> None:
+        _check(self._lib.rpga_commit(self._h, addr), "commit")
+
+    def path(self, ost: int) -> tuple[int, int]:
+        """exiom: (endpoint in use or -1, moves to another path so far)"""
+        e, n = ctypes.c_int(), ctypes.c_uint64()
+        _check(self._lib.rpga_path(self._h, ost, ctypes.byref(e), ctypes.byref(n)), "path")
+        return e.value, n.value
 
     def size(self, addr: int) -> int:
         s = ctypes.c_uint64()

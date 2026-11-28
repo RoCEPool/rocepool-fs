@@ -32,6 +32,22 @@
  * after 65535 more allocations on that OST: an address must not be kept
  * past its region's free.
  *
+ * exiom memory servers. An entry of the list may be an exiom memory server
+ * pair instead of an OST: "exiom://tenant@host:port|host:port" -- the
+ * control ports of its paths, primary first (rocepool_ga_exiom.c). There
+ * a region is the value of a key in the tenant's space: rpga_alloc places
+ * it (a name that exists is opened, or -EEXIST when exclusive), rpga_read
+ * and rpga_write are one RDMA READ / WRITE by this host's NIC with no CPU
+ * on the server; offsets and lengths are multiples of 4 bytes (-EINVAL).
+ * Values are durable (the memory server keeps them on NVMe) and versioned:
+ * rpga_stage places a new value of a key that is not visible until
+ * rpga_commit, which makes it the key's value in one step; an address from
+ * rpga_lookup holds for the lease the server gave and is checked again
+ * after it -- a key that got another value since reads -ENOENT, never the
+ * other value's bytes. A failed request or transfer moves to the next
+ * path (rpga_path tells which one is in use and how many moves there
+ * were). Verbs backend only (RoCE NICs, softverbs).
+ *
  * Return values: 0, or a negative errno: -ENOENT (no such region), -EEXIST
  * (rpga_alloc exclusive, the name exists), -ERANGE (past the region's end,
  * or a size out of range), -ENOSPC (the OST's ROCEPOOL_OST_GA_MIB is used
@@ -95,6 +111,14 @@ int rpga_mwrite(rpga_t *ga, size_t n, const rpga_addr_t *dst, rpga_mem_t *m, con
  * through host memory, round trips */
 void rpga_stats(rpga_t *ga, uint64_t *read_direct, uint64_t *read_rpc, uint64_t *write_direct, uint64_t *write_bounced,
                 uint64_t *rpcs);
+
+/* exiom memory servers only (-EOPNOTSUPP on an OST): a new value of key
+ * `name`, placed but not visible (rpga_lookup still finds the old one)
+ * until rpga_commit; write it with rpga_write first. */
+int rpga_stage(rpga_t *ga, int ost, const char *name, uint64_t size, rpga_addr_t *addr);
+int rpga_commit(rpga_t *ga, rpga_addr_t addr);
+/* the path in use (index of its endpoint, -1: none) and the moves so far */
+int rpga_path(rpga_t *ga, int ost, int *endpoint, uint64_t *failovers);
 
 #ifdef __cplusplus
 }
