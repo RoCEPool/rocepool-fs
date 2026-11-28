@@ -12,6 +12,7 @@
 
 #include "rocepool_client.h"
 #include "rocepool_devmem.h"
+#include "rocepool_ga_exiom.h"
 
 #define GA_OP 48
 #define GA_OP_OK 49
@@ -27,20 +28,12 @@ typedef struct {
 
 struct rpga {
     rp_peer_t ost[GA_MAX_OSTS];
+    gx_t *ex[GA_MAX_OSTS];           /* an exiom memory server (rocepool_ga_exiom.c), not an OST */
     int n;
     ga_desc_t *cache[GA_MAX_OSTS];   /* allocated on first use */
     pthread_mutex_t lk;
     atomic_uint rr;
     atomic_ullong rd_direct, rd_rpc, wr_direct, wr_bounced;
-};
-
-struct rpga_mem {
-    uint8_t *base;
-    size_t len;
-    roce_mem_t *mem;    /* NULL: transfers bounce */
-    int fd;
-    const rp_devrt_t *rt;
-    atomic_int broken;
 };
 
 static void le32(uint8_t *p, uint32_t v) { for (int i = 0; i < 4; i++) p[i] = (uint8_t)(v >> (8 * i)); }
@@ -52,18 +45,23 @@ rpga_t *rpga_open(const char *osts) {
     rpga_t *ga = calloc(1, sizeof(*ga));
     if (!ga || !osts) { free(ga); return NULL; }
     char *list = strdup(osts), *save = NULL;
-    for (char *t = strtok_r(list, ",", &save); t && ga->n < GA_MAX_OSTS; t = strtok_r(NULL, ",", &save))
-        rp_peer_init(&ga->ost[ga->n++], t);
+    int bad = 0;
+    for (char *t = strtok_r(list, ",", &save); t && ga->n < GA_MAX_OSTS; t = strtok_r(NULL, ",", &save)) {
+        if (gx_is_spec(t)) { if (!(ga->ex[ga->n] = gx_open(t))) { bad = 1; break; } }
+        else rp_peer_init(&ga->ost[ga->n], t);
+        ga->n++;
+    }
     free(list);
-    if (!ga->n) { free(ga); return NULL; }
     pthread_mutex_init(&ga->lk, NULL);
+    if (!ga->n || bad) { rpga_close(ga); return NULL; }
     return ga;
 }
 
 void rpga_close(rpga_t *ga) {
     if (!ga) return;
     for (int i = 0; i < ga->n; i++) {
-        rp_peer_close_idle(&ga->ost[i]);
+        if (ga->ex[i]) gx_close(ga->ex[i]);
+        else rp_peer_close_idle(&ga->ost[i]);
         free(ga->cache[i]);
     }
     pthread_mutex_destroy(&ga->lk);
@@ -147,6 +145,12 @@ int rpga_alloc(rpga_t *ga, int ost, const char *name, uint64_t size, int exclusi
     if (!size || size > (1ull << RPGA_OFFSET_BITS)) return -ERANGE;
     if (ost < 0) ost = ost_of_name(ga, name);
     if (ost >= ga->n) return -EINVAL;
+    if (ga->ex[ost]) {
+        uint32_t slot;
+        int rc = gx_alloc(ga->ex[ost], name, size, exclusive, &slot);
+        if (!rc) *addr = RPGA_MAKE(ost, slot, 0);
+        return rc;
+    }
     uint8_t h[10 + 128];
     h[0] = 1;
     le64(h + 1, size);
@@ -170,6 +174,12 @@ int rpga_lookup(rpga_t *ga, int ost, const char *name, rpga_addr_t *addr, uint64
     if (nl >= 128) return -ENAMETOOLONG;
     if (ost < 0) ost = ost_of_name(ga, name);
     if (ost >= ga->n) return -EINVAL;
+    if (ga->ex[ost]) {
+        uint32_t slot;
+        int rc = gx_lookup(ga->ex[ost], name, &slot, size);
+        if (!rc) *addr = RPGA_MAKE(ost, slot, 0);
+        return rc;
+    }
     uint8_t h[5 + 128];
     h[0] = 2;
     le32(h + 1, 0xffffffffu);
@@ -192,6 +202,7 @@ int rpga_free(rpga_t *ga, rpga_addr_t addr) {
     int ost = RPGA_OST(addr);
     uint32_t id = RPGA_REGION(addr);
     if (ost >= ga->n || !id) return -EINVAL;
+    if (ga->ex[ost]) return gx_free(ga->ex[ost], id);
     cache_drop(ga, ost, id);
     uint8_t h[5];
     h[0] = 3;
@@ -203,6 +214,8 @@ int rpga_free(rpga_t *ga, rpga_addr_t addr) {
 }
 
 int rpga_region_size(rpga_t *ga, rpga_addr_t addr, uint64_t *size) {
+    if (ga && RPGA_OST(addr) < ga->n && ga->ex[RPGA_OST(addr)])
+        return gx_size(ga->ex[RPGA_OST(addr)], RPGA_REGION(addr), size);
     ga_desc_t d;
     int rc = ga ? desc_of(ga, RPGA_OST(addr), RPGA_REGION(addr), &d) : -EINVAL;
     if (!rc && size) *size = d.size;
@@ -288,6 +301,12 @@ int rpga_read(rpga_t *ga, rpga_addr_t src, rpga_mem_t *m, size_t off, size_t len
     int ost = RPGA_OST(src);
     uint32_t id = RPGA_REGION(src);
     uint64_t roff = RPGA_OFFSET(src);
+    if (ost >= ga->n) return -EINVAL;
+    if (ga->ex[ost]) {
+        int direct = 0, rc = gx_read(ga->ex[ost], id, roff, m, off, len, &direct);
+        if (!rc) atomic_fetch_add(direct ? &ga->rd_direct : &ga->rd_rpc, len);
+        return rc;
+    }
     uint8_t *dst = m->base + off;
     for (int attempt = 0; attempt < 2; attempt++) {
         ga_desc_t d;
@@ -320,6 +339,12 @@ int rpga_write(rpga_t *ga, rpga_addr_t dstaddr, rpga_mem_t *m, size_t off, size_
     int ost = RPGA_OST(dstaddr);
     uint32_t id = RPGA_REGION(dstaddr);
     uint64_t roff = RPGA_OFFSET(dstaddr);
+    if (ost >= ga->n) return -EINVAL;
+    if (ga->ex[ost]) {
+        int direct = 0, rc = gx_write(ga->ex[ost], id, roff, m, off, len, &direct);
+        if (!rc) atomic_fetch_add(direct ? &ga->wr_direct : &ga->wr_bounced, len);
+        return rc;
+    }
     ga_desc_t d;
     int rc = desc_of(ga, ost, id, &d);
     if (rc) return rc;
@@ -429,7 +454,39 @@ void rpga_stats(rpga_t *ga, uint64_t *read_direct, uint64_t *read_rpc, uint64_t 
     if (write_bounced) *write_bounced = atomic_load(&ga->wr_bounced);
     if (rpcs) {
         uint64_t t = 0;
-        for (int i = 0; i < ga->n; i++) t += atomic_load(&ga->ost[i].rpcs);
+        for (int i = 0; i < ga->n; i++) {
+            uint64_t r = 0;
+            if (ga->ex[i]) gx_path(ga->ex[i], NULL, NULL, &r);
+            else r = atomic_load(&ga->ost[i].rpcs);
+            t += r;
+        }
         *rpcs = t;
     }
+}
+
+/* ---------------------------------------------------------------- exiom: values by key, paths */
+int rpga_stage(rpga_t *ga, int ost, const char *name, uint64_t size, rpga_addr_t *addr) {
+    if (!ga || !name || !*name || !addr) return -EINVAL;
+    if (strlen(name) >= 128) return -ENAMETOOLONG;
+    if (ost < 0) ost = ost_of_name(ga, name);
+    if (ost >= ga->n) return -EINVAL;
+    if (!ga->ex[ost]) return -EOPNOTSUPP;
+    uint32_t slot;
+    int rc = gx_stage(ga->ex[ost], name, size, &slot);
+    if (!rc) *addr = RPGA_MAKE(ost, slot, 0);
+    return rc;
+}
+
+int rpga_commit(rpga_t *ga, rpga_addr_t addr) {
+    int ost = ga ? RPGA_OST(addr) : 0;
+    if (!ga || ost >= ga->n) return -EINVAL;
+    if (!ga->ex[ost]) return -EOPNOTSUPP;
+    return gx_commit(ga->ex[ost], RPGA_REGION(addr));
+}
+
+int rpga_path(rpga_t *ga, int ost, int *endpoint, uint64_t *failovers) {
+    if (!ga || ost < 0 || ost >= ga->n) return -EINVAL;
+    if (!ga->ex[ost]) return -EOPNOTSUPP;
+    gx_path(ga->ex[ost], endpoint, failovers, NULL);
+    return 0;
 }

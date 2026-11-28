@@ -1969,3 +1969,200 @@ int roce_server_defer_reply(roce_reply_ready_fn ready, void *obj, uint64_t token
     return -1;
 }
 void roce_server_defer_fill(roce_reply_fill_fn fill) { (void)fill; }
+
+/* ---------------------------------------------------------------------
+ * Queue pairs connected by hand (roce_transport.h): no CM on the peer --
+ * the exiom FPGA memory server. The rdma_cm_id is only bound to the local
+ * address, to find the device and port; the queue pair is created and
+ * moved INIT -> RTR -> RTS here with what the peer sent out of band.
+ * --------------------------------------------------------------------- */
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netpacket/packet.h>
+
+struct roce_raw_qp {
+    struct rdma_cm_id *id;
+    struct roce_qp_resources r;   /* cq, comp, pd (r.id stays NULL: no CM) */
+    struct ibv_qp *qp;
+    uint8_t port;
+    int gid_index;
+    roce_raw_attr_t local;
+};
+
+/* one PD per device for every raw queue pair: a region registered for one
+ * has the same keys on all (a responder publishes one rkey) */
+#define ROCE_RAW_DEVS 8
+static struct { struct ibv_context *ctx; struct ibv_pd *pd; } g_raw_pd[ROCE_RAW_DEVS];
+static pthread_mutex_t g_raw_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static struct ibv_pd *raw_pd(struct ibv_context *ctx) {
+    struct ibv_pd *pd = NULL;
+    pthread_mutex_lock(&g_raw_lock);
+    for (int i = 0; i < ROCE_RAW_DEVS && !pd; i++) {
+        if (g_raw_pd[i].ctx == ctx) pd = g_raw_pd[i].pd;
+        else if (!g_raw_pd[i].ctx && (pd = ibv_alloc_pd(ctx))) { g_raw_pd[i].ctx = ctx; g_raw_pd[i].pd = pd; }
+    }
+    pthread_mutex_unlock(&g_raw_lock);
+    return pd;
+}
+
+/* MAC address of the interface that has the IPv4 address ip_n (network order) */
+static void iface_mac(uint32_t ip_n, uint8_t mac[6]) {
+    struct ifaddrs *all, *a;
+    char name[IF_NAMESIZE] = "";
+    memset(mac, 0, 6);
+    if (getifaddrs(&all)) return;
+    for (a = all; a; a = a->ifa_next)
+        if (a->ifa_addr && a->ifa_addr->sa_family == AF_INET &&
+            ((struct sockaddr_in *)a->ifa_addr)->sin_addr.s_addr == ip_n) {
+            snprintf(name, sizeof(name), "%s", a->ifa_name);
+            break;
+        }
+    for (a = all; a && *name; a = a->ifa_next)
+        if (a->ifa_addr && a->ifa_addr->sa_family == AF_PACKET && !strcmp(a->ifa_name, name)) {
+            const struct sockaddr_ll *ll = (const struct sockaddr_ll *)a->ifa_addr;
+            if (ll->sll_halen == 6) memcpy(mac, ll->sll_addr, 6);
+            break;
+        }
+    freeifaddrs(all);
+}
+
+/* the GID that carries ip_n (::ffff:a.b.c.d): the last such entry (RoCEv2
+ * follows RoCEv1 in the table), or ROCEPOOL_GID_INDEX; 0 without one */
+static int raw_gid_index(struct ibv_context *ctx, uint8_t port, uint32_t ip_n) {
+    const char *e = getenv("ROCEPOOL_GID_INDEX");
+    if (e && *e) return atoi(e);
+    struct ibv_port_attr pa;
+    if (ibv_query_port(ctx, port, &pa)) return 0;
+    static const uint8_t v4[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
+    int found = 0;
+    for (int i = 0; i < pa.gid_tbl_len && i < 256; i++) {
+        union ibv_gid g;
+        if (ibv_query_gid(ctx, port, i, &g)) continue;
+        if (!memcmp(g.raw, v4, 12) && !memcmp(g.raw + 12, &ip_n, 4)) found = i;
+    }
+    return found;
+}
+
+void roce_raw_qp_destroy(roce_raw_qp_t *q) {
+    if (!q) return;
+    if (q->qp) ibv_destroy_qp(q->qp);
+    if (q->r.cq) ibv_destroy_cq(q->r.cq);
+    if (q->r.comp) ibv_destroy_comp_channel(q->r.comp);
+    if (q->id) rdma_destroy_id(q->id);
+    free(q);
+}
+
+roce_raw_qp_t *roce_raw_qp_create(const char *local_ip, roce_raw_attr_t *local) {
+    struct sockaddr_in a = { .sin_family = AF_INET };
+    if (!local_ip || !local || inet_pton(AF_INET, local_ip, &a.sin_addr) != 1) {
+        set_error("roce_raw_qp_create: bad local address %s", local_ip ? local_ip : "(null)");
+        return NULL;
+    }
+    struct roce_raw_qp *q = calloc(1, sizeof(*q));
+    if (!q) { set_error("out of memory"); return NULL; }
+    if (rdma_create_id(NULL, &q->id, NULL, RDMA_PS_TCP)) {
+        set_error("rdma_create_id failed: %s", strerror(errno)); q->id = NULL; goto fail;
+    }
+    if (rdma_bind_addr(q->id, (struct sockaddr *)&a) || !q->id->verbs) {
+        set_error("no RDMA device for %s: %s", local_ip, strerror(errno)); goto fail;
+    }
+    struct ibv_context *ctx = q->id->verbs;
+    q->port = q->id->port_num ? q->id->port_num : 1;
+    q->r.pd = raw_pd(ctx);
+    q->r.comp = q->r.pd ? ibv_create_comp_channel(ctx) : NULL;
+    q->r.cq = q->r.comp ? ibv_create_cq(ctx, 4 * ROCE_CQ_DEPTH, NULL, q->r.comp, 0) : NULL;
+    if (!q->r.cq) { set_error("PD, completion channel or CQ for %s failed", local_ip); goto fail; }
+    struct ibv_qp_init_attr ia = {
+        .send_cq = q->r.cq, .recv_cq = q->r.cq, .qp_type = IBV_QPT_RC,
+        .cap = { .max_send_wr = 16, .max_recv_wr = 1, .max_send_sge = 1, .max_recv_sge = 1 },
+    };
+    q->qp = ibv_create_qp(q->r.pd, &ia);
+    if (!q->qp) { set_error("ibv_create_qp failed: %s", strerror(errno)); goto fail; }
+    struct ibv_qp_attr at = {
+        .qp_state = IBV_QPS_INIT, .pkey_index = 0, .port_num = q->port,
+        .qp_access_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE,
+    };
+    int rc = ibv_modify_qp(q->qp, &at, IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS);
+    if (rc) { set_error("ibv_modify_qp (INIT) failed: %s", strerror(rc)); goto fail; }
+    q->gid_index = raw_gid_index(ctx, q->port, a.sin_addr.s_addr);
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    q->local.qpn = q->qp->qp_num;
+    q->local.psn = (uint32_t)(ts.tv_nsec ^ (q->local.qpn << 8) ^ (uint32_t)getpid()) & 0xffffff;
+    q->local.ip = ntohl(a.sin_addr.s_addr);
+    iface_mac(a.sin_addr.s_addr, q->local.mac);
+    q->local.sport = (uint16_t)(0xc000 | (q->local.qpn & 0x3fff));
+    *local = q->local;
+    return q;
+fail:
+    roce_raw_qp_destroy(q);
+    return NULL;
+}
+
+static enum ibv_mtu mtu_enum(uint32_t bytes) {
+    return bytes == 256 ? IBV_MTU_256 : bytes == 512 ? IBV_MTU_512 : bytes == 1024 ? IBV_MTU_1024
+         : bytes == 2048 ? IBV_MTU_2048 : IBV_MTU_4096;
+}
+
+int roce_raw_qp_connect(roce_raw_qp_t *q, const roce_raw_attr_t *rem, int initiator, uint32_t mtu) {
+    if (!q || !rem) { set_error("roce_raw_qp_connect: no queue pair"); return -1; }
+    struct ibv_context *ctx = q->id->verbs;
+    enum ibv_mtu pm = mtu_enum(mtu);
+    struct ibv_port_attr pa;
+    if (!ibv_query_port(ctx, q->port, &pa) && pa.active_mtu && pa.active_mtu < pm) pm = pa.active_mtu;
+    struct rdma_conn_param cp = {0};
+    rd_atomic_params(ctx, &cp);
+    struct ibv_qp_attr at = {
+        .qp_state = IBV_QPS_RTR, .path_mtu = pm, .dest_qp_num = rem->qpn & 0xffffff, .rq_psn = rem->psn & 0xffffff,
+        .max_dest_rd_atomic = initiator ? 0 : cp.responder_resources, .min_rnr_timer = 12,
+        .ah_attr = { .is_global = 1, .port_num = q->port,
+                     .grh = { .sgid_index = (uint8_t)q->gid_index, .hop_limit = 64 } },
+    };
+    uint32_t ip_n = htonl(rem->ip);
+    at.ah_attr.grh.dgid.raw[10] = at.ah_attr.grh.dgid.raw[11] = 0xff;
+    memcpy(at.ah_attr.grh.dgid.raw + 12, &ip_n, 4);
+    int rc = ibv_modify_qp(q->qp, &at, IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN |
+                                           IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER);
+    if (rc) { set_error("ibv_modify_qp (RTR) failed: %s", strerror(rc)); return -1; }
+    memset(&at, 0, sizeof(at));
+    at.qp_state = IBV_QPS_RTS;
+    at.timeout = (uint8_t)env_u32("ROCEPOOL_RAW_TIMEOUT", 17);
+    at.retry_cnt = 7;
+    at.rnr_retry = 7;
+    at.sq_psn = q->local.psn;
+    at.max_rd_atomic = initiator ? cp.initiator_depth : 0;
+    rc = ibv_modify_qp(q->qp, &at, IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN |
+                                       IBV_QP_MAX_QP_RD_ATOMIC);
+    if (rc) { set_error("ibv_modify_qp (RTS) failed: %s", strerror(rc)); return -1; }
+    return 0;
+}
+
+int roce_raw_qp_rdma(roce_raw_qp_t *q, int write, const roce_read_t *ops, int n, int timeout_ms) {
+    if (!q || n < 1 || n > 16) { set_error("roce_raw_qp_rdma: 1..16 operations"); return -1; }
+    struct ibv_sge sge[16];
+    struct ibv_send_wr wr[16];
+    for (int i = 0; i < n; i++) {
+        uint32_t lkey, rkey_unused;
+        if (mem_keys(ops[i].mem, q->r.pd, &lkey, &rkey_unused)) return -1;
+        sge[i] = (struct ibv_sge){ .addr = (uintptr_t)ops[i].local, .length = ops[i].len, .lkey = lkey };
+        wr[i] = (struct ibv_send_wr){
+            .wr_id = WR_MAKE(WR_READ, (uint32_t)i), .sg_list = &sge[i], .num_sge = 1,
+            .opcode = write ? IBV_WR_RDMA_WRITE : IBV_WR_RDMA_READ, .send_flags = IBV_SEND_SIGNALED,
+            .wr.rdma = { .remote_addr = ops[i].raddr, .rkey = ops[i].rkey },
+            .next = i + 1 < n ? &wr[i + 1] : NULL,
+        };
+    }
+    struct ibv_send_wr *bad = NULL;
+    int rc = ibv_post_send(q->qp, wr, &bad);
+    if (rc) { set_error("ibv_post_send (RDMA %s) failed: %s", write ? "WRITE" : "READ", strerror(rc)); return -1; }
+    for (int i = 0; i < n; i++)
+        if (poll_for_completion(&q->r, WR_READ, timeout_ms) < 0) return -1;
+    return 0;
+}
+
+int roce_raw_qp_mem_rkey(roce_raw_qp_t *q, roce_mem_t *mem, uint32_t *rkey) {
+    uint32_t lkey;
+    if (!q || !mem || mem_keys(mem, q->r.pd, &lkey, rkey)) { set_error("cannot register the region"); return -1; }
+    return 0;
+}

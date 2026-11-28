@@ -2806,3 +2806,29 @@ void roce_server_stop(roce_server_t *s) {
      * server lives for the process; closing the endpoints here would race
      * a provider progress thread for nothing */
 }
+
+/* Queue pairs connected by hand (roce_transport.h): RC verbs only -- an
+ * exiom memory server speaks RoCEv2, which libfabric's reliable datagrams
+ * (EFA SRD) do not reach. */
+struct roce_raw_qp { int unused; };
+roce_raw_qp_t *roce_raw_qp_create(const char *local_ip, roce_raw_attr_t *local) {
+    (void)local_ip; (void)local;
+    set_error("queue pairs connected by hand need the verbs backend (RoCE)");
+    return NULL;
+}
+int roce_raw_qp_connect(roce_raw_qp_t *qp, const roce_raw_attr_t *remote, int initiator, uint32_t mtu) {
+    (void)qp; (void)remote; (void)initiator; (void)mtu;
+    set_error("queue pairs connected by hand need the verbs backend (RoCE)");
+    return -1;
+}
+int roce_raw_qp_rdma(roce_raw_qp_t *qp, int write, const roce_read_t *ops, int n, int timeout_ms) {
+    (void)qp; (void)write; (void)ops; (void)n; (void)timeout_ms;
+    set_error("queue pairs connected by hand need the verbs backend (RoCE)");
+    return -1;
+}
+int roce_raw_qp_mem_rkey(roce_raw_qp_t *qp, roce_mem_t *mem, uint32_t *rkey) {
+    (void)qp; (void)mem; (void)rkey;
+    set_error("queue pairs connected by hand need the verbs backend (RoCE)");
+    return -1;
+}
+void roce_raw_qp_destroy(roce_raw_qp_t *qp) { (void)qp; }

@@ -24,6 +24,7 @@ struct rdma_cm_id {
     struct ibv_context *verbs;
     struct ibv_qp *qp;
     struct rdma_event_channel *channel;
+    uint8_t port_num;
 };
 
 enum rdma_port_space {

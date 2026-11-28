@@ -97,9 +97,114 @@ struct ibv_qp_init_attr {
     int sq_sig_all;
 };
 
+enum ibv_qp_state {
+    IBV_QPS_RESET,
+    IBV_QPS_INIT,
+    IBV_QPS_RTR,
+    IBV_QPS_RTS,
+    IBV_QPS_SQD,
+    IBV_QPS_SQE,
+    IBV_QPS_ERR,
+    IBV_QPS_UNKNOWN,
+};
+
 struct ibv_qp {
     struct ibv_context *context;
     struct ibv_pd *pd;
+    uint32_t qp_num;
+    enum ibv_qp_state state;
+};
+
+/* queue pairs connected without the CM (ibv_create_qp + ibv_modify_qp):
+ * the subset of rdma-core's declarations roce_transport.c's raw queue
+ * pairs use, field names as in the real header */
+union ibv_gid {
+    uint8_t raw[16];
+    struct {
+        uint64_t subnet_prefix;
+        uint64_t interface_id;
+    } global;
+};
+
+enum ibv_mtu {
+    IBV_MTU_256 = 1,
+    IBV_MTU_512 = 2,
+    IBV_MTU_1024 = 3,
+    IBV_MTU_2048 = 4,
+    IBV_MTU_4096 = 5,
+};
+
+enum ibv_port_state {
+    IBV_PORT_NOP = 0,
+    IBV_PORT_DOWN = 1,
+    IBV_PORT_INIT = 2,
+    IBV_PORT_ARMED = 3,
+    IBV_PORT_ACTIVE = 4,
+};
+
+struct ibv_port_attr {
+    enum ibv_port_state state;
+    enum ibv_mtu max_mtu;
+    enum ibv_mtu active_mtu;
+    int gid_tbl_len;
+    uint8_t link_layer;
+};
+
+struct ibv_global_route {
+    union ibv_gid dgid;
+    uint32_t flow_label;
+    uint8_t sgid_index;
+    uint8_t hop_limit;
+    uint8_t traffic_class;
+};
+
+struct ibv_ah_attr {
+    struct ibv_global_route grh;
+    uint16_t dlid;
+    uint8_t sl;
+    uint8_t src_path_bits;
+    uint8_t static_rate;
+    uint8_t is_global;
+    uint8_t port_num;
+};
+
+struct ibv_qp_attr {
+    enum ibv_qp_state qp_state;
+    enum ibv_qp_state cur_qp_state;
+    enum ibv_mtu path_mtu;
+    uint32_t qkey;
+    uint32_t rq_psn;
+    uint32_t sq_psn;
+    uint32_t dest_qp_num;
+    unsigned int qp_access_flags;
+    struct ibv_qp_cap cap;
+    struct ibv_ah_attr ah_attr;
+    uint16_t pkey_index;
+    uint8_t max_rd_atomic;
+    uint8_t max_dest_rd_atomic;
+    uint8_t min_rnr_timer;
+    uint8_t port_num;
+    uint8_t timeout;
+    uint8_t retry_cnt;
+    uint8_t rnr_retry;
+};
+
+enum ibv_qp_attr_mask {
+    IBV_QP_STATE = 1 << 0,
+    IBV_QP_ACCESS_FLAGS = 1 << 3,
+    IBV_QP_PKEY_INDEX = 1 << 4,
+    IBV_QP_PORT = 1 << 5,
+    IBV_QP_AV = 1 << 7,
+    IBV_QP_PATH_MTU = 1 << 8,
+    IBV_QP_TIMEOUT = 1 << 9,
+    IBV_QP_RETRY_CNT = 1 << 10,
+    IBV_QP_RNR_RETRY = 1 << 11,
+    IBV_QP_RQ_PSN = 1 << 12,
+    IBV_QP_MAX_QP_RD_ATOMIC = 1 << 13,
+    IBV_QP_MIN_RNR_TIMER = 1 << 15,
+    IBV_QP_SQ_PSN = 1 << 16,
+    IBV_QP_MAX_DEST_RD_ATOMIC = 1 << 17,
+    IBV_QP_DEST_QPN = 1 << 20,
 };
 
 struct ibv_sge {
@@ -218,6 +323,12 @@ void ibv_ack_cq_events(struct ibv_cq *cq, unsigned int nevents);
 
 struct ibv_mr *ibv_reg_mr(struct ibv_pd *pd, void *addr, size_t length, int access);
 int ibv_dereg_mr(struct ibv_mr *mr);
+
+struct ibv_qp *ibv_create_qp(struct ibv_pd *pd, struct ibv_qp_init_attr *qp_init_attr);
+int ibv_modify_qp(struct ibv_qp *qp, struct ibv_qp_attr *attr, int attr_mask);
+int ibv_destroy_qp(struct ibv_qp *qp);
+int ibv_query_port(struct ibv_context *context, uint8_t port_num, struct ibv_port_attr *port_attr);
+int ibv_query_gid(struct ibv_context *context, uint8_t port_num, int index, union ibv_gid *gid);
 
 int ibv_post_send(struct ibv_qp *qp, struct ibv_send_wr *wr, struct ibv_send_wr **bad_wr);
 int ibv_post_recv(struct ibv_qp *qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad_wr);
